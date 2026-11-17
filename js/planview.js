@@ -195,7 +195,10 @@ export function planView(box, plan, opt = {}) {
     }
   });
   /* その点を含む区画のうち一番小さい物（図枠の内側のような大きい区画が、上に重なっていても小さい方を選ぶ） */
-  const faceAt = (x, y) => { let best = null; for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || (best && z.area >= best.area)) continue; let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > y) !== (P[j][1] > y)) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } if (c) best = z; } return best; };
+  /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）はタップで選ばない（区画の無い所を押すと図面全体が選ばれていた）。区画の一覧からは選べる */
+  const pin = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > y) !== (P[j][1] > y)) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } return c; };
+  const wrapM = new Map(), wraps = (z) => { if (!wrapM.has(z.i)) { let k = 0; for (const o of plan.faces) { if (o !== z && o.area < z.area && pin(o.cx, o.cy, z.poly) && ++k >= 2) break; } wrapM.set(z.i, k >= 2); } return wrapM.get(z.i); };
+  const faceAt = (x, y) => { let best = null; for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || (best && z.area >= best.area)) continue; if (!pin(x, y, P) || wraps(z)) continue; best = z; } return best; };
   const up = e => {
     const was = pts.size; pts.delete(e.pointerId); clearTimeout(longT);
     if (loupe) {
@@ -213,7 +216,7 @@ export function planView(box, plan, opt = {}) {
       const [ux, uy, sc] = toUser(e.clientX, e.clientY);
       const mode = opt.mode ? opt.mode() : 'room';
       const fa = mode === 'room' && opt.onTap ? faceAt(ux, -uy) : null;
-      if (mode === 'room' && opt.onTap) { if (fa) opt.onTap(fa.i); else if (pg) opt.onTap(+pg.dataset.i); }
+      if (mode === 'room' && opt.onTap) { if (fa) opt.onTap(fa.i); }
       else if (opt.onPoint) opt.onPoint(ux, -uy, sc);
     }
   };
