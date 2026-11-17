@@ -116,7 +116,13 @@ export function planView(box, plan, opt = {}) {
       const o = owner.get(f.i), s = sel.has(f.i);
       const m = !s && o == null ? mk(f) : null;
       const fz = fzOf.get(f.i) || fs;
-      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${m.s === 'join' ? 'まとめ済' : m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : m.type === 'sheet' ? '使わない図' : m.type === 'off' ? '区画ではない' : '表') : '？'}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
+      const kind = m ? (m.s === 'join' ? 'まとめ済' : m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : m.type === 'sheet' ? '使わない図' : m.type === 'off' ? '区画ではない' : '表') : '？') : '';
+      /* 灰色の区画に文字が書いてあれば、その文字を出す（2行まで・長い物は切る）。何の区画かは下に小さく */
+      if (m && m.label && m.label.length) { const cut = v => v.length > 14 ? v.slice(0, 13) + '…' : v, L = m.label.slice(0, 2).map(v => cut(v)), more = m.label.length > 2 ? ' 他' + (m.label.length - 2) : '';
+        const xs = f.poly.map(q => q[0]), w = Math.max(...xs) - Math.min(...xs), n = Math.max(...L.map(v => v.length)) + (more ? 3 : 0), fz2 = Math.min(fz, w * 0.9 / Math.max(4, n));
+        const E = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+        return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz2}" data-fz="${fz2}" fill="var(--muted)" font-weight="700" pointer-events="none">${L.map((v, k) => `<tspan x="${f.cx}" dy="${k ? '1.15em' : 0}">${E(v)}${k === L.length - 1 ? more : ''}</tspan>`).join('')}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.7em" fill="var(--faint)">${kind}・区画${f.no}</tspan></text>`; }
+      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${kind}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
       return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
     }).join('');
     vis();

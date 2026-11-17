@@ -5,7 +5,7 @@ import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
 import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
-import { modelFor } from './reader2/text.js';
+import { modelFor, joinTexts } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
@@ -593,7 +593,23 @@ function stepRooms(ctx) {
     Object.keys(d.faceOff || {}).forEach(k => { o[k] = { s: 'out', type: 'off', why: '「区画ではない」にした所です。もう一度選んで「元に戻す」で戻せます' }; });
     Object.entries(d.faceJoin || {}).forEach(([k, b]) => { const t = F.find(f => f.i === b); o[k] = { s: 'join', type: 'join', why: `区画${t ? t.no : ''} にまとめた所です。もう一度選んで「元に戻す」で戻せます` }; });
     return o; };
-  const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); return Object.keys(a).length || Object.keys(b).length || Object.keys(h).length ? { ...a, ...b, ...h } : null; };
+  /* 区画の中に書いてある文字（表のマスの「床 長尺シート」など）。灰色の区画に「区画ではない」の代わりに出す（かつ「拾った文字を入れれないかな」）。文字は一番小さい区画に入れる */
+  let ftKey = null, ftMap = null;
+  const faceTexts = () => { const d = p.drawing || {}, F = (d.plan && d.plan.faces) || [], T = (d.src2 && d.src2.texts) || [];
+    if (ftKey === F && ftMap) return ftMap; ftKey = F; ftMap = new Map(); if (!T.length || !F.length) return ftMap;
+    let J = []; try { J = joinTexts(T).texts; } catch (e) { J = T; }
+    J.forEach(t => { const s = String(t.t || '').replace(/[\s\u3000]+/g, ' ').trim(); if (!s) return; let best = null;
+      F.forEach(f => { if (!f.poly || f.poly.length < 3 || (best && f.area >= best.area)) return; if (pip(t.x, t.y, f.poly)) best = f; });
+      if (best) { const L = ftMap.get(best.i) || []; L.push({ s, x: t.x, y: t.y }); ftMap.set(best.i, L); } });
+    /* 上の行から、同じ行は左から */
+    ftMap.forEach((L, k) => { L.sort((a, b) => Math.abs(a.y - b.y) > 0.15 ? b.y - a.y : a.x - b.x); const R = [];
+      L.forEach(q => { const r = R[R.length - 1]; if (r && Math.abs(r.y - q.y) <= 0.15) r.s += ' ' + q.s; else R.push({ y: q.y, s: q.s }); });   // 同じ行の文字は1行に
+      ftMap.set(k, R.map(r => r.s)); });
+    return ftMap; };
+  const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); if (!(Object.keys(a).length || Object.keys(b).length || Object.keys(h).length)) return null;
+    const o = { ...a, ...b, ...h }, FT = faceTexts();
+    Object.keys(o).forEach(k => { const L = FT.get(+k) || FT.get(k); if (L && L.length && o[k] && o[k].s === 'out') o[k] = { ...o[k], label: L }; });
+    return o; };
   /* 区画のまとまりを決め直した部屋の広さ・周り・開口 */
   /* 区画のまとまりの広さ・周り。まとまりの中の穴（机などで切れてどの区画にも入らなかった所）も床の広さに足す（drawing.js の roomHoles） */
   const geoOf = (ids) => { const plan = p.drawing.plan, S = new Set(ids), F = ids.map(i => plan.faces.find(f => f.i === i)).filter(Boolean), g = groupGeom(F);
