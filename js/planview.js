@@ -89,7 +89,7 @@ export function planView(box, plan, opt = {}) {
     visT = requestAnimationFrame(() => {
       const r = svg.getBoundingClientRect(); if (!r.width) return;
       const sc = Math.min(r.width / vb[2], r.height / vb[3]); let hid = 0;
-      svg.querySelectorAll('.labels text').forEach(t => { const fz = +t.dataset.fz || fs, on = fz * sc >= 7; if (on) { t.removeAttribute('display'); t.setAttribute('font-size', Math.min(fz, 17 / sc)); } else { t.setAttribute('display', 'none'); hid++; } });   // 大きく拡大した時は、字を画面で 17px までにする
+      svg.querySelectorAll('.labels text').forEach(t => { const fz = +t.dataset.fz || fs, on = fz * sc >= 7; if (on) { t.removeAttribute('display'); t.setAttribute('font-size', Math.min(fz, (+t.dataset.cap || 17) / sc)); } else { t.setAttribute('display', 'none'); hid++; } });   // 大きく拡大した時は、字を画面で 17px までにする
       const note = box.querySelector('.pv-note'); if (note) note.hidden = !hid;
     });
   }
@@ -117,11 +117,12 @@ export function planView(box, plan, opt = {}) {
     svg.querySelector('.labels').innerHTML = plan.faces.map(f => {
       const o = owner.get(f.i), s = sel.has(f.i);
       const m = !s && o == null ? mk(f) : null;
-      const fz = fzOf.get(f.i) || fs;
+      /* 図面の文字を出している時は、まだ部屋にしていない区画の番号を小さく薄くする（図面の文字が先。選んだ・部屋にした区画はそのまま） */
+      const dim = !!opt.dtexts && txtOn() && !s && o == null, fz = (fzOf.get(f.i) || fs) * (dim ? 0.6 : 1), dz = dim ? ' data-cap="11" opacity=".55"' : '';
       const kind = m ? (m.s === 'join' ? 'まとめ済' : m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : m.type === 'sheet' ? '使わない図' : m.type === 'off' ? '区画ではない' : '表') : '？') : '';
       if (m && m.hide) return '';   // 表・表題欄・区画ではない所は、区画の字を出さない（図面の文字を下の dtexts で出す）
-      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${kind}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
-      return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
+      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}"${dz} fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${kind}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
+      return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}"${dz} fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
     }).join('');
     /* 区画ではない所（表・表題欄など）に書いてある図面の文字を、その場所にそのまま出す（左下が文字の位置） */
     const E = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -251,7 +252,7 @@ export function planView(box, plan, opt = {}) {
     const r = svg.getBoundingClientRect();
     if (z.dataset.z === 'txt') { const on = !txtOn(); try { localStorage.setItem('kaku-dtext', on ? '1' : '0'); } catch (e2) { /* 覚えられなくても切り替える */ }
       const g = svg.querySelector('.dtexts'); if (g) { if (on) g.removeAttribute('display'); else g.setAttribute('display', 'none'); }
-      z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); return; }
+      z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); paint(); return; }
     if (z.dataset.z === 'grid') { const on = !gridOn(); try { localStorage.setItem('kaku-grid', on ? '1' : '0'); } catch (e2) { /* 覚えられなくても表示は切り替える */ }
       const g = svg.querySelector('.pv-grid'); if (g) { if (on) g.removeAttribute('display'); else g.setAttribute('display', 'none'); }
       z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); return; }
