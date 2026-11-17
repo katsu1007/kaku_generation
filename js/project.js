@@ -7,7 +7,7 @@ import { analyzeAll as analyzeFrame } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
-import { importDrawing, groupGeom, planCH, orderFaces as orderFacesOf } from './drawing.js';
+import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
 import { planView, roomColor } from './planview.js';
 import { USES, DEF_LM, needCount, pitchFor, luxOf, wirePlan, cableQty, pip } from './lighting.js';
@@ -206,6 +206,7 @@ function roomCard(r, i, p) {
       <button class="iconbtn" data-act="dupRoom" title="同じ部屋をもう1つ">${icon('copy')}</button>
       <button class="iconbtn" data-act="delRoom" title="この部屋を消す">${icon('trash')}</button></div>
     ${finChips(p, r)}
+    ${r.src === 'plan' && r.holes && r.holes.area > 0 ? `<div class="row small" style="margin-bottom:8px;gap:8px;flex-wrap:wrap;align-items:center"><span class="${r.noHoles ? 'muted' : ''}">机・棚などで囲まれた所 ${r.holes.area}㎡ を床に${r.noHoles ? '足していません' : '足しています（図面では部屋の色で塗っています）'}</span><button class="btn sm" data-act="holeToggle" style="min-height:36px">${r.noHoles ? '床に足す' : '足さない'}</button></div>` : ''}
     <div class="row" style="margin-bottom:10px"><span class="small muted">形</span><div class="seg"><button data-shape="rect" class="${free ? '' : 'on'}">四角（幅×奥行）</button><button data-shape="free" class="${free ? 'on' : ''}">面積で入れる（L字など）</button></div></div>
     <div class="rfields">
       ${free ? num('area', '床の面積', '㎡') + num('perim', '周りの長さ', 'm') : num('w', '幅', 'm', '例 3.64') + num('d', '奥行', 'm')}
@@ -588,7 +589,12 @@ function stepRooms(ctx) {
     return o; };
   const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); return Object.keys(a).length || Object.keys(b).length || Object.keys(h).length ? { ...a, ...b, ...h } : null; };
   /* 区画のまとまりを決め直した部屋の広さ・周り・開口 */
-  const regeo = (r) => { const plan = p.drawing.plan; const g = groupGeom(r.faces.map(i => plan.faces.find(f => f.i === i)).filter(Boolean)); r.area = g.area; r.perim = g.perim; if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); };
+  /* 区画のまとまりの広さ・周り。まとまりの中の穴（机などで切れてどの区画にも入らなかった所）も床の広さに足す（drawing.js の roomHoles） */
+  const geoOf = (ids) => { const plan = p.drawing.plan, S = new Set(ids), F = ids.map(i => plan.faces.find(f => f.i === i)).filter(Boolean), g = groupGeom(F);
+    let h = { area: 0, runs: [] }; try { h = roomHoles(F, plan.faces.filter(f => !S.has(f.i)), plan.segs || [], fxList()); } catch (e) { console.warn('穴を数えられませんでした', e); }
+    return { area: Math.round((g.area + h.area) * 100) / 100, perim: g.perim, holes: h.area > 0 ? { area: h.area, cs: h.cs, runs: h.runs } : null }; };
+  const setGeo = (r) => { const g = geoOf(r.faces); r.area = r.noHoles && g.holes ? Math.round((g.area - g.holes.area) * 100) / 100 : g.area; r.perim = g.perim; if (g.holes) r.holes = g.holes; else delete r.holes; };
+  const regeo = (r) => { const plan = p.drawing.plan; setGeo(r); if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); };
   /* ある区画の隣の区画（接している長さがいちばん長い物）。辺の両側 20cm の点を調べる */
   /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）。まとめ先にしない */
   const wrapsF = (f, F) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of F) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
@@ -615,6 +621,9 @@ function stepRooms(ctx) {
   const demoOverlay = () => {
     const lw = symLw(), plan = p.drawing.plan, d = p.drawing;
     let h = '';
+    /* 部屋の床に足した穴（机などの所）も、部屋の色で塗る（どこを部屋にしたか分かるように） */
+    p.rooms.forEach(r => { if (!r.holes || !r.holes.runs || !r.holes.runs.length || r.src !== 'plan' || r.noHoles) return; const cs = r.holes.cs;
+      h += `<path d="${r.holes.runs.map(q => `M${q[0]} ${-(q[2] + cs)}H${q[1]}V${-q[2]}H${q[0]}Z`).join('')}" fill="${roomColor(r.color)}" fill-opacity=".22" stroke="none" pointer-events="none"/>`; });
     (d.walls || []).forEach(w => (w.segs || []).forEach(i => { const s = plan.segs[i]; if (s) h += `<line x1="${s[0]}" y1="${-s[1]}" x2="${s[2]}" y2="${-s[3]}" stroke="#ff6b6b" stroke-width="${lw * 7}" stroke-linecap="round" opacity=".75"/>`; }));
     wsel.forEach(i => { const s = plan.segs[i]; if (s) h += `<line x1="${s[0]}" y1="${-s[1]}" x2="${s[2]}" y2="${-s[3]}" stroke="var(--accent)" stroke-width="${lw * 7}" stroke-linecap="round"/>`; });
     (d.walls || []).forEach(w => { if (w.pts && w.pts.length > 1) h += `<polyline points="${w.pts.map(q => `${q[0]},${-q[1]}`).join(' ')}" fill="none" stroke="${w.itemId ? '#ff6b6b' : '#5ab7ff'}" stroke-width="${lw * 7}" stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>`; });
@@ -880,7 +889,7 @@ function stepRooms(ctx) {
       const keep = r.faces.filter(i => !sel.has(i));
       if (keep.length !== r.faces.length) {
         r.faces = keep;
-        if (keep.length) { const g = groupGeom(keep.map(i => plan.faces.find(f => f.i === i)).filter(Boolean)); r.area = g.area; r.perim = g.perim; }
+        if (keep.length) setGeo(r);
       }
     });
     p.rooms = p.rooms.filter(r => !(r.src === 'plan' && r.faces && !r.faces.length));
@@ -891,14 +900,14 @@ function stepRooms(ctx) {
     const defCH = planCH(plan);
     groups.forEach(g => {
       const F = g.map(i => plan.faces.find(f => f.i === i)).filter(Boolean);
-      const geo = groupGeom(F);
+      const geo = geoOf(g);
       /* 新しい読み取りを選んだ図面では、名前の無い区画に「つないだ文字」からの名前の提案を使う */
       const r2n = (p.drawing.reader === 'v2' && p.drawing.analysis && p.drawing.analysis.names) || {};
       const names = [...new Set(F.map(f => f.name || r2n[f.i] || r2n[String(f.i)]).filter(Boolean))];
       const chs = F.map(f => +f.ch || 0).filter(v => v > 0);
       const runs = p.drawing.open ? roomOpenRuns(g, plan, p.drawing.open) : [];
       p.rooms.push({ id: uid('r'), name: names.join('・') || `区画 ${F.map(f => f.no).join('・')}`, shape: 'free', area: geo.area, perim: geo.perim,
-        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs });
+        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs, ...(geo.holes ? { holes: geo.holes } : {}) });
     });
     /* 区画を外した部屋の開口も決め直す */
     if (p.drawing.open) p.rooms.forEach(r => { if (r.src === 'plan' && r.faces) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); });
@@ -1255,7 +1264,7 @@ function stepRooms(ctx) {
       if (a === 'unassign') {
         const plan = p.drawing.plan, ids = new Set([...sel]);
         p.rooms.forEach(r => { if (!r.faces || !r.faces.some(i => ids.has(i))) return; r.faces = r.faces.filter(i => !ids.has(i));
-          if (r.faces.length) { const g = groupGeom(r.faces.map(i => plan.faces.find(f => f.i === i)).filter(Boolean)); r.area = g.area; r.perim = g.perim; if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open);
+          if (r.faces.length) { setGeo(r); if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open);
             if (/^区画 [\d・]+$/.test(r.name || '')) r.name = `区画 ${r.faces.map(i => (plan.faces.find(f => f.i === i) || {}).no).sort((x, y) => x - y).join('・')}`; } });
         const empty = p.rooms.filter(r => r.src === 'plan' && r.faces && !r.faces.length).map(r => r.id);
         p.rooms = p.rooms.filter(r => !empty.includes(r.id));
@@ -1332,6 +1341,7 @@ function stepRooms(ctx) {
       touch(p); draw(); return;
     }
     const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'holeToggle' && r.holes) { r.noHoles = !r.noHoles; const ha = r.holes.area; r.area = Math.round((r.area + (r.noHoles ? -ha : ha)) * 100) / 100; touch(p); draw(); toast(r.noHoles ? `囲まれた所 ${ha}㎡ を床から外しました` : `囲まれた所 ${ha}㎡ を床に足しました`); return; }
     if (a.dataset.act === 'addWin') { r.windows = r.windows || []; r.windows.push({ w: 1690, h: 1800, n: 1 }); }
     if (a.dataset.act === 'delWin') r.windows.splice(+a.dataset.wi, 1);
     if (a.dataset.act === 'addPart') { (r.parts = r.parts || []).push({ s: 1, w: '', h: '' }); touch(p); draw(); return; }
