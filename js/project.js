@@ -620,7 +620,7 @@ function stepRooms(ctx) {
             <label class="f">照明器具<select class="in" id="lItem">${lightItems.map(i => `<option value="${esc(i.id)}" ${lset.item === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select></label>
             <label class="f">1台の明るさ<span class="hint">カタログの器具光束</span><div class="unitwrap"><input class="in num" id="lLm" type="number" inputmode="numeric" value="${lset.lm}"><span>lm</span></div></label>
             <label class="f">照明の間隔の目安<span class="hint">天井が高い所は自動で詰めます</span><div class="unitwrap"><input class="in num" id="lPitch" type="number" inputmode="decimal" step="0.1" min="0.9" max="6" value="${lset.pitch || 2}"><span>m</span></div></label></div>
-          <button class="btn sm primary" data-act="lAuto" data-out="${hasOut ? 1 : ''}">${icon('spark')}${hasOut ? '器具に合わせて自動（照明とコンセント）' : '照明を自動で並べる'}</button>
+          <button class="btn sm primary" data-act="lAuto" data-out="${hasOut ? 1 : ''}">${icon('spark')}${hasOut ? '照明を自動で並べる（便器・洗面台などのコンセントも置きます）' : '照明を自動で並べる'}</button>
           ${hasOut ? `<button class="btn sm" data-act="oAuto">コンセントだけ置き直す</button>` : ''}
           ${n ? `<button class="btn sm ghost danger" data-act="lClear">照明を全部消す</button>` : ''}${(p.drawing.outlets || []).length ? `<button class="btn sm ghost danger" data-act="oClear">コンセントを全部消す</button>` : ''}
           <div class="seg" style="width:100%" id="lTool">${[['light', '照明'], ['sw', 'スイッチ'], ['out', 'コンセント'], ['panel', '分電盤'], ['link', 'つなぎ替え']].map(t => `<button data-ltool="${t[0]}" class="${ltool === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
