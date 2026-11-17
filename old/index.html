@@ -4169,17 +4169,39 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
       rebuild(true);pan()}})}
   /* ---- 指・マウス ---- */
   function bindInput(cv){
-    var pts=S.ptr,last=null,tp=null;
-    var two=function(){var k=Object.keys(pts);if(k.length<2)return null;var a=pts[k[0]],b=pts[k[1]];return{d:Math.hypot(a.x-b.x,a.y-b.y),x:(a.x+b.x)/2,y:(a.y+b.y)/2}};
-    var pan=function(dx,dy){var s=S.dist*.0016*(2/Math.min(2,window.devicePixelRatio||1)),cy=Math.cos(S.yaw),sy=Math.sin(S.yaw);
-      /* 画面の右＝カメラの右、画面の上＝カメラの向き（床の上で） */var rx=-sy,ry=cy,fx=-cy,fy=-sy;S.tx-=(rx*dx-fx*dy)*s;S.ty-=(ry*dx-fy*dy)*s;req()};
-    cv.addEventListener('pointerdown',function(e){cv.setPointerCapture(e.pointerId);pts[e.pointerId]={x:e.clientX,y:e.clientY,b:e.button};last=two();hideHint();tp=Object.keys(pts).length===1&&e.button===0?{id:e.pointerId,x:e.clientX,y:e.clientY,t:Date.now()}:null});
-    cv.addEventListener('pointermove',function(e){var p=pts[e.pointerId];if(!p)return;var dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;var t=two();
-      if(t&&last){if(last.d>0&&t.d>0){S.dist=Math.max(1,Math.min(S.fit*6,S.dist*last.d/t.d))}pan(t.x-last.x,t.y-last.y);last=t;return}
-      if(p.b===2||e.shiftKey){pan(dx,dy);return}
+    /* 指・マウスの操作（新しいKAKUで作り直した・2026-11-17）：指の下の床の点が指について来るように動かす。
+       1本指＝回す（指を離すと少し惰性で回る）、2本指＝つまんで拡大・縮小（指の間を中心に）・ずらす・ひねって回す、右ボタンかShift＋ドラッグ＝ずらす、ホイール＝カーソルの所を中心に拡大 */
+    var pts=S.ptr,last=null,tp=null,vel=null,inert=0;
+    var FOV=.8;
+    var rect=function(){return cv.getBoundingClientRect()};
+    /* 画面の点（clientX,Y）から、目の高さの床（z＝S.tz）の点。地平線より上なら null */
+    var ground=function(cx,cy){var r=rect();if(!r.width||!r.height)return null;var e=eye(),t=[S.tx,S.ty,S.tz],f=[t[0]-e[0],t[1]-e[1],t[2]-e[2]],fl=Math.hypot(f[0],f[1],f[2]);f=[f[0]/fl,f[1]/fl,f[2]/fl];
+      var rt=[f[1],-f[0],0],rl=Math.hypot(rt[0],rt[1])||1;rt=[rt[0]/rl,rt[1]/rl,0];var up=[rt[1]*f[2]-rt[2]*f[1],rt[2]*f[0]-rt[0]*f[2],rt[0]*f[1]-rt[1]*f[0]];
+      var th=Math.tan(FOV/2),as=r.width/r.height,nx=(2*(cx-r.left)/r.width-1)*th*as,ny=(1-2*(cy-r.top)/r.height)*th;
+      var d=[f[0]+rt[0]*nx+up[0]*ny,f[1]+rt[1]*nx+up[1]*ny,f[2]+rt[2]*nx+up[2]*ny];if(d[2]>-1e-4)return null;var k=(S.tz-e[2])/d[2];if(!(k>0)||k>S.dist*30)return null;return[e[0]+d[0]*k,e[1]+d[1]*k]};
+    var clampD=function(v){return Math.max(1,Math.min(S.fit*6,v))};
+    /* (cx,cy) の床の点を動かさずに拡大・縮小 */
+    var zoomAt=function(k,cx,cy){var P=ground(cx,cy),nd=clampD(S.dist*k),q=nd/S.dist;if(P){S.tx=P[0]+(S.tx-P[0])*q;S.ty=P[1]+(S.ty-P[1])*q}S.dist=nd};
+    /* (cx,cy) の床の点のまわりに回す（ひねる） */
+    var twist=function(da,cx,cy){var P=ground(cx,cy)||[S.tx,S.ty],c=Math.cos(da),sn=Math.sin(da),x=S.tx-P[0],y=S.ty-P[1];S.tx=P[0]+x*c-y*sn;S.ty=P[1]+x*sn+y*c;S.yaw+=da};
+    /* 前の点の床が、今の点に来るようにずらす。地平線の近くで飛ばないように、1回で動く量は距離の半分まで */
+    var oldPan=function(dx,dy){var s=S.dist*.0016*(2/Math.min(2,window.devicePixelRatio||1)),cy=Math.cos(S.yaw),sy=Math.sin(S.yaw),rx=-sy,ry=cy,fx=-cy,fy=-sy;S.tx-=(rx*dx-fx*dy)*s;S.ty-=(ry*dx-fy*dy)*s};
+    var pan=function(x0,y0,x1,y1){var A=ground(x0,y0),B=ground(x1,y1);if(!A||!B){oldPan(x1-x0,y1-y0);return}var mx=A[0]-B[0],my=A[1]-B[1],m=Math.hypot(mx,my),lim=S.dist*.5;if(m>lim){mx*=lim/m;my*=lim/m}S.tx+=mx;S.ty+=my};
+    var two=function(){var k=Object.keys(pts);if(k.length<2)return null;var a=pts[k[0]],b=pts[k[1]];return{d:Math.hypot(a.x-b.x,a.y-b.y),x:(a.x+b.x)/2,y:(a.y+b.y)/2,a:Math.atan2(b.y-a.y,b.x-a.x)}};
+    var stopInert=function(){if(inert){cancelAnimationFrame(inert);inert=0}};
+    cv.addEventListener('pointerdown',function(e){stopInert();cv.setPointerCapture(e.pointerId);pts[e.pointerId]={x:e.clientX,y:e.clientY,b:e.button};last=two();vel=null;hideHint();tp=Object.keys(pts).length===1&&e.button===0?{id:e.pointerId,x:e.clientX,y:e.clientY,t:Date.now()}:null});
+    cv.addEventListener('pointermove',function(e){var p=pts[e.pointerId];if(!p)return;var ox=p.x,oy=p.y,dx=e.clientX-ox,dy=e.clientY-oy;p.x=e.clientX;p.y=e.clientY;var t=two();
+      if(t&&last){if(last.d>8&&t.d>8)zoomAt(last.d/t.d,t.x,t.y);var da=t.a-last.a;if(da>Math.PI)da-=2*Math.PI;if(da<-Math.PI)da+=2*Math.PI;if(Math.abs(da)<.5)twist(da,t.x,t.y);pan(last.x,last.y,t.x,t.y);last=t;req();return}
+      if(p.b===2||e.shiftKey){pan(ox,oy,e.clientX,e.clientY);req();return}
+      var now=performance.now();vel={x:dx,y:dy,t:now};
       S.yaw-=dx*.008;S.pitch=Math.max(.05,Math.min(1.52,S.pitch+dy*.006));req()});
-    var up=function(e){delete pts[e.pointerId];last=two();if(S.R&&!Object.keys(pts).length)hqIdle();if(e.type==='pointerup'&&tp&&tp.id===e.pointerId&&Math.hypot(e.clientX-tp.x,e.clientY-tp.y)<8&&Date.now()-tp.t<600){try{tap(e.clientX,e.clientY)}catch(err){console.error(err)}}tp=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
-    cv.addEventListener('wheel',function(e){e.preventDefault();S.dist=Math.max(1,Math.min(S.fit*6,S.dist*Math.exp(e.deltaY*.0012)));req()},{passive:false});
+    var up=function(e){var was=Object.keys(pts).length;delete pts[e.pointerId];last=two();
+      /* 1本指で回して離した時は、少し惰性で回る（止めて離した時は回らない） */
+      if(was===1&&e.type==='pointerup'&&vel&&performance.now()-vel.t<60&&Math.hypot(vel.x,vel.y)>2&&!(tp&&Math.hypot(e.clientX-tp.x,e.clientY-tp.y)<8)){var vx=vel.x,vy=vel.y;var step=function(){vx*=.92;vy*=.92;if(Math.hypot(vx,vy)<.3){inert=0;if(S.R)hqIdle();return}S.yaw-=vx*.008;S.pitch=Math.max(.05,Math.min(1.52,S.pitch+vy*.006));req();inert=requestAnimationFrame(step)};inert=requestAnimationFrame(step)}
+      else if(S.R&&!Object.keys(pts).length)hqIdle();
+      vel=null;
+      if(e.type==='pointerup'&&tp&&tp.id===e.pointerId&&Math.hypot(e.clientX-tp.x,e.clientY-tp.y)<8&&Date.now()-tp.t<600){try{tap(e.clientX,e.clientY)}catch(err){console.error(err)}}tp=null};cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+    cv.addEventListener('wheel',function(e){e.preventDefault();stopInert();zoomAt(Math.exp(e.deltaY*(e.ctrlKey?.01:.0012)),e.clientX,e.clientY);req()},{passive:false});
     cv.addEventListener('contextmenu',function(e){e.preventDefault()})}
   function hideHint(){var h=S.root&&S.root.querySelector('.k3hint');if(h)h.style.opacity=0}
   /* ---- 画面 ---- */
@@ -4196,7 +4218,7 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
       /* three.js がだめな時は、新しいキャンバスで自前の WebGL に切り替える */S.R=null;S.T3=null;S.T=null;var n=document.createElement('canvas');S.cv.parentNode.replaceChild(n,S.cv);S.cv=n}
     return!!initGL(S.cv)}
   function open2(){if(!plan()){toast('先に図面を読み込んでください');return}
-    if(!S.root){var r=document.createElement('div');r.id='k3d';r.innerHTML='<canvas></canvas><div class="k3labs"></div><div class="k3top"><b>3Dで見る</b><button type="button" class="k3print">印刷・PDF</button><button type="button" class="k3close">閉じる</button></div><div class="k3hq"></div><div class="k3info"></div><div class="k3pan"></div><div class="k3bar"></div><div class="k3hint">1本指で回す・2本指で拡大と移動<br>壁・床・照明をタップすると寸法が出ます</div>';
+    if(!S.root){var r=document.createElement('div');r.id='k3d';r.innerHTML='<canvas></canvas><div class="k3labs"></div><div class="k3top"><b>3Dで見る</b><button type="button" class="k3print">印刷・PDF</button><button type="button" class="k3close">閉じる</button></div><div class="k3hq"></div><div class="k3info"></div><div class="k3pan"></div><div class="k3bar"></div><div class="k3hint">1本指で回す・2本指でつまんで拡大、ずらして移動、ひねって回す<br>壁・床・照明をタップすると寸法が出ます</div>';
       document.body.appendChild(r);S.root=r;S.cv=r.querySelector('canvas');S.labBox=r.querySelector('.k3labs');
       if(!startGL(r)){r.remove();S.root=null;toast('この端末では3Dを表示できません');return}
       bindInput(S.cv);r.querySelector('.k3close').onclick=close;r.querySelector('.k3print').onclick=printShot;window.addEventListener('resize',function(){if(S.root&&S.root.classList.contains('on'))req()})}
