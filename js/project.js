@@ -346,10 +346,20 @@ function sheetNotes(d) {
     <div class="small muted" style="margin-top:6px">※ 印を外すと、その図の中に自動で並べた照明も消えます（知らせの「照明を戻す」で戻せます）。</div></div>`;
 }
 /* 図面の上に、図の範囲の枠と名前を出す（使う図は橙の枠、使わない図は灰色の点線） */
-function sheetOverlay(d, lw) {
+function sheetOverlay(d, lw, texts = []) {
   const S = sheetsOf(d); if (!S.length) return '';
-  return S.map(x => { const [a, b, c, e] = x.box, col = x.use ? 'var(--accent)' : '#8a93a0', fz = Math.max(0.25, (c - a) * 0.028, (e - b) * 0.05);
-    return `<rect x="${a}" y="${-e}" width="${c - a}" height="${e - b}" fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke" ${x.use ? '' : 'stroke-dasharray="8 6"'} pointer-events="none"/><text x="${a + fz * 0.4}" y="${-e + fz * 1.2}" font-size="${fz}" fill="${col}" font-weight="700" stroke="var(--bg)" stroke-width="${fz * 0.15}" paint-order="stroke" pointer-events="none">${x.use ? '✓ ' : '× '}${esc(x.title || `図 ${x.k + 1}`)}</text>`; }).join('');
+  /* 図の名前は、図面の文字とかぶらない所に置く（かつ「両方見えるように少しずらす」）。枠の上の辺に沿って左から、次に枠のすぐ外の上を探す。どこも空いていなければ左上 */
+  const wOf = v => [...String(v)].reduce((a, c) => a + (/[\x20-\x7e\uff61-\uff9f]/.test(c) ? 0.6 : 1), 0);
+  const TB = texts.map(q => [q.x, q.y - q.h * 0.25, q.x + wOf(q.s) * q.h, q.y + q.h]);
+  const hit = (x0, y0, x1, y1) => TB.some(t => t[0] < x1 && t[2] > x0 && t[1] < y1 && t[3] > y0);
+  return S.map(x => { const [a, b, c, e] = x.box, col = x.use ? 'var(--accent)' : '#8a93a0', fz = Math.max(0.2, Math.min((c - a) * 0.02, (e - b) * 0.035, 1.2));
+    const label = (x.use ? '✓ ' : '× ') + (x.title || `図 ${x.k + 1}`), w = wOf(label) * fz;
+    let at = null;
+    for (const base of [e - fz * 1.15, e + fz * 0.3]) {   // 文字の下の線：枠の内側の上の帯、枠のすぐ外の上
+      for (let x0 = a + fz * 0.4; x0 + w <= c - fz * 0.2 && !at; x0 += fz) if (!hit(x0 - fz * 0.2, base - fz * 0.3, x0 + w + fz * 0.2, base + fz * 0.95)) at = [x0, base];
+      if (at) break; }
+    if (!at) at = [a + fz * 0.4, e - fz * 1.15];
+    return `<rect x="${a}" y="${-e}" width="${c - a}" height="${e - b}" fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke" ${x.use ? '' : 'stroke-dasharray="8 6"'} pointer-events="none"/><text x="${at[0]}" y="${-at[1]}" font-size="${fz}" fill="${col}" font-weight="700" stroke="var(--bg)" stroke-width="${fz * 0.15}" paint-order="stroke" pointer-events="none">${esc(label)}</text>`; }).join('');
 }
 
 /* 新しい読み取り（試し）の切り替えと、見つけた図枠・表の数。解析の結果がある図面（JWW・DXF を読み込んだ時に作る）だけ出す */
@@ -728,7 +738,7 @@ function stepRooms(ctx) {
     if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(','); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
       if (selGeo && selGeo.holes && holesOn) { const cs = selGeo.holes.cs; selHoles = `<path d="${selGeo.holes.runs.map(q => `M${q[0]} ${-(q[2] + cs)}H${q[1]}V${-q[2]}H${q[0]}Z`).join('')}" fill="var(--accent)" fill-opacity=".35" stroke="none" pointer-events="none"/>`; } }
     else { selGeoKey = ''; selGeo = null; }
-    if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
+    if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw, allTexts()) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
     const demoBox = body.querySelector('#dwgDemo'); if (demoBox) demoBox.innerHTML = demoList();
     const fxBox = body.querySelector('#dwgFix'); if (fxBox) fxBox.innerHTML = fixSummary(p.drawing);
     if (mode !== 'room') {
