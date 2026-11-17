@@ -795,7 +795,7 @@ function stepRooms(ctx) {
           ${hasOut ? `<button class="btn sm" data-act="oAuto">コンセントだけ置き直す</button>` : ''}
           ${n ? `<button class="btn sm ghost danger" data-act="lClear">照明を全部消す</button>` : ''}${(p.drawing.outlets || []).length ? `<button class="btn sm ghost danger" data-act="oClear">コンセントを全部消す</button>` : ''}
           <div class="seg" style="width:100%" id="lTool">${[['light', '照明'], ['sw', 'スイッチ'], ['out', 'コンセント'], ['panel', '分電盤'], ['link', 'つなぎ替え']].map(t => `<button data-ltool="${t[0]}" class="${ltool === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
-          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（つながっていた照明は、近くの照明から線を引きます）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: '何も無い所をタップで分電盤を置く（何個でも）・分電盤をタップで向きを90°回す（消す時は知らせの「消す」）・なぞって動かす', link: linkSel ? 'つなぐスイッチをタップしてください' : '照明をタップしてから、つなぎたいスイッチをタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
+          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（つながっていた照明は、近くの照明から線を引きます）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: '何も無い所をタップで分電盤を置く（何個でも）・分電盤をタップで向きを90°回す（消す時は知らせの「消す」）・なぞって動かす', link: linkSel ? 'つなぐスイッチか照明をタップしてください（照明をタップすると、その照明から線を引きます）' : '照明をタップしてから、つなぎたいスイッチか照明をタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
           ${(() => { const ws = wireSetOf(p.drawing), M = masterItems(), cab = M.filter(i => i.cat === 'wire' && i.unit === 'm'), sws = M.filter(i => i.cat === 'elec' && /スイッチ/.test(i.name));
             const sel = (k, list) => `<select class="in" data-wset="${k}" style="min-height:36px">${list.map(i => `<option value="${esc(i.id)}" ${ws[k] === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</option>`).join('')}</select>`;
             return `<details style="width:100%"><summary class="small">配線の設定（ケーブル・スイッチの種類・余り）</summary><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:6px">
@@ -1049,8 +1049,12 @@ function stepRooms(ctx) {
               if (!linkSel) { const k = near(d.lights); if (k < 0) { toast('照明をタップしてください', { bad: true }); return; } linkSel = d.lights[k].id; paintSel(); return; }
               const W = lightWires(p), all = [...W.sws, ...d.switches.map(q => ({ key: q.id, l: [q.x, q.y] }))];
               let best = null, bd = tol; all.forEach(s0 => { const dd = Math.hypot(s0.l[0] - x, s0.l[1] - y); if (dd < bd) { bd = dd; best = s0; } });
-              if (!best) { linkSel = null; paintSel(); toast('スイッチをタップしてください。やめました'); return; }
-              const id = linkSel, was = d.link[id]; d.link[id] = best.key; linkSel = null; redo(); undoT('つなぎ替えました', () => { if (was) d.link[id] = was; else delete d.link[id]; }); return;
+              /* 2つ目に照明をタップした時：その照明と同じスイッチにつなぎ、線はその照明から引く（渡り。かつ「配線も照明同時タップで繋ぎ直したい」） */
+              let viaL = null;
+              if (!best) { const k2 = near(d.lights); const lt = k2 >= 0 ? d.lights[k2] : null;
+                if (lt && lt.id !== linkSel && W.assign[lt.id]) { viaL = lt; best = all.find(s0 => s0.key === W.assign[lt.id]) || { key: W.assign[lt.id] }; } }
+              if (!best) { linkSel = null; paintSel(); toast('スイッチか照明をタップしてください。やめました'); return; }
+              const id = linkSel, was = d.link[id]; d.link[id] = best.key; linkSel = null; redo(); undoT(viaL ? '照明から線を引くようにつなぎ替えました' : 'つなぎ替えました', () => { if (was) d.link[id] = was; else delete d.link[id]; }); return;
             }
             if (ltool === 'sw') {
               /* スイッチ（黄＝自動・青＝置いた物のどちらも）をタップで消す。つながっていた照明は、残っているスイッチのうちいちばん近い物につなぎ直す
