@@ -157,7 +157,7 @@ registerView('settings', async el => {
     <div class="card"><h2>そのほか</h2>
       <div class="row"><button class="btn" id="intro">${icon('help')}最初の案内をもう一度見る</button><button class="btn" id="sample">${icon('spark')}見本の案件を入れる</button><a class="btn" href="./old/index.html">${icon('layers')}前のKAKUを開く</a><button class="btn" id="reold">${icon('up')}前のKAKUの案件を取り込み直す</button></div>
       <p class="small muted">前のKAKU（図面・照明・3D）で作ったり直したりした案件を、こちらに取り込みます。前のKAKUから来た案件は上書きされます。</p>
-      <p class="small muted" style="margin-bottom:0">KAKU ${APP_VERSION}（${APP_DATE}）</p></div>
+      <p class="small muted" style="margin-bottom:0" data-build>KAKU ${APP_VERSION}（${APP_DATE}）</p></div>
     </div>`;
   el.addEventListener('click', e => {
     const t = e.target.closest('[data-theme-set]');
