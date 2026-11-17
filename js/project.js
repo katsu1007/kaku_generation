@@ -592,7 +592,7 @@ function stepRooms(ctx) {
     if (mode === 'place') pPreview().forEach(q => { h += sym(pset.item, q, '#e65c32', 0, 'new'); });
     return h;
   };
-  const meas = { pts: [], cont: false };
+  const meas = { pts: [], cont: false, redo: [] };   // redo：「1つ戻す」で消した点（「1つ進む」で戻す。新しく点を打つと消える）
   /* 新しい読み取りの印（「新しい読み取り」を選んだ図面だけ。選んでいなければ今まで通り何も出さない） */
   const r2marks = () => (p.drawing && p.drawing.reader === 'v2' && p.drawing.analysis && p.drawing.analysis.marks) || null;
   /* 区画の印：新しい読み取りの印（選んだ図面だけ）＋使わない図の中の区画（どちらの読み取りでも） */
@@ -823,7 +823,7 @@ function stepRooms(ctx) {
         bar.innerHTML = `<span class="small muted">${P.length ? '' : '測りたい所を2点タップしてください。線の端・交点・線の上にくっつきます。長押しすると虫めがねで大きく見えます（指を動かして、離した所に決まります）。'}</span>
           ${P.length > 1 ? `<span class="pill acc" style="font-size:15px">長さ ${last.toFixed(3)} m</span>${meas.cont && P.length > 2 ? `<span class="pill info" style="font-size:15px">合計 ${total.toFixed(3)} m</span><span class="pill ok" style="font-size:15px">囲んだ広さ ${polyArea(P).toFixed(2)} ㎡</span><button class="btn sm primary" data-act="measFace" title="壁の線で囲まれていない部屋（広い事務室・つながった部屋など）を、タップした角で囲んで区画にします">${icon('plus')}この形を区画にする</button>` : ''}` : ''}
           <span class="spacer"></span><label class="row small muted" style="gap:6px"><input type="checkbox" data-meas-cont ${meas.cont ? 'checked' : ''} style="width:20px;height:20px">続けて測る（合計・囲んだ広さを出す。区画にもできます）</label>
-          ${P.length ? `<button class="btn sm" data-act="measBack" title="最後に打った点だけ消します">${icon('undo')}1つ戻す</button>` : ''}<button class="btn sm" data-act="measClear">全部やり直す</button>`;
+          <button class="btn sm" data-act="measBack" title="最後に打った点だけ消します" ${P.length ? '' : 'disabled'}>${icon('undo')}1つ戻す</button><button class="btn sm" data-act="measFwd" title="「1つ戻す」で消した点を戻します" ${meas.redo.length ? '' : 'disabled'}>${icon('redo')}1つ進む</button><button class="btn sm" data-act="measClear">全部やり直す</button>`;
       } else {
         const fx = fxList();
         const x = fx[fsel];
@@ -1009,7 +1009,7 @@ function stepRooms(ctx) {
           if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.type === 'off' || m.type === 'join') ? m.why : (m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
         /* 虫めがねの吸い付き：測る・カッター・壁の範囲・照明の置き場所で、線の端や線の上に吸い付く */
-        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 28) : [x, y],
+        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 40) : [x, y],
         onPoint: (x, y, sc, lp) => {
           const snapAt = (t) => lp ? [x, y] : snapPt(p.drawing.plan, x, y, t);
           if (mode === 'fix') {
@@ -1061,14 +1061,14 @@ function stepRooms(ctx) {
             toast(itemName(np.item) + ' を置きました', { action: '元に戻す', onAction: () => { d.places = d.places.filter(q => q !== np); syncDemoLines(p); touch(p); paintSel(); } });
             return;
           }
-          if (mode === 'wall' && wway === 'range') { wpts.push(snapAt(sc * 32)); paintSel(); return; }
+          if (mode === 'wall' && wway === 'range') { wpts.push(snapAt(sc * 44)); paintSel(); return; }
           if (mode === 'wall') {
             const i = nearestSeg(p.drawing.plan, x, y, sc * 18);
             if (i >= 0) { if (wsel.has(i)) wsel.delete(i); else wsel.add(i); paintSel(); }
             return;
           }
           if (mode === 'cut') {
-            const q = snapAt(sc * 32);
+            const q = snapAt(sc * 44);
             if (!cutA) { cutA = q; paintSel(); return; }
             const rect = [Math.min(cutA[0], q[0]), Math.min(cutA[1], q[1]), Math.max(cutA[0], q[0]), Math.max(cutA[1], q[1])].map(r3);
             cutA = null;
@@ -1079,9 +1079,9 @@ function stepRooms(ctx) {
             return;
           }
           if (mode === 'meas') {
-            const q = snapAt(sc * 32);
+            const q = snapAt(sc * 44);
             if (!meas.cont && meas.pts.length >= 2) meas.pts = [];
-            meas.pts.push(q); paintSel();
+            meas.pts.push(q); meas.redo = []; paintSel();
           }
         }
       });
@@ -1196,7 +1196,7 @@ function stepRooms(ctx) {
       else delete p.drawing.reader;
       touch(p); draw(); return;
     }
-    if (e.target.matches('[data-meas-cont]')) { meas.cont = e.target.checked; meas.pts = []; paintSel(); return; }
+    if (e.target.matches('[data-meas-cont]')) { meas.cont = e.target.checked; meas.pts = []; meas.redo = []; paintSel(); return; }
     if (e.target.id === 'oItem') { lset.out = e.target.value; return; }
     if (e.target.id === 'pItem') { pset.item = e.target.value; paintSel(); return; }
     if (e.target.id === 'pHow') { pset.how = e.target.value; paintSel(); return; }
@@ -1223,7 +1223,7 @@ function stepRooms(ctx) {
     if (lt) { ltool = lt.dataset.ltool; linkSel = null; paintSel(); return; }
     const pw = e.target.closest('[data-pwhere]');
     if (pw) { pset.where = pw.dataset.pwhere; pfaces.clear(); psegs.clear(); psel = null; paintSel(); return; }
-    if (mb) { mode = mb.dataset.mode; psel = null; pfaces.clear(); psegs.clear(); fsel = -1; addAt = null; cutA = null; linkSel = null; wsel.clear(); wpts.length = 0; if (mode !== 'meas') meas.pts = []; paintSel(); return; }
+    if (mb) { mode = mb.dataset.mode; psel = null; pfaces.clear(); psegs.clear(); fsel = -1; addAt = null; cutA = null; linkSel = null; wsel.clear(); wpts.length = 0; if (mode !== 'meas') { meas.pts = []; meas.redo = []; } paintSel(); return; }
     const fb = e.target.closest('[data-face]');
     if (fb) { const i = +fb.dataset.face; if (sel.has(i)) sel.delete(i); else sel.add(i); paintSel(); return; }
     const da = e.target.closest('[data-act]');
@@ -1231,8 +1231,9 @@ function stepRooms(ctx) {
       const a = da.dataset.act;
       if (a === 'fixLines') return fixLinesDialog(p, () => {});
       if (a === 'r2name') { const v = (((p.drawing.analysis || {}).title || {}).project || [])[0]; if (v) { p.name = v; touch(p); refresh(); toast(`案件の名前を「${v}」にしました`); } return; }
-      if (a === 'measClear') { meas.pts = []; paintSel(); return; }
-      if (a === 'measBack') { meas.pts.pop(); paintSel(); return; }   // 最後に打った点だけ消す（かつ「やり直すだと全部消える。1回ずつ戻せると良い」）
+      if (a === 'measClear') { meas.pts = []; meas.redo = []; paintSel(); return; }
+      if (a === 'measBack') { const q = meas.pts.pop(); if (q) meas.redo.push(q); paintSel(); return; }
+      if (a === 'measFwd') { const q = meas.redo.pop(); if (q) meas.pts.push(q); paintSel(); return; }   // 「1つ戻す」で消した点を1つ戻す（かつ「一つ進むボタンもよろしく」）
       if (a === 'measFace') {
         /* 壁の線で囲まれていなくて区画として拾えなかった部屋を、タップした角で囲んで区画にする（読み取りは変えない。図面に区画を1つ足すだけ）。
          * 図面の中身（plan）は「元に戻す」が同じ物を指しているので、書き換えずに新しい入れ物に替える */
