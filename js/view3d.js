@@ -48,6 +48,28 @@ export function toOld(p) {
   return { plan: P, fix, cur, wire };
 }
 
+/* 図が2つ以上ある図面（1階・2階、現況・プラン など）で、1つの図だけを3Dにする：図の範囲（box＝[x0,y0,x1,y1]）の中の物だけにした案件の写しを作る。
+ * 元の案件は変えない。配線の長さも、その図の中だけで数え直す */
+export function sheetProject(p, sh) {
+  if (!sh || !sh.box) return p;
+  const [x0, y0, x1, y1] = sh.box, inB = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+  const d = p.drawing, plan = d.plan;
+  const cOf = f => { if (Number.isFinite(f.cx) && Number.isFinite(f.cy)) return [f.cx, f.cy]; let x = 0, y = 0; f.poly.forEach(q => { x += q[0] / f.poly.length; y += q[1] / f.poly.length; }); return [x, y]; };
+  const faces = (plan.faces || []).filter(f => f.poly && f.poly.length > 2 && inB(...cOf(f)));
+  const ids = new Set(faces.map(f => f.i));
+  const segIn = q => Array.isArray(q) && inB((q[0] + q[2]) / 2, (q[1] + q[3]) / 2);
+  const ptIn = o => o && (Number.isFinite(o.x) ? inB(o.x, o.y) : true);
+  const plan2 = { ...plan, faces, segs: (plan.segs || []).filter(segIn), dsegs: (plan.dsegs || []).filter(segIn), titles: (plan.titles || []).filter(ptIn) };
+  const d2 = { ...d, plan: plan2,
+    fixtures: (d.fixtures || []).filter(x => x.b && inB((x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2)),
+    doors: (d.doors || []).filter(x => !x.c || inB(x.c[0], x.c[1])),
+    lights: (d.lights || []).filter(ptIn), outlets: (d.outlets || []).filter(ptIn), switches: (d.switches || []).filter(ptIn),
+    panels: (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).filter(ptIn), panel: undefined,
+    places: (d.places || []).map(x => x.where === 'pt' ? (x.p && inB(x.p[0], x.p[1]) ? x : null) : { ...x, pts: (x.pts || []).filter(q => q && inB(q[0], q[1])) }).filter(x => x && (x.where === 'pt' || x.pts.length)) };
+  const rooms = p.rooms.map(r => r.src === 'plan' ? { ...r, faces: (r.faces || []).filter(i => ids.has(i)) } : r).filter(r => r.src !== 'plan' || r.faces.length);
+  return { ...p, name: [p.name, sh.title].filter(Boolean).join(' '), drawing: d2, rooms };
+}
+
 let layer = null;
 /* 3Dで足した窓：面している部屋（窓の真ん中から30cm以内に辺がある区画）の「窓を寸法で入れる」に入れる。
  * 3Dから入れた窓は from3d が付いていて、3Dを閉じるたびに入れ直す（手で入れた窓はそのまま） */
@@ -71,8 +93,9 @@ export async function open3D(p, opt = {}) {
   try { return await open3D0(p, opt); }
   catch (e) { close3D(); throw new Error('3Dを開けませんでした：' + (e && e.message ? e.message : String(e))); }
 }
-async function open3D0(p, { onClose } = {}) {
-  if (!p.drawing || !p.drawing.plan) throw new Error('先に図面を読み込んでください');
+async function open3D0(p0, { onClose, sheet = null, sheets = [] } = {}) {
+  if (!p0.drawing || !p0.drawing.plan) throw new Error('先に図面を読み込んでください');
+  const p = sheet ? sheetProject(p0, sheet) : p0;
   close3D();
   const f = document.createElement('iframe');
   f.title = '3Dで見る';
@@ -109,7 +132,18 @@ async function open3D0(p, { onClose } = {}) {
 
   f.style.visibility = 'visible'; cover.remove();
   const btn = W.document.querySelector('#k3d .k3close');
-  if (btn) { btn.textContent = '閉じる'; btn.onclick = e => { e.preventDefault(); let wins = null; try { wins = JSON.parse(W.eval('JSON.stringify(current.win3d||[])')); } catch (er) { /* 読めなければそのまま */ } close3D(); onClose && onClose(wins); }; }
+  /* 図を1つだけ出している時は、3Dで足した窓を元の案件に戻さない（ほかの図の窓が消えるため） */
+  if (btn) { btn.textContent = '閉じる'; btn.onclick = e => { e.preventDefault(); let wins = null; if (!sheet) { try { wins = JSON.parse(W.eval('JSON.stringify(current.win3d||[])')); } catch (er) { /* 読めなければそのまま */ } } close3D(); onClose && onClose(wins); }; }
+  /* 図が2つ以上ある時：上の帯に図の切り替え（押すとその図の3Dを開き直す）。印刷・PDF は、出している図だけになる */
+  if (sheets.length > 1) { try {
+    const top = W.document.querySelector('#k3d .k3top'), bar = W.document.createElement('div');
+    bar.style.cssText = 'display:flex;gap:6px;overflow-x:auto;max-width:100%;padding:18px 0 2px;flex-basis:100%;order:9';   // 上に「高画質にしています」の字が出るので少し下げる
+    const b = (label, sh) => { const x = W.document.createElement('button'); x.type = 'button'; x.textContent = label; x.className = 'k3print';
+      const on = sh ? sheet && sheet.key === sh.key : !sheet; x.style.cssText = 'white-space:nowrap;' + (on ? 'outline:2px solid #e65c32' : 'opacity:.8');
+      x.onclick = ev => { ev.preventDefault(); if (on) return; open3D(p0, { onClose, sheet: sh, sheets }).catch(er => { try { window.alert(er.message); } catch (e2) {} }); }; bar.appendChild(x); };
+    sheets.forEach(sh => b(sh.title || '図', sh)); b('全部', null);
+    if (top) { top.style.flexWrap = 'wrap'; top.appendChild(bar); }
+  } catch (e) { /* 出せなくても3Dは使える */ } }
   return W;
 }
 let cover3 = null;

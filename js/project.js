@@ -1331,10 +1331,20 @@ function stepRooms(ctx) {
       if (a === 'elecOff') { const was = p.elec; delete p.elec; syncDemoLines(p); touch(p); draw(); toast('電気の図面から入れた分を外しました', { action: '元に戻す', onAction: () => { p.elec = was; syncDemoLines(p); touch(p); draw(); } }); return; }
       if (a === 'cadOut') { cadExport(p); return; }
 
-      if (a === 'open3d') { flush(); toast('3Dを用意しています…'); open3D(p, { onClose: wins => {
-        if (!wins || JSON.stringify(wins) === JSON.stringify(p.drawing.win3d || [])) return;
-        const n = applyWin3d(p, wins); touch(p); draw(); if (wins.length) toast(`3Dの窓 ${wins.length} か所を、面している部屋の窓に入れました（${n} 部屋）`, { ms: 4000 });
-      } }).catch(e => showError(e)); return; }
+      if (a === 'open3d') {
+        const onClose = wins => {
+          if (!wins || JSON.stringify(wins) === JSON.stringify(p.drawing.win3d || [])) return;
+          const n = applyWin3d(p, wins); touch(p); draw(); if (wins.length) toast(`3Dの窓 ${wins.length} か所を、面している部屋の窓に入れました（${n} 部屋）`, { ms: 4000 });
+        };
+        /* 図が2つ以上ある図面は、どの図を3Dにするか選ぶ（使う印の図を先に。かつ「複数図面がある時に3Dにすると全部出ちゃう」） */
+        const SH = sheetsOf(p.drawing).filter(x => x.kind !== 'table'), list = [...SH.filter(x => x.use), ...SH.filter(x => !x.use)];
+        const go3 = sheet => { flush(); toast('3Dを用意しています…'); open3D(p, { onClose, sheet, sheets: list }).catch(e => showError(e)); };
+        if (list.length < 2) { go3(null); return; }
+        const m = modal({ title: 'どの図を3Dにしますか', body: `<div class="small muted" style="margin-bottom:8px">選んだ図だけを3Dにします。3Dの上の帯で、ほかの図に切り替えられます。「印刷・PDF」は出している図だけになります。</div>
+          <div style="display:grid;gap:8px">${list.map((x, k) => `<button class="btn" data-sh3="${k}" style="justify-content:flex-start">${icon('cube')}${esc(x.title || `図 ${k + 1}`)}${x.use ? '' : '<span class="small muted">（使わない図）</span>'}</button>`).join('')}
+          <button class="btn ghost" data-sh3="all" style="justify-content:flex-start">${icon('cube')}全部まとめて</button></div>` });
+        m.el.querySelectorAll('[data-sh3]').forEach(bt => bt.onclick = () => { const v = bt.dataset.sh3; m.close(); go3(v === 'all' ? null : list[+v]); });
+        return; }
       if (a === 'linkClear') { const was = p.drawing.link, wasV = p.drawing.linkVia; p.drawing.link = Object.fromEntries(Object.entries(was || {}).filter(([, v]) => v === 'none')); delete p.drawing.linkVia;   // スイッチ無し（消したスイッチ）は残す
         syncDemoLines(p); touch(p); paintSel(); toast('つなぎ替えを元に戻しました（スイッチを消した照明はスイッチ無しのまま）', { action: '取り消す', onAction: () => { p.drawing.link = was; p.drawing.linkVia = wasV; syncDemoLines(p); touch(p); paintSel(); } }); return; }
       if (a === 'oClear') { const was = p.drawing.outlets; p.drawing.outlets = []; syncDemoLines(p); touch(p); paintSel(); toast('コンセントを全部消しました', { action: '元に戻す', onAction: () => { p.drawing.outlets = was; syncDemoLines(p); touch(p); paintSel(); } }); return; }
