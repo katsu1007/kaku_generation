@@ -19,7 +19,7 @@ let mirrorT = null;
 function mirror() {
   if (!NATIVE) return;
   clearTimeout(mirrorT);
-  mirrorT = setTimeout(async () => { try { NATIVE.postMessage(JSON.stringify(await exportAll())); } catch (e) { console.warn('アプリへの控えに失敗', e); } }, 3000);
+  mirrorT = setTimeout(async () => { try { NATIVE.postMessage(JSON.stringify(await exportAll({ native: true }))); } catch (e) { console.warn('アプリへの控えに失敗', e); } }, 3000);
 }
 export const usingMemory = () => !!mem;
 
@@ -38,7 +38,11 @@ function open() {
     rq.onsuccess = () => resolve(rq.result);
     rq.onerror = () => { if (NATIVE) { memDB(); resolve(null); return; } reject(new Error('保存場所を開けませんでした：' + (rq.error && rq.error.message))); };
     rq.onblocked = () => reject(new Error('別のタブでKAKUが開いています。ほかのタブを閉じてください。'));
-  });
+  }).then(db => {
+    /* ほかのタブが新しい版の保存場所を開こうとした時・閉じられた時は、次の保存で開き直す */
+    if (db) { db.onversionchange = () => { try { db.close(); } catch (e) {} dbp = null; }; db.onclose = () => { dbp = null; }; }
+    return db;
+  }, e => { dbp = null; throw e; });   // 失敗を覚えたままにしない（前は一度失敗すると、読み直すまで全部の保存が失敗し続けた）
   return dbp;
 }
 
@@ -47,7 +51,7 @@ const done = v => { const r = { result: v }; setTimeout(() => r.onsuccess && r.o
 function memStore(name) {
   const M = mem[name];
   return {
-    getAll: () => done([...M.values()]), get: k => done(M.get(k)), put: (v, k) => { M.set(k === undefined ? v.id : k, v); return done(k); }, delete: k => { M.delete(k); return done(); },
+    getAll: () => done([...M.values()]), get: k => done(M.get(k)), put: (v, k) => { M.set(k === undefined ? v.id : k, v); return done(k); }, delete: k => { M.delete(k); return done(); }, clear: () => { M.clear(); return done(); },
     openCursor: () => { const it = [...M.entries()]; let i = 0; const c = { result: null }; const step = () => setTimeout(() => { c.result = i < it.length ? { key: it[i][0], value: it[i][1], continue: () => { i++; step(); } } : null; c.onsuccess && c.onsuccess(); }); step(); return c; }
   };
 }
@@ -67,9 +71,21 @@ const quotaMsg = e => e && e.name === 'QuotaExceededError'
   : '保存できませんでした：' + (e && e.message || '原因不明');
 const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 
-export const listProjects = () => tx('projects', 'readonly', s => req(s.getAll()));
-export const getProject = id => tx('projects', 'readonly', s => req(s.get(id)));
-export const putProject = p => tx('projects', 'readwrite', s => req(s.put({ ...p, dataVersion: DATA_VERSION })));
+/* この画面が最後に読んだ・書いた時の updatedAt（案件 id ごと）。ほかのタブが書いた後かどうかを見分ける */
+export const known = new Map();
+const note = p => { if (p && p.id) known.set(p.id, p.updatedAt || 0); return p; };
+export const listProjects = () => tx('projects', 'readonly', s => req(s.getAll())).then(L => { (L || []).forEach(note); return L; });
+export const getProject = id => tx('projects', 'readonly', s => req(s.get(id))).then(note);
+export const putProject = p => tx('projects', 'readwrite', s => req(s.put({ ...p, dataVersion: DATA_VERSION }))).then(r => { note(p); return r; });
+/* 保存の前に、入っている物がほかのタブ（画面）で新しくなっていないか確かめてから書く（1つの書き込みの中で）。
+ * expect＝この画面が最後に読んだ・書いた時の updatedAt。入っている方が新しければ書かずに 'conflict' を返す */
+export const putProjectIf = (p, expect = known.get(p.id)) => tx('projects', 'readwrite', s => new Promise((res, rej) => {
+  /* 読んだ結果のすぐ後（同じ書き込みの中）で書く。Promise をはさむと書き込みが閉じる端末があるので、呼び返しの中で直に書く */
+  const g = s.get(p.id);
+  g.onsuccess = () => { const cur = g.result; if (cur && expect != null && (cur.updatedAt || 0) > expect) { res('conflict'); return; }
+    const w = s.put({ ...p, dataVersion: DATA_VERSION }); w.onsuccess = () => { note(p); res('ok'); }; w.onerror = () => rej(w.error); };
+  g.onerror = () => rej(g.error);
+}));
 export const deleteProject = id => tx('projects', 'readwrite', s => req(s.delete(id)));
 export const getKV = (k, d) => tx('kv', 'readonly', s => req(s.get(k))).then(v => v === undefined ? d : v);
 export const setKV = (k, v) => tx('kv', 'readwrite', s => req(s.put(v, k)));
@@ -148,8 +164,9 @@ export async function migrateOnce() {
   try { raw = localStorage.getItem(OLD_KEY); } catch (e) { raw = null; }
   let list = [];
   if (raw) {
-    try { list = convertOld(JSON.parse(raw)); }
-    catch (e) { throw new Error('前のKAKUのデータを読めませんでした：' + e.message); }
+    /* 読めない時は止めずに飛ばす（前は起動ごと止まり、今の案件も出なくなっていた）。1件ずつ移し、読めない案件だけ飛ばす */
+    let arr = []; try { arr = JSON.parse(raw); } catch (e) { console.warn('前のKAKUのデータを読めませんでした', e); arr = []; }
+    (Array.isArray(arr) ? arr : []).forEach(x => { try { list.push(...convertOld([x])); } catch (e) { console.warn('前のKAKUの案件を1件読めませんでした', e); } });
   }
   /* 前のKAKUの見本（新規案件・養生清掃・既存仕上げ撤去の初期値のまま）は引き継がない */
   list = list.filter(p => !(p.name === '新規案件' && !p.customer && p.lines.length === 2 && p.lines[0].name === '養生・清掃' && p.lines[0].price === 12000));
@@ -159,12 +176,15 @@ export async function migrateOnce() {
 }
 
 /* まるごとバックアップ */
-export async function exportAll() {
+/* 端末だけの物（保存先フォルダのつながり syncDir・同期の記録 syncState）は、バックアップに入れない。
+ * フォルダのつながりは文字にすると {} に化け、戻すとフォルダの同期が選び直すまで使えなくなっていた。アプリの控え（native）は同じ端末なので syncState は残す */
+const DEVICE_ONLY = ['syncDir', 'syncState'];
+export async function exportAll(opt = {}) {
   const projects = await listProjects();
-  const kv = {};
+  const kv = {}, skip = opt.native ? ['syncDir'] : DEVICE_ONLY;
   await tx('kv', 'readonly', s => new Promise((res, rej) => {
     const c = s.openCursor();
-    c.onsuccess = () => { const cur = c.result; if (cur) { kv[cur.key] = cur.value; cur.continue(); } else res(); };
+    c.onsuccess = () => { const cur = c.result; if (cur) { if (!skip.includes(cur.key)) kv[cur.key] = cur.value; cur.continue(); } else res(); };
     c.onerror = () => rej(c.error);
   }));
   return { app: 'KAKU', dataVersion: DATA_VERSION, exportedAt: new Date().toISOString(), projects, kv };
@@ -174,7 +194,7 @@ export async function importAll(obj, mode = 'merge') {
   /* 前のKAKUの「まるごとバックアップ」（kind:'backup'、data に localStorage の中身） */
   if (obj && obj.app === 'KAKU' && obj.kind === 'backup' && obj.data) {
     let arr;
-    try { arr = JSON.parse(obj.data['kaku-estimate-v1'] || '[]'); }
+    try { arr = JSON.parse(obj.data[OLD_KEY] || obj.data['kaku-estimate-v1'] || '[]'); }   // この試し場の前のKAKU（kaku-generation-v1）と、KAKU 本体（kaku-estimate-v1）のどちらも
     catch (e) { throw new Error('前のKAKUのバックアップの中身を読めませんでした。'); }
     return importOldArray(arr);
   }
@@ -182,10 +202,14 @@ export async function importAll(obj, mode = 'merge') {
     if (Array.isArray(obj)) return importOldArray(obj);
     throw new Error('KAKUのバックアップファイルではありません。');
   }
-  if (mode === 'replace') { for (const p of await listProjects()) await deleteProject(p.id); }
-  for (const p of obj.projects) await putProject(p);
-  for (const [k, v] of Object.entries(obj.kv || {})) if (k !== 'migratedOld') await setKV(k, v);
-  return obj.projects.length;
+  /* 先に全部の案件の形を確かめる。おかしい物があれば、何も書かずに止める */
+  const bad = obj.projects.findIndex(p => !p || typeof p !== 'object' || typeof p.id !== 'string' || !p.id || (p.rooms != null && !Array.isArray(p.rooms)) || (p.lines != null && !Array.isArray(p.lines)));
+  if (bad >= 0) throw new Error(`バックアップの ${bad + 1} 件目の案件が壊れているので、読み込みをやめました（今の案件はそのままです）。`);
+  /* 入れ替える・足すは、1つの書き込みでまとめて行う。途中で失敗したら全部取り消され、今の案件はそのまま残る（前は先に全部消してから1件ずつ書いていた） */
+  const n = await tx('projects', 'readwrite', s => { const R = []; if (mode === 'replace') R.push(req(s.clear()));   // 頼みはすぐに全部出す（順番に実行される）
+    obj.projects.forEach(p => { note(p); R.push(req(s.put({ ...p, dataVersion: DATA_VERSION }))); }); return Promise.all(R).then(() => obj.projects.length); });
+  for (const [k, v] of Object.entries(obj.kv || {})) if (k !== 'migratedOld' && !DEVICE_ONLY.includes(k)) await setKV(k, v);
+  return n;
 }
 async function importOldArray(arr) {
   const list = convertOld(arr);

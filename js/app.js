@@ -44,22 +44,37 @@ export function touch(p) {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 400);
 }
-export async function flush() {
+/* 保存は1つずつ順に（前の書き込みが終わる前に次を始めない）。ほかのタブで同じ案件が新しくなっていたら上書きしない */
+const known = store.known;   // 案件 id → この画面が最後に読んだ・書いた時の updatedAt（store.js が覚える）
+let inflight = Promise.resolve(), retryT = null;
+const bc = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('kaku-generation') : null;
+export function flush() { inflight = inflight.then(flush0, flush0); return inflight; }
+async function flush0() {
   clearTimeout(saveTimer);
   const list = [...pending.values()];
   pending.clear();
+  if (!list.length) { if (!saveTimer) setSave('ok'); return; }
   try {
-    for (const p of list) await store.putProject(p);
-    list.forEach(p => undoer.commit(p));
+    const done = [];
+    for (const p of list) {
+      const r = await store.putProjectIf(p);
+      if (r === 'conflict') { toast(`「${p.name || '案件'}」は別のタブ（画面）で変わっているので、ここでの変更は保存しませんでした。画面を読み直してください`, { bad: true, ms: 10000, action: '読み直す', onAction: () => location.reload() }); continue; }
+      done.push(p);
+      if (bc) try { bc.postMessage({ id: p.id, u: p.updatedAt }); } catch (e) {}
+    }
+    done.forEach(p => undoer.commit(p));
     paintUndo();
-    setSave('ok');
-    sync.autoSave(list, opts());
+    setSave(pending.size ? 'busy' : done.length === list.length ? 'ok' : 'bad');   // 書いている間に次の変更が来ていたら「保存しています」のまま
+    sync.autoSave(done, opts());
   } catch (e) {
-    list.forEach(p => pending.set(p.id, p));
+    list.forEach(p => { if (!pending.has(p.id)) pending.set(p.id, p); });
     setSave('bad', e.message);
     toast(e.message, { bad: true });
+    clearTimeout(retryT); retryT = setTimeout(() => { if (pending.size) flush(); }, 4000);   // 1回だけ、少し待って自動でもう一度
   }
 }
+if (bc) bc.onmessage = e => { const m = e.data || {}; const r = state.route;
+  if (r && r.name === 'project' && r.id === m.id && (known.get(m.id) || 0) < m.u) toast('この案件が別のタブ（画面）で変わりました。読み直すと新しい中身になります', { ms: 10000, action: '読み直す', onAction: () => location.reload() }); };
 window.addEventListener('pagehide', flush);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
 
@@ -86,13 +101,19 @@ export async function stepUndo(p, back) {
   return true;
 }
 
+let saveNow = { kind: 'ok', msg: '', at: null };   // 画面を作り直しても、保存の状態をそのまま出す（前は作り直すたびに「保存しました」に戻っていた）
 function setSave(kind, msg) {
+  saveNow = { kind, msg: msg || '', at: kind === 'ok' ? new Date() : saveNow.at };
+  paintSave();
+}
+function paintSave() {
+  const { kind, msg } = saveNow;
   const el = document.getElementById('savestate');
   if (!el) return;
   el.className = 'savestate ' + (kind === 'ok' ? '' : kind);
-  const d = new Date();
+  const d = saveNow.at || new Date();
   el.innerHTML = `<i></i>${kind === 'busy' ? '保存しています' : kind === 'bad' ? '保存できませんでした' : `保存しました ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`}`;
-  if (msg) el.title = msg;
+  el.title = msg || '';
 }
 
 let compT = null;
@@ -151,6 +172,7 @@ function shell() {
 export function setTop(title, right = '') {
   $('#top').innerHTML = `<h1>${esc(title)}</h1><span id="savestate" class="savestate"><i></i>保存しました</span>${right}
     <button class="iconbtn" id="themeBtn" aria-label="明るさの切り替え" title="暗い表示／明るい表示">${icon(state.settings.theme === 'light' ? 'moon' : 'sun')}</button>`;
+  paintSave();
   $('#themeBtn').onclick = () => {
     state.settings.theme = state.settings.theme === 'light' ? 'dark' : 'light';
     applyTheme(); saveSettings(); setTop(title, right);
