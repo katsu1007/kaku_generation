@@ -57,7 +57,8 @@ export function planView(box, plan, opt = {}) {
   if (!isFinite(minX)) { minX = minY = 0; maxX = maxY = 1; }
   const W = Math.max(1, maxX - minX), H = Math.max(1, maxY - minY), pad = Math.max(W, H) * 0.04;
   const base = [minX - pad, -maxY - pad, W + pad * 2, H + pad * 2];   // y は上向きなので反転して描く
-  let vb = base.slice();
+  /* 描き直しても、同じ図面なら前の拡大・位置のまま（opt.keep＝前の view.keep()） */
+  let vb = opt.keep && opt.keep.base && opt.keep.base.every((v, k) => Math.abs(v - base[k]) < 1e-6) ? opt.keep.vb.slice() : base.slice();
   const lw = Math.max(W, H) / 900;
   const pathOf = S => S.map(s => `M${s[0]} ${-s[1]}L${s[2]} ${-s[3]}`).join('');
   const fs = Math.max(W, H) / 60;
@@ -279,5 +280,6 @@ export function planView(box, plan, opt = {}) {
   });
   /* 図面の中の1か所（図枠や段の範囲）を大きく出す。null で全体に戻す */
   const zoomTo = (b) => { if (!b) { vb = base.slice(); set(); return; } const w = b[2] - b[0], h = b[3] - b[1], pd = Math.max(w, h) * 0.03; vb = [b[0] - pd, -b[3] - pd, w + pd * 2, h + pd * 2]; set(); };
-  return { paint, overlay, scale, lw, zoomTo };
+  const keep = () => ({ base: base.slice(), vb: vb.slice() });
+  return { paint, overlay, scale, lw, zoomTo, keep };
 }
