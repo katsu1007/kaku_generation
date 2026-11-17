@@ -49,6 +49,7 @@ function rectangles(H, V, minLen) {
     const left = V.find(v => Math.abs(v.c - h1.a) <= tol && v.a <= h1.c + tol && v.b >= h2.c - tol);
     const right = V.find(v => Math.abs(v.c - h1.b) <= tol && v.a <= h1.c + tol && v.b >= h2.c - tol);
     if (left && right) out.push([r3(h1.a), r3(h1.c), r3(h1.b), r3(h2.c)]);
+    else out.push(Object.assign([r3(h1.a), r3(h1.c), r3(h1.b), r3(h2.c)], { open: true }));   // 左右の縦線が無い枠（上下の横線だけで描いた図枠。0530）。根拠を厳しくして使う
   }
   return out;
 }
@@ -78,7 +79,7 @@ export function analyze({ segs = [], faces = [], texts = [], fixtures = [], door
   const all = boxOf(F.flatMap(a => [[a.box[0], a.box[1]], [a.box[2], a.box[3]]]));
   const minLen = Math.max(3, Math.min(all[2] - all[0], all[3] - all[1]) * 0.25);
   const HL = longSpans(segs, 0, minLen), VL = longSpans(segs, 1, minLen);   // 長い横線・縦線（c＝位置、a〜b＝範囲）
-  const R = rectangles(HL, VL, minLen).map(box => ({ box, w: box[2] - box[0], h: box[3] - box[1] }));
+  const R = rectangles(HL, VL, minLen).map(box => ({ box: box.slice(), open: !!box.open, w: box[2] - box[0], h: box[3] - box[1] }));
   R.forEach(r => {
     r.why = []; r.score = 0;
     const tin = T.filter(t => inBox(t.x, t.y, r.box) && TITLE_RE.test(t.t));
@@ -86,14 +87,18 @@ export function analyze({ segs = [], faces = [], texts = [], fixtures = [], door
     if (kinds.size >= 2) { r.score += 2; r.title = true; r.why.push(`表題欄の文字が中にある（${[...kinds].slice(0, 4).join('・')}）`); }
     const ratio = Math.max(r.w, r.h) / Math.min(r.w, r.h);
     if (ratio >= 1.36 && ratio <= 1.5) { r.score += 1; r.why.push(`縦横の比が用紙に近い（1:${ratio.toFixed(2)}）`); }
-    const twin = R.some(o => o !== r && Math.abs(o.w - r.w) <= r.w * 0.01 && Math.abs(o.h - r.h) <= r.h * 0.01 && (o.box[0] > r.box[2] - 0.01 || o.box[2] < r.box[0] + 0.01 || o.box[1] > r.box[3] - 0.01 || o.box[3] < r.box[1] + 0.01));
+    const twin = R.some(o => o !== r && o.open === r.open && Math.abs(o.w - r.w) <= r.w * 0.01 && Math.abs(o.h - r.h) <= r.h * 0.01 && (o.box[0] > r.box[2] - 0.01 || o.box[2] < r.box[0] + 0.01 || o.box[1] > r.box[3] - 0.01 || o.box[3] < r.box[1] + 0.01));
     if (twin) { r.score += 1; r.twin = true; r.why.push('同じ大きさの枠が並んでいる'); }
     const inside = F.filter(a => inBox(a.cx, a.cy, r.box)).length;
     if (inside >= 3) { r.score += 1; r.why.push(`中に区画が ${inside} 個ある`); }
     r.inside = inside;
   });
   /* 根拠が3点以上で、表題欄の文字か並んだ枠のどちらかがある物だけ「図枠」。中に入れ子の枠（二重の枠）は外側だけ残す */
-  let frames = R.filter(r => r.score >= 3 && (r.title || r.twin));
+  /* 左右の縦線が無い枠は、用紙の比・同じ大きさの枠が横に並ぶ（同じ高さ）・中に区画、の3つがそろった時だけ */
+  /* 横に並んだ枠が図面の高さいっぱい（線の上下の端の9割以上）の時だけ（建物の中の同じ長さの壁・表の線を枠と見ていた。office_core） */
+  let y0 = Infinity, y1 = -Infinity; segs.forEach(q => { y0 = Math.min(y0, q[1], q[3]); y1 = Math.max(y1, q[1], q[3]); });
+  R.forEach(r => { if (r.open) { r.ok = r.h >= (y1 - y0) * 0.9 && r.twin && r.why.some(w => w.startsWith('縦横の比')) && r.inside >= 3 && R.some(o => o !== r && o.open && Math.abs(o.box[1] - r.box[1]) <= 0.05 && Math.abs(o.w - r.w) <= r.w * 0.01 && Math.abs(o.h - r.h) <= r.h * 0.01 && (o.box[0] > r.box[2] - 0.01 || o.box[2] < r.box[0] + 0.01)); if (r.ok) r.why.push('左右の縦線は無く、上下の横線だけの枠'); } });
+  let frames = R.filter(r => r.score >= 3 && (r.title || r.twin) && (!r.open || r.ok));
   /* 図枠の中の長方形（表の罫線・図の区切り）は図枠ではない。大きい順に見て、もう決まった図枠の中にある物は外す */
   const within = (r, o) => o.box[0] <= r.box[0] + 0.02 && o.box[1] <= r.box[1] + 0.02 && o.box[2] >= r.box[2] - 0.02 && o.box[3] >= r.box[3] - 0.02;
   const acc = [];
@@ -119,7 +124,7 @@ export function analyze({ segs = [], faces = [], texts = [], fixtures = [], door
   const tries = [];   // 表と見なかった罫線の並びと、その理由（確かめる用）
   const clean = box => !FX.some(q => inBox(q[0], q[1], box)) && !DR.some(q => inBox(q[0], q[1], box, 0.1)) && !T.some(t => inBox(t.x, t.y, box) && t.t.length <= 16 && ROOMISH_RE.test(t.t));
   frames.forEach(fr => {
-    const inner = R.filter(r => r !== fr && within(r, fr) && r.w * r.h < fr.w * fr.h * 0.5);
+    const inner = R.filter(r => r !== fr && !r.open && within(r, fr) && r.w * r.h < fr.w * fr.h * 0.5);
     [[0, 2, 1, 3], [1, 3, 0, 2]].forEach(([a0, a1, b0, b1]) => {          // 横に同じ幅で縦に重なる／縦に同じ高さで横に並ぶ
       const used = new Set();
       inner.forEach(r => {

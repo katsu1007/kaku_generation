@@ -9,7 +9,7 @@
 import { analyze as analyzeFrame } from './frame.js';
 import { joinTexts, classify, equipment, titleInfo, sheetTitles } from './text.js';
 
-export const VER = 3;   // 3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
+export const VER = 4;   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物
@@ -90,5 +90,12 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   /* 図面の名前は、図枠ごとに読んだ物（sheetTitles）の方が確か（表題欄の見出しの右だけ見ると会社名などを拾う） */
   const st = [...new Set(sheets.map(x => x.title).filter(Boolean))];
   if (sheets.length >= 2 && st.length) title.sheet = st;
+  /* 工事名称の見出しが無い表題欄：帯の中の「〜工事」の文字（0530 は「大天工業株式会社様 本社改修工事」が各図の帯にある）。図の名前は使わない */
+  if (!(title.project || []).length) {
+    const TB = A.regions.filter(r => r.type === 'title').map(r => r.box);
+    const P = [...new Set(J.texts.filter(t => TB.some(b => t.x >= b[0] && t.x <= b[2] && t.y >= b[1] && t.y <= b[3])).map(t => String(t.t).replace(/[\s\u3000]+/g, ' ').trim())
+      .filter(v => v.length >= 4 && v.length <= 40 && /工事$/.test(v.replace(/\s/g, '')) && !st.includes(v)))];
+    if (P.length) title.project = P.slice(0, 1);
+  }
   return { ...A, ver: VER, names, fxOut, equip, title, sheets, text: { total: texts.length, after: J.texts.length, joined: J.joined, parts: J.parts, kinds } };
 }

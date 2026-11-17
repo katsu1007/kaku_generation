@@ -198,13 +198,30 @@ export function planView(box, plan, opt = {}) {
   /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）はタップで選ばない（区画の無い所を押すと図面全体が選ばれていた）。区画の一覧からは選べる */
   const pin = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > y) !== (P[j][1] > y)) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } return c; };
   const wrapM = new Map(), wraps = (z) => { if (!wrapM.has(z.i)) { let k = 0; for (const o of plan.faces) { if (o !== z && o.area < z.area && pin(o.cx, o.cy, z.poly) && ++k >= 2) break; } wrapM.set(z.i, k >= 2); } return wrapM.get(z.i); };
-  const faceAt = (x, y) => { let best = null; for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || (best && z.area >= best.area)) continue; if (!pin(x, y, P) || wraps(z)) continue; best = z; } return best; };
+  const faceAt0 = (x, y) => { let best = null; for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || (best && z.area >= best.area)) continue; if (!pin(x, y, P) || wraps(z)) continue; best = z; } return best; };
+  /* どの区画にも入らない所（机・棚のかたまりの中など）を押した時：上下左右に見て、8m 以内で最初に当たる区画が3方向以上で同じなら、その区画（まわりを囲んでいる部屋）を選ぶ。建物の外を押した時は選ばない */
+  const faceAround = (x, y) => {
+    const hit = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => {
+      let best = null, bd = 8;
+      for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || wraps(z)) continue;
+        for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[j], b = P[i];
+          let t;
+          if (dx) { if ((a[1] > y) === (b[1] > y)) continue; const xx = a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]); t = (xx - x) * dx; }
+          else { if ((a[0] > x) === (b[0] > x)) continue; const yy = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); t = (yy - y) * dy; }
+          if (t > 0 && t < bd) { bd = t; best = z; } } }
+      return best; });
+    const n = new Map(); hit.forEach(z => { if (z) n.set(z, (n.get(z) || 0) + 1); });
+    let pick = null; n.forEach((k, z) => { if (k >= 3) pick = z; });
+    return pick;
+  };
+  const faceAt = (x, y) => { const f = faceAt0(x, y); if (f) return f; const g = faceAround(x, y); if (g) g._around = true; return g; };
+  const tapFace = f => { const ar = !!f._around; delete f._around; opt.onTap(f.i, { around: ar }); };
   const up = e => {
     const was = pts.size; pts.delete(e.pointerId); clearTimeout(longT);
     if (loupe) {
       const at = lpAt; hideLoupe(); if (e.type !== 'pointerup' || !at) return;
       const mode = opt.mode ? opt.mode() : 'room';
-      if (mode === 'room' && opt.onTap) { const f = faceAt(at[0], at[1]); if (f) opt.onTap(f.i); }
+      if (mode === 'room' && opt.onTap) { const f = faceAt(at[0], at[1]); if (f) tapFace(f); }
       else if (opt.onPoint) opt.onPoint(at[0], at[1], toUser(0, 0)[2], true);
       return;
     }
@@ -216,7 +233,7 @@ export function planView(box, plan, opt = {}) {
       const [ux, uy, sc] = toUser(e.clientX, e.clientY);
       const mode = opt.mode ? opt.mode() : 'room';
       const fa = mode === 'room' && opt.onTap ? faceAt(ux, -uy) : null;
-      if (mode === 'room' && opt.onTap) { if (fa) opt.onTap(fa.i); }
+      if (mode === 'room' && opt.onTap) { if (fa) tapFace(fa); }
       else if (opt.onPoint) opt.onPoint(ux, -uy, sc);
     }
   };

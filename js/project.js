@@ -948,7 +948,8 @@ function stepRooms(ctx) {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
         extraTools: `<button class="iconbtn" data-act="dwgFs" title="${dwgFs ? '全画面をやめる' : '全画面で編集する'}" aria-label="${dwgFs ? '全画面をやめる' : '全画面で編集する'}">${icon(dwgFs ? 'shrink' : 'full')}</button>`,
         marks: () => faceMarks(),
-        onTap: i => { if (!sel.has(i) && owner().has(i)) {
+        onTap: (i, how) => { if (how && how.around && !sel.has(i) && !owner().has(i)) { const f = p.drawing.plan.faces.find(z => z.i === i); toast(`区画の無い所（机・棚などの所）を押したので、まわりの区画${f ? f.no : ''} を選びました`, { ms: 4000 }); }
+          if (!sel.has(i) && owner().has(i)) {
             /* もう部屋に入っている区画は、タップしただけでは選ばない（まとめた後に触ってしまっても崩れないように）。選び直す時は知らせのボタンで */
             const r = p.rooms.find(q => (q.faces || []).includes(i) || (q.faces || []).includes(joinRoot(i))), f = p.drawing.plan.faces.find(z => z.i === i);
             toast(`区画${f ? f.no : ''} は部屋「${r ? r.name : ''}」に入っています。選び直す時は「選ぶ」を押してください`, { ms: 5000, action: '選ぶ', onAction: () => { sel.add(i); paintSel(); } }); return; }

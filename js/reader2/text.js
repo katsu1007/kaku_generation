@@ -153,7 +153,9 @@ export function sheetTitles(texts = [], frames = [], titles = []) {
     const hits = T.filter(t => SHEET_WORD.test(t.s));
     if (!hits.length) return { box: fb, title: '', kind: '' };
     /* いちばん長い物の行で、近くに続く切れ端をつなぐ */
-    const best = hits.sort((p, q) => q.s.length - p.s.length)[0];
+    /* 工事の名前（「〜様 〜改修工事」）は図の名前ではない。「〜図」「〜プラン」を先に、同じなら長い方（0530 は工事名に「改修」が入っていて、図の名前に工事名を拾っていた） */
+    const rank = t => (/工事|株式会社|様|御中/.test(t.s) ? 0 : 2) + (/図|プラン/.test(t.s) ? 1 : 0);
+    const best = hits.sort((p, q) => rank(q) - rank(p) || q.s.length - p.s.length)[0];
     const row = T.filter(t => Math.abs(t.y - best.y) <= 0.08).sort((p, q) => p.x - q.x);
     let k = row.indexOf(best), a = k, b = k;
     const near = (p, q) => q.x - p.x > 0 && q.x - p.x <= p.s.length * 0.6 + 0.8;
