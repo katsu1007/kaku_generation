@@ -313,7 +313,9 @@ function sheetRow(d) {
   const S = sheetsOf(d); if (!S.length) return '';
   return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><b class="small">この図面の中の図（使う図に印を付けてください）</b>
     ${S.map(x => `<label class="row" style="gap:8px;min-height:44px;cursor:pointer"><input type="checkbox" data-sheet="${x.key}" ${x.use ? 'checked' : ''} style="width:22px;height:22px"><span class="small">${esc(x.title || `図 ${x.k + 1}`)}${x.kind === 'now' ? '<span class="muted">（今の図）</span>' : x.kind === 'plan' ? '<span class="muted">（改修の図）</span>' : x.kind === 'table' ? '<span class="muted">（表）</span>' : ''}</span></label>`).join('')}
-    <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span></div>`;
+    <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span>
+    ${S.some(x => /（\dつ目）$/.test(x.title)) ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 同じ名前の図が2つ以上あります。名前からは今の図か改修の図か分からないので、全部使うにしてあります。図面を見て、使わない方の印を外してください（そのままだと同じ所を二重に数えます）。</div>` : ''}
+    <div class="small muted" style="margin-top:6px">※ 印を外す前に並べた照明は、自動では消えません。照明を自動で並べ直すと、使わない図の中の照明は消えます。</div></div>`;
 }
 
 /* 新しい読み取り（試し）の切り替えと、見つけた図枠・表の数。解析の結果がある図面（JWW・DXF を読み込んだ時に作る）だけ出す */
