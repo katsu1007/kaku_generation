@@ -43,9 +43,9 @@ export const pitchFor = (ch, base = 2) => base * Math.max(0.7, Math.pow(0.9, ch 
 
 /* 部屋1つの照明の点。use を選んだ時は光束法の台数に届くまで間隔を詰める */
 /* 照度の目安（置いた台数から） */
-export function luxOf(P, ch, use, lm, n) {
+export function luxOf(P, ch, use, lm, n, A0, L0) {   // A0・L0：区画いくつかの部屋の広さ・周り（無ければ P から）
   const u = USES.find(x => x[0] === use); if (!u || !u[2]) return 0;
-  const A = areaOf(P), Hm = Math.max(0.5, ch - u[3]), K = 2 * A / (Hm * perimOf(P));
+  const A = A0 > 0 ? A0 : areaOf(P), Hm = Math.max(0.5, ch - u[3]), K = 2 * A / (Hm * (L0 > 0 ? L0 : perimOf(P)));
   return n * lm * util(K) * MF / A;
 }
 

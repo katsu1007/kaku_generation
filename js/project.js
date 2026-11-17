@@ -787,7 +787,7 @@ function stepRooms(ctx) {
         const pr = p.rooms.filter(r => r.src === 'plan');
         const lightItems = masterItems().filter(i => /^e-(dl|clight|bl|base)/.test(i.id));
         const W = lightWires(p), n = (p.drawing.lights || []).length;
-        const res = pr.map(r => { const k = (p.drawing.lights || []).filter(x => x.room === r.id).length; if (!k) return ''; const u = r.lightUse || ''; const F = (r.faces || []).map(i => p.drawing.plan.faces.find(f => f.i === i)).filter(Boolean); const lx = u && F[0] ? Math.round(luxOf(F[0].poly, Number(r.h) || planCH(p.drawing.plan) || opts().ceilH, u, r.lightLm || 800, k) / 10) * 10 : 0; const tgt = (USES.find(x => x[0] === u) || [])[2]; return `<span class="pill ${lx && tgt && lx < tgt * 0.95 ? 'warn' : 'info'}">${esc(r.name)} ${k}台${lx ? `・約${lx}lx（目標${tgt}）` : ''}</span>`; }).join('');
+        const res = pr.map(r => { const k = (p.drawing.lights || []).filter(x => x.room === r.id).length; if (!k) return ''; const u = r.lightUse || ''; const F = (r.faces || []).map(i => p.drawing.plan.faces.find(f => f.i === i)).filter(Boolean); const lx = u && F[0] ? Math.round(luxOf(F[0].poly, Number(r.h) || planCH(p.drawing.plan) || opts().ceilH, u, r.lightLm || 800, k, Number(r.area) || F.reduce((t, f) => t + (f.area || 0), 0), Number(r.perim) || 0) / 10) * 10 : 0; const tgt = (USES.find(x => x[0] === u) || [])[2]; return `<span class="pill ${lx && tgt && lx < tgt * 0.95 ? 'warn' : 'info'}">${esc(r.name)} ${k}台${lx ? `・約${lx}lx（目標${tgt}）` : ''}</span>`; }).join('');
         const hasOut = (p.drawing.fixtures || []).some(x => x.out || ((x.t === 'toilet' || x.t === 'counter') && x.back));
         if (!pr.length && lset.room !== 'faces') lset.room = 'faces';
         bar.innerHTML = `

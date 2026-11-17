@@ -100,7 +100,8 @@ export function planView(box, plan, opt = {}) {
   const set = () => { svg.setAttribute('viewBox', vb.join(' ')); vis(); };
   set();
   /* 図面の縦横の比に合わせて高さを決める（横長の図面で下が空かないように） */
-  const fitH = () => { if (box.closest('.dwg-fs')) { svg.style.height = ''; return; } const w = box.clientWidth || 600; svg.style.height = Math.round(Math.max(240, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
+  const fitH = () => { if (!box.isConnected) { window.removeEventListener('resize', fitH); return; }   // 描き直して外れた図面の分は外す（描き直すたびに溜まっていた）
+    if (box.closest('.dwg-fs')) { svg.style.height = ''; return; } const w = box.clientWidth || 600; svg.style.height = Math.round(Math.max(240, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
   fitH();
   window.addEventListener('resize', fitH);
 
@@ -212,6 +213,8 @@ export function planView(box, plan, opt = {}) {
       moved = true;
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       vb = startVb.slice(); set(); zoomAt(startMid[0], startMid[1], d / startDist);
+      /* 2本指をそろって動かした分だけ、図もずらす（指について来る） */
+      const mx = (a[0] + b[0]) / 2 - startMid[0], my = (a[1] + b[1]) / 2 - startMid[1], sc2 = toUser(0, 0)[2]; vb[0] -= mx * sc2; vb[1] -= my * sc2; set();
     }
   });
   /* その点を含む区画のうち一番小さい物（図枠の内側のような大きい区画が、上に重なっていても小さい方を選ぶ） */
