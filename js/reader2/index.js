@@ -9,7 +9,7 @@
 import { analyze as analyzeFrame } from './frame.js';
 import { joinTexts, classify, equipment, titleInfo, sheetTitles } from './text.js';
 
-export const VER = 2;
+export const VER = 3;   // 3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物

@@ -3,7 +3,7 @@ import { state, registerView, setTop, go, touch, opts, findProject, masterItems,
 import { roomGeom, lineQty, netQty, totals, check, MEASURES, KINDS, isRoomBased, hatsuCalc, hatsuItem, cutItem, ZANDO_F, wallGroup, lineBasis, okState, okMark, hasCode, missingWaste, isDemoArea, wasteRows } from './calc.js';
 import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
-import { analyzeAll as analyzeFrame } from './reader2/index.js';
+import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
@@ -262,7 +262,7 @@ function drawingCard(p) {
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div id="dwgEdit" class="${dwgFs ? 'dwg-fs' : ''}"><div class="dwg-fs-head"><b class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name || '図面')}</b><button class="btn sm" data-act="dwgFs">${icon('shrink')}全画面をやめる</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
-    ${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
+    ${oldReadRow(d)}${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div></div>
     <div id="dwgDemo"></div>
     <div id="dwgFix">${fixSummary(d)}</div>${elecRow(p)}
@@ -314,6 +314,11 @@ export function sheetMarks(d) {
   return out;
 }
 /* 表題欄の工事名称（どちらの読み取りでも出す）。案件の名前と違う時だけ「案件の名前に入れる」 */
+/* 文字を覚えていない前の版の図面：図の分け方・工事名称は読み直さないと出ない。その事を先に知らせる（後で気付かないように） */
+function oldReadRow(d) {
+  if (!d || !d.analysis || d.src2 || d.analysis.ver === R2VER) return '';
+  return `<div class="small" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ この図面は前の版で読み込んだため、図の分け方（今の図・改修の図）や工事名称がまだ出ていません。上の「読み直す」で同じ図面を選び直すと出ます（一度読み直せば、次からは開くだけで新しくなります）。</div>`;
+}
 function titleRow(p) {
   const d = p.drawing, v = ((((d && d.analysis) || {}).title || {}).project || [])[0];
   if (!v) return '';
@@ -338,7 +343,7 @@ function sheetNotes(d) {
     <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span>
     ${S.some(x => /（\dつ目）$/.test(x.title)) ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 同じ名前の図が2つ以上あります。名前からは今の図か改修の図か分からないので、全部使うにしてあります。図面を見て、使わない方の印を外してください（そのままだと同じ所を二重に数えます）。</div>` : ''}
     ${alts.length >= 2 ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 改修の案が ${alts.length} つとも使うになっています（${alts.map(x => esc(x.title)).join('・')}）。同じ所の別の案なので、見積もりに使う案だけに印を付けてください（そのままだと同じ所を二重に数えます）。</div>` : ''}
-    <div class="small muted" style="margin-top:6px">※ 印を外す前に並べた照明は、自動では消えません。照明を自動で並べ直すと、使わない図の中の照明は消えます。</div></div>`;
+    <div class="small muted" style="margin-top:6px">※ 印を外すと、その図の中に自動で並べた照明も消えます（知らせの「照明を戻す」で戻せます）。</div></div>`;
 }
 /* 図面の上に、図の範囲の枠と名前を出す（使う図は橙の枠、使わない図は灰色の点線） */
 function sheetOverlay(d, lw) {
@@ -926,6 +931,12 @@ function stepRooms(ctx) {
     openRoomFin(p, made.map(r => r.id), { title: n > 1 ? `${n} 部屋の仕上げ（同じにする）` : `「${made[0].name}」の仕上げ`, onDone: () => { syncWaste(p); touch(p); draw(); } });
   };
   const draw = () => {
+    /* 解析の作りを直した後に開いた図面は、覚えておいた文字・線から解析を作り直す（読み直さなくても図の分け方・工事名称が出る） */
+    { const d = p.drawing; if (d && d.plan && d.analysis && d.src2 && d.analysis.ver !== R2VER) { try {
+      const mk = (faces, shapes) => analyzeFrame({ segs: d.src2.segs.length ? d.src2.segs : d.plan.segs, faces, texts: d.src2.texts, fixtures: d.fixtures || [], doors: d.src2.doors || [], shapes });
+      if (d.reader === 'v2' && d.v1) { d.analysis = mk(d.plan.faces, true); d.v1.analysis = mk(d.v1.faces, false); }
+      else { d.analysis = mk(d.plan.faces, false); if (d.v2 && d.v2.faces) d.v2.analysis = mk(d.v2.faces, true); }
+      touch(p); } catch (e) { console.warn('解析を作り直せませんでした', e); } } }
     body.innerHTML = drawingCard(p) + `<div class="rooms">${p.rooms.map((r, i) => roomCard(r, i, p)).join('') || `<div class="card empty"><b>まだ部屋がありません</b>下のボタンで部屋を足してください。</div>`}</div>
       <div class="addbar" style="margin-top:12px"><button class="btn primary" id="addRoom">${icon('plus')}部屋を足す</button>
       </div>`;
@@ -1055,6 +1066,8 @@ function stepRooms(ctx) {
         p.rooms.forEach(r => { if (r.src === 'plan') { r.src = 'plan-old'; delete r.faces; } });
         p.drawing = { fileName: (cad ? [cad] : files).map(f => f.name).join('、'), at: Date.now(), plan: res.plan, fixtures: cad ? res.fixtures : null, open: cad ? res.open : null, doors: cad ? (res.doorList || []) : [], fixG: cad ? res.fixG : '', fixGd: cad ? res.fixGd : '' };
         /* 新しい読み取り（js/reader2）：図枠・表の印を作って覚えておく。今の読み取りの結果（区画・器具）は変えない。画面に出すのは「新しい読み取り」を選んだ時だけ */
+        /* 解析を後で作り直せるように、文字・長い線・ドアを覚えておく（解析の作りを直した時、開いただけで新しい解析になる） */
+        if (cad) p.drawing.src2 = { texts: res.texts || [], segs: res.longSegs && res.longSegs.length ? res.longSegs : [], doors: res.doorList || [] };
         if (cad) { try { p.drawing.analysis = analyzeFrame({ segs: res.longSegs && res.longSegs.length ? res.longSegs : res.plan.segs, faces: res.plan.faces, texts: res.texts || [], fixtures: res.fixtures || [], doors: res.doorList || [] }); } catch (e2) { console.warn('新しい読み取りの解析に失敗', e2); } }
         if (cad && res.v2) { try { const P2 = { faces: res.v2.faces }; orderFacesOf(P2);
           /* 扉の無い開口は「区画の辺に壁の線が無い所」で決めるので、区画の形が壁の線に沿っていないと、辺のほとんどが開口になる。
@@ -1104,7 +1117,13 @@ function stepRooms(ctx) {
     if (e.target.matches('[data-holes]')) { holesOn = e.target.checked; paintSel(); return; }
     if (e.target.matches('[data-sheet]')) {
       const d = p.drawing; d.sheetUse = { ...(d.sheetUse || {}), [e.target.dataset.sheet]: e.target.checked };
-      touch(p); draw(); toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
+      /* 使わない図にした時は、その図の中に自動で並べた照明もすぐ消す（並べ直さなくても消えるように）。元に戻すで戻せる */
+      let gone = [];
+      if (!e.target.checked) { const sh = sheetsOf(d).find(x => x.key === e.target.dataset.sheet), b = sh && sh.box;
+        if (b) { const inB = x => x.x >= b[0] && x.x <= b[2] && x.y >= b[1] && x.y <= b[3]; gone = (d.lights || []).filter(x => x.auto && !x.room && inB(x)); if (gone.length) { d.lights = d.lights.filter(x => !gone.includes(x)); syncDemoLines(p); } } }
+      touch(p); draw();
+      if (gone.length) toast(`この図の区画は使いません（灰色になります）。この図の中に自動で並べた照明 ${gone.length} 台も消しました`, { ms: 6000, action: '照明を戻す', onAction: () => { d.lights = [...(d.lights || []), ...gone]; syncDemoLines(p); touch(p); draw(); } });
+      else toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
     }
     if (e.target.matches('[data-reader2]')) {
       /* 入れる：表題欄・表の中の「器具」を「器具ではない」にする（元の種類は r2 に覚える）。外す：元の種類に戻す */
