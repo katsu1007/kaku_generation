@@ -5,7 +5,7 @@ import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
 import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
-import { modelFor, joinTexts } from './reader2/text.js';
+import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
@@ -593,22 +593,24 @@ function stepRooms(ctx) {
     Object.keys(d.faceOff || {}).forEach(k => { o[k] = { s: 'out', type: 'off', why: '「区画ではない」にした所です。もう一度選んで「元に戻す」で戻せます' }; });
     Object.entries(d.faceJoin || {}).forEach(([k, b]) => { const t = F.find(f => f.i === b); o[k] = { s: 'join', type: 'join', why: `区画${t ? t.no : ''} にまとめた所です。もう一度選んで「元に戻す」で戻せます` }; });
     return o; };
-  /* 区画の中に書いてある文字（表のマスの「床 長尺シート」など）。灰色の区画に「区画ではない」の代わりに出す（かつ「拾った文字を入れれないかな」）。文字は一番小さい区画に入れる */
+  /* 表・表題欄・「区画ではない」にした所は区画として出さず、図面に書いてある文字をその場所にそのまま出す（かつ「区画じゃないから文字出してもらいたい」）。
+     文字は含む一番小さい区画に入れる。字の高さは図面から来ないので、同じ区画の中の行の間かくから決める */
+  const TXT_TYPES = new Set(['table', 'title', 'off']);
   let ftKey = null, ftMap = null;
   const faceTexts = () => { const d = p.drawing || {}, F = (d.plan && d.plan.faces) || [], T = (d.src2 && d.src2.texts) || [];
     if (ftKey === F && ftMap) return ftMap; ftKey = F; ftMap = new Map(); if (!T.length || !F.length) return ftMap;
-    let J = []; try { J = joinTexts(T).texts; } catch (e) { J = T; }
-    J.forEach(t => { const s = String(t.t || '').replace(/[\s\u3000]+/g, ' ').trim(); if (!s) return; let best = null;
+    T.forEach(t => { const s = normalizeText(t.t).trim(); if (!s) return; let best = null;
       F.forEach(f => { if (!f.poly || f.poly.length < 3 || (best && f.area >= best.area)) return; if (pip(t.x, t.y, f.poly)) best = f; });
       if (best) { const L = ftMap.get(best.i) || []; L.push({ s, x: t.x, y: t.y }); ftMap.set(best.i, L); } });
-    /* 上の行から、同じ行は左から */
-    ftMap.forEach((L, k) => { L.sort((a, b) => Math.abs(a.y - b.y) > 0.15 ? b.y - a.y : a.x - b.x); const R = [];
-      L.forEach(q => { const r = R[R.length - 1]; if (r && Math.abs(r.y - q.y) <= 0.15) r.s += ' ' + q.s; else R.push({ y: q.y, s: q.s }); });   // 同じ行の文字は1行に
-      ftMap.set(k, R.map(r => r.s)); });
+    ftMap.forEach((L, k) => { const f = F.find(z => z.i === k), xs = f.poly.map(q => q[0]), ys = f.poly.map(q => q[1]), x1 = Math.max(...xs), fh = Math.max(...ys) - Math.min(...ys);
+      const rows = [...new Set(L.map(q => Math.round(q.y / 0.02)))].sort((a, b) => a - b); let gap = Infinity; for (let i = 1; i < rows.length; i++) gap = Math.min(gap, (rows[i] - rows[i - 1]) * 0.02);
+      const h0 = Math.max(0.05, Math.min(0.4, isFinite(gap) ? gap * 0.7 : fh * 0.45));
+      L.forEach(q => { const room = x1 - q.x; q.h = Math.max(0.03, Math.min(h0, room > 0 ? room / Math.max(1, q.s.length * 0.95) : h0)); }); });
     return ftMap; };
+  const textMarksOf = (o) => { const FT = faceTexts(), out = []; Object.keys(o || {}).forEach(k => { const m = o[k]; if (m && m.s === 'out' && TXT_TYPES.has(m.type)) (FT.get(+k) || []).forEach(q => out.push(q)); }); return out; };
   const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); if (!(Object.keys(a).length || Object.keys(b).length || Object.keys(h).length)) return null;
-    const o = { ...a, ...b, ...h }, FT = faceTexts();
-    Object.keys(o).forEach(k => { const L = FT.get(+k) || FT.get(k); if (L && L.length && o[k] && o[k].s === 'out') o[k] = { ...o[k], label: L }; });
+    const o = { ...a, ...b, ...h };
+    Object.keys(o).forEach(k => { if (o[k] && o[k].s === 'out' && TXT_TYPES.has(o[k].type)) o[k] = { ...o[k], hide: true }; });
     return o; };
   /* 区画のまとまりを決め直した部屋の広さ・周り・開口 */
   /* 区画のまとまりの広さ・周り。まとまりの中の穴（机などで切れてどの区画にも入らなかった所）も床の広さに足す（drawing.js の roomHoles） */
@@ -964,6 +966,7 @@ function stepRooms(ctx) {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
         extraTools: `<button class="iconbtn" data-act="dwgFs" title="${dwgFs ? '全画面をやめる' : '全画面で編集する'}" aria-label="${dwgFs ? '全画面をやめる' : '全画面で編集する'}">${icon(dwgFs ? 'shrink' : 'full')}</button>`,
         marks: () => faceMarks(),
+        dtexts: () => textMarksOf(faceMarks()),
         onTap: (i, how) => { if (how && how.around && !sel.has(i) && !owner().has(i)) { const f = p.drawing.plan.faces.find(z => z.i === i); toast(`区画の無い所（机・棚などの所）を押したので、まわりの区画${f ? f.no : ''} を選びました`, { ms: 4000 }); }
           if (!sel.has(i) && owner().has(i)) {
             /* もう部屋に入っている区画は、タップしただけでは選ばない（まとめた後に触ってしまっても崩れないように）。選び直す時は知らせのボタンで */

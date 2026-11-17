@@ -71,6 +71,7 @@ export function planView(box, plan, opt = {}) {
       ${opt.fixGd ? `<path d="${opt.fixGd}" transform="scale(0.001,0.001)" fill="none" stroke="var(--faint)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="4 3" pointer-events="none"/>` : ''}
       <g class="fixes" pointer-events="none"></g>
       <g class="overlay" pointer-events="none"></g>
+      <g class="dtexts" pointer-events="none" fill="var(--text)" opacity=".8"></g>
       <g class="labels" font-size="${fs}" text-anchor="middle"></g></g></svg>
     <div class="pv-note" hidden>拡大すると、区画の番号が出ます</div>
     <div class="pv-loupe" hidden><svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><use href="#${gid}"/><g class="lp-mark"></g></svg></div>
@@ -108,8 +109,8 @@ export function planView(box, plan, opt = {}) {
     /* 大きい区画を先に描いて、小さい区画を上に重ねる（大きい区画の下に小さい区画が隠れて押せなくならないように） */
     svg.querySelector('.faces').innerHTML = [...plan.faces].sort((a, b) => b.area - a.area).map(f => {
       const o = owner.get(f.i), s = sel.has(f.i), m = !s && o == null ? mk(f) : null;
-      const fill = s ? 'var(--accent)' : o != null ? roomColor(o) : m && m.s === 'out' ? '#8a93a0' : 'transparent';
-      const op = s ? 0.45 : o != null ? 0.22 : m && m.s === 'out' ? 0.32 : 0;
+      const fill = s ? 'var(--accent)' : o != null ? roomColor(o) : m && m.s === 'out' && !m.hide ? '#8a93a0' : 'transparent';
+      const op = s ? 0.45 : o != null ? 0.22 : m && m.s === 'out' && !m.hide ? 0.32 : 0;
       return `<polygon data-i="${f.i}" points="${f.poly.map(p => p[0] + ',' + -p[1]).join(' ')}" fill="${fill}" fill-opacity="${op}" stroke="${s ? 'var(--accent)' : m && m.s === 'hold' ? 'var(--warn)' : 'none'}" ${m && m.s === 'hold' ? `stroke-dasharray="${lw * 6} ${lw * 4}"` : ''} stroke-width="${lw * 2.5}" style="cursor:pointer"/>`;
     }).join('');
     svg.querySelector('.labels').innerHTML = plan.faces.map(f => {
@@ -117,14 +118,13 @@ export function planView(box, plan, opt = {}) {
       const m = !s && o == null ? mk(f) : null;
       const fz = fzOf.get(f.i) || fs;
       const kind = m ? (m.s === 'join' ? 'まとめ済' : m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : m.type === 'sheet' ? '使わない図' : m.type === 'off' ? '区画ではない' : '表') : '？') : '';
-      /* 灰色の区画に文字が書いてあれば、その文字を出す（2行まで・長い物は切る）。何の区画かは下に小さく */
-      if (m && m.label && m.label.length) { const cut = v => v.length > 14 ? v.slice(0, 13) + '…' : v, L = m.label.slice(0, 2).map(v => cut(v)), more = m.label.length > 2 ? ' 他' + (m.label.length - 2) : '';
-        const xs = f.poly.map(q => q[0]), w = Math.max(...xs) - Math.min(...xs), n = Math.max(...L.map(v => v.length)) + (more ? 3 : 0), fz2 = Math.min(fz, w * 0.9 / Math.max(4, n));
-        const E = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-        return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz2}" data-fz="${fz2}" fill="var(--muted)" font-weight="700" pointer-events="none">${L.map((v, k) => `<tspan x="${f.cx}" dy="${k ? '1.15em' : 0}">${E(v)}${k === L.length - 1 ? more : ''}</tspan>`).join('')}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.7em" fill="var(--faint)">${kind}・区画${f.no}</tspan></text>`; }
+      if (m && m.hide) return '';   // 表・表題欄・区画ではない所は、区画の字を出さない（図面の文字を下の dtexts で出す）
       if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${kind}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
       return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
     }).join('');
+    /* 区画ではない所（表・表題欄など）に書いてある図面の文字を、その場所にそのまま出す（左下が文字の位置） */
+    const E = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    svg.querySelector('.dtexts').innerHTML = (opt.dtexts ? opt.dtexts() : []).map(q => `<text x="${q.x}" y="${-q.y}" font-size="${q.h}">${E(q.s)}</text>`).join('');
     vis();
   }
   paint();
