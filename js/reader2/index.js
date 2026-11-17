@@ -13,6 +13,7 @@ export const VER = 2;
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物
+ *   見出しは図枠の左の端（幅の1割以内）にある物だけ（仕上表の中の「改修後」などを見出しにしない）
  *   見出しが縦に2つ以上並ぶ（x が 1m 以内でそろい、y が 1m 以上離れる）時だけ分ける
  *   段の境目：上と下の見出しの間で、図の幅の6割以上ある横の長い線のうち一番上（段の見出しの帯の上の線）。無ければまん中
  *   出力：[{ box, title, kind, alt }]（alt：プラン③・A案のように、同じ所の案がいくつもある物） */
@@ -20,7 +21,7 @@ const BAND_LABEL = /^(現況図?|既存図?|改修前図?|改修後図?|計画�
 export function splitBands(fb, texts = [], segs = [], skip = []) {
   const inBox = (x, y, b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
   const L = texts.map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
-    .filter(t => inBox(t.x, t.y, fb) && !skip.some(b => inBox(t.x, t.y, b)) && BAND_LABEL.test(t.s));
+    .filter(t => inBox(t.x, t.y, fb) && t.x <= fb[0] + (fb[2] - fb[0]) * 0.1 && !skip.some(b => inBox(t.x, t.y, b)) && BAND_LABEL.test(t.s));
   if (L.length < 2) return null;
   /* いちばん多くそろう縦の列 */
   let col = [];
@@ -85,7 +86,7 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   const title = titleInfo(J.texts, A.regions.filter(r => r.type === 'title').map(r => r.box));
   const sheets0 = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
   const skipB = A.regions.filter(r => r.type === 'title' || r.type === 'table').map(r => r.box);
-  const sheets = sheets0.flatMap(x => splitBands(x.box, J.texts, segs, skipB) || [x]);
+  const sheets = sheets0.flatMap(x => (x.kind !== 'table' && splitBands(x.box, J.texts, segs, skipB)) || [x]);
   /* 図面の名前は、図枠ごとに読んだ物（sheetTitles）の方が確か（表題欄の見出しの右だけ見ると会社名などを拾う） */
   const st = [...new Set(sheets.map(x => x.title).filter(Boolean))];
   if (sheets.length >= 2 && st.length) title.sheet = st;
