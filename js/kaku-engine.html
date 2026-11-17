@@ -1531,6 +1531,26 @@ function rgSingleLines(){
   const touches=(x,y,k)=>{for(const j of near(k)){if(j===k||!keep[j])continue;const dx=X2[j]-X1[j],dy=Y2[j]-Y1[j],l2=dx*dx+dy*dy;let t=l2?((x-X1[j])*dx+(y-Y1[j])*dy)/l2:0;t=Math.max(0,Math.min(1,t));
     if(Math.hypot(x-X1[j]-t*dx,y-Y1[j]-t*dy)<=TOL)return true}return false};
   for(let it=0;it<3;it++){let ch=false;for(let k=0;k<N;k++){if(keep[k]||!(L[k]>0.02)||L[k]>1.2)continue;if(touches(X1[k],Y1[k],k)&&touches(X2[k],Y2[k],k)){keep[k]=1;ch=true}}if(!ch)break}
+  /* 家具のかたまりを外す：壁は建物じゅうでつながっている。机・テーブル・椅子は壁から離れて置いた小さいかたまり（2本線で描いてあっても）。
+     残す線どうしを「端が相手の線に3cm以内で付いている」でつなぎ、どこにもつながらない差し渡し6m未満のかたまりは外す（kaku_generation で追加） */
+  {const par=new Int32Array(N);for(let k=0;k<N;k++)par[k]=k;const fd=k=>{while(par[k]!==k){par[k]=par[par[k]];k=par[k]}return k};
+    const segD=(x,y,j)=>{const dx=X2[j]-X1[j],dy=Y2[j]-Y1[j],l2=dx*dx+dy*dy;let t=l2?((x-X1[j])*dx+(y-Y1[j])*dy)/l2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(x-X1[j]-t*dx,y-Y1[j]-t*dy)};
+    for(let k=0;k<N;k++){if(!keep[k]||!(L[k]>0.02))continue;for(const j of near(k)){if(j===k||!keep[j])continue;if(segD(X1[k],Y1[k],j)<=0.03||segD(X2[k],Y2[k],j)<=0.03){const a=fd(k),b=fd(j);if(a!==b)par[a]=b}}}
+    const bb=new Map();for(let k=0;k<N;k++){if(!keep[k])continue;const r=fd(k);let v=bb.get(r);if(!v){v=[Infinity,Infinity,-Infinity,-Infinity];bb.set(r,v)}
+      v[0]=Math.min(v[0],X1[k],X2[k]);v[1]=Math.min(v[1],Y1[k],Y2[k]);v[2]=Math.max(v[2],X1[k],X2[k]);v[3]=Math.max(v[3],Y1[k],Y2[k])}
+    const big=r=>{const v=bb.get(r);return Math.max(v[2]-v[0],v[3]-v[1])>=6};
+    /* ただし、大きいかたまり（建物の壁）の線と同じ直線の上に、両側とも2.5m以内のすき間で並ぶかたまりは壁の切れ端（ドアとドアの間の壁・出入口の枠）なので残す。机は壁に向かって片側だけ */
+    const R=2.5,aligned=k=>{let sa=false,sb=false;const ax=Math.floor((Math.min(X1[k],X2[k])-R)/CS),bx=Math.floor((Math.max(X1[k],X2[k])+R)/CS),ay=Math.floor((Math.min(Y1[k],Y2[k])-R)/CS),by=Math.floor((Math.max(Y1[k],Y2[k])+R)/CS);
+      if((bx-ax+1)*(by-ay+1)>900)return false;
+      for(let gx=ax;gx<=bx;gx++)for(let gy=ay;gy<=by;gy++){const v=cell.get(gx+","+gy);if(!v)continue;for(const j of v){if(!keep[j]||!big(fd(j))||!(L[j]>=0.3))continue;
+        if(Math.abs(UX[k]*UY[j]-UY[k]*UX[j])>0.02)continue;
+        const d1=Math.abs((X1[k]-X1[j])*UY[j]-(Y1[k]-Y1[j])*UX[j]),d2=Math.abs((X2[k]-X1[j])*UY[j]-(Y2[k]-Y1[j])*UX[j]);if(d1>0.03||d2>0.03)continue;
+        /* 壁の線 j が、この線（k の向きで測る）の手前側か向こう側か（両側にあれば壁の切れ端） */
+        const s1=(X1[j]-X1[k])*UX[k]+(Y1[j]-Y1[k])*UY[k],s2=(X2[j]-X1[k])*UX[k]+(Y2[j]-Y1[k])*UY[k],jl=Math.min(s1,s2),jh=Math.max(s1,s2);
+        if(jh<=0.05&&-jh<=R)sb=true;else if(jl>=L[k]-0.05&&jl-L[k]<=R)sa=true;
+        if(sa&&sb)return true}}return false};
+    const keepC=new Set();for(let k=0;k<N;k++){if(!keep[k]||!(L[k]>=0.3))continue;const r=fd(k);if(big(r)||keepC.has(r))continue;if(aligned(k))keepC.add(r)}
+    for(let k=0;k<N;k++){if(!keep[k])continue;const r=fd(k);if(!big(r)&&!keepC.has(r))keep[k]=0}}
   const extra=[];
   /* 吹き抜け・エレベーターなどの「四角の中の×」：×の線は外すが、×の4つの先を結んだ四角のふちの線は残す（ホールとの境目が1本線のことがある）。
      ×＝長さ1m以上の1本線どうしが、どちらもまん中あたり（長さの2割以内）で交わる物。×の描いてある所を吹き抜けの広さとみて、線の無い辺には見えない線を足す */
