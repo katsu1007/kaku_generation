@@ -1,9 +1,9 @@
 /* 保存（IndexedDB）。失敗は必ず呼び出し元に投げる（黙って捨てない）。
  * projects：案件 1件1レコード ／ kv：設定・会社情報・単価マスターの変更など */
-const DB_NAME = 'kaku';
+const DB_NAME = 'kaku_generation';
 const DB_VER = 1;
 export const DATA_VERSION = 1;
-const OLD_KEY = 'kaku-estimate-v1';
+const OLD_KEY = 'kaku-generation-v1';
 
 /* iPhoneアプリ（KAKU.ipa）の中で動いている時：保存のたびに全部をアプリのファイルにも書く（kakuDB）。
  * 起動の時にアプリが前回の中身を window.__kakuDB に入れてくれる。
