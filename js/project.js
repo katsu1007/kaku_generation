@@ -605,9 +605,25 @@ function stepRooms(ctx) {
     ftMap.forEach((L, k) => { const f = F.find(z => z.i === k), xs = f.poly.map(q => q[0]), ys = f.poly.map(q => q[1]), x1 = Math.max(...xs), fh = Math.max(...ys) - Math.min(...ys);
       const rows = [...new Set(L.map(q => Math.round(q.y / 0.02)))].sort((a, b) => a - b); let gap = Infinity; for (let i = 1; i < rows.length; i++) gap = Math.min(gap, (rows[i] - rows[i - 1]) * 0.02);
       const h0 = Math.max(0.05, Math.min(0.4, isFinite(gap) ? gap * 0.7 : fh * 0.45));
-      L.forEach(q => { const room = x1 - q.x; q.h = Math.max(0.03, Math.min(h0, room > 0 ? room / Math.max(1, q.s.length * 0.95) : h0)); }); });
+      L.forEach(q => { const room = x1 - q.x; q.h = Math.max(0.03, Math.min(h0, room > 0 ? room / Math.max(1, wOf(q.s)) : h0)); }); });
     return ftMap; };
-  const textMarksOf = (o) => { const FT = faceTexts(), out = []; Object.keys(o || {}).forEach(k => { const m = o[k]; if (m && m.s === 'out' && TXT_TYPES.has(m.type)) (FT.get(+k) || []).forEach(q => out.push(q)); }); return out; };
+  /* 出す文字：表・表題欄の範囲（解析の regions。新しい読み取りでは表の罫線を外すのでマスが区画にならない）の文字と、「区画ではない」にした区画の中の文字 */
+  let rtKey = null, rtList = null;
+  const wOf = v => [...v].reduce((a, c) => a + (/[\x20-\x7e\uff61-\uff9f]/.test(c) ? 0.6 : 1), 0);   // 字の幅（半角は細い）
+  const regionTexts = () => { const d = p.drawing || {}, A = d.analysis || {}, T = (d.src2 && d.src2.texts) || [];
+    if (rtKey === A && rtList) return rtList; rtKey = A; rtList = [];
+    const B = (A.regions || []).filter(r => r && (r.type === 'table' || r.type === 'title') && r.box).map(r => r.box);
+    if (!B.length || !T.length) return rtList;
+    const L = T.map(t => ({ s: normalizeText(t.t).trim(), x: t.x, y: t.y })).filter(q => q.s && B.some(b => q.x >= b[0] && q.x <= b[2] && q.y >= b[1] && q.y <= b[3]));
+    L.forEach(q => { const b = B.find(b => q.x >= b[0] && q.x <= b[2] && q.y >= b[1] && q.y <= b[3]);
+      /* 字の高さ：近くの行（左右 2m 以内）との上下の間かくの7割。右のとなりの文字・範囲のふちを越えない */
+      let gap = Infinity, right = b[2] - q.x;
+      L.forEach(o => { if (o === q) return; const dy = Math.abs(o.y - q.y), dx = o.x - q.x; if (dy > 0.02 && Math.abs(dx) <= 2) gap = Math.min(gap, dy); if (dy <= 0.05 && dx > 0.02) right = Math.min(right, dx); });
+      const h0 = Math.max(0.05, Math.min(0.4, isFinite(gap) ? gap * 0.7 : 0.25));
+      q.h = Math.max(0.03, Math.min(h0, right / Math.max(1, wOf(q.s)))); });
+    rtList = L; return rtList; };
+  const textMarksOf = (o) => { const FT = faceTexts(), out = regionTexts().slice(), seen = new Set(out.map(q => q.x + ',' + q.y));
+    Object.keys(o || {}).forEach(k => { const m = o[k]; if (m && m.s === 'out' && TXT_TYPES.has(m.type)) (FT.get(+k) || []).forEach(q => { if (!seen.has(q.x + ',' + q.y)) { seen.add(q.x + ',' + q.y); out.push(q); } }); }); return out; };
   const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); if (!(Object.keys(a).length || Object.keys(b).length || Object.keys(h).length)) return null;
     const o = { ...a, ...b, ...h };
     Object.keys(o).forEach(k => { if (o[k] && o[k].s === 'out' && TXT_TYPES.has(o[k].type)) o[k] = { ...o[k], hide: true }; });
