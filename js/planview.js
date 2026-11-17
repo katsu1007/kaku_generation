@@ -39,6 +39,7 @@ function fixBox(x, lw, on) {
 /* 通り芯を出すか（端末に覚える。前のKAKUと同じ） */
 const bgOn = () => { try { return localStorage.getItem('kaku-bg') !== '0'; } catch (e) { return true; } };
 const gridOn = () => { try { return localStorage.getItem('kaku-grid') === '1'; } catch (e) { return false; } };
+const txtOn = () => { try { return localStorage.getItem('kaku-dtext') !== '0'; } catch (e) { return true; } };   // 図面の文字（最初は出す）
 export function planView(box, plan, opt = {}) {
   /* 全体の大きさ：図面のずっと遠くにぽつんとある線（三井屋の図面は 600m 下に1本）まで入れると、
      図面が点のように小さくなる。線の端の 1%〜99% の範囲を芯にして、芯の大きさの半分より外に出る線は入れない（区画は全部入れる） */
@@ -71,11 +72,11 @@ export function planView(box, plan, opt = {}) {
       ${opt.fixGd ? `<path d="${opt.fixGd}" transform="scale(0.001,0.001)" fill="none" stroke="var(--faint)" stroke-width="1" vector-effect="non-scaling-stroke" stroke-dasharray="4 3" pointer-events="none"/>` : ''}
       <g class="fixes" pointer-events="none"></g>
       <g class="overlay" pointer-events="none"></g>
-      <g class="dtexts" pointer-events="none" fill="var(--text)" opacity=".8"></g>
+      <g class="dtexts" pointer-events="none" fill="var(--text)" opacity=".8" ${txtOn() ? '' : 'display="none"'}></g>
       <g class="labels" font-size="${fs}" text-anchor="middle"></g></g></svg>
     <div class="pv-note" hidden>拡大すると、区画の番号が出ます</div>
     <div class="pv-loupe" hidden><svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><use href="#${gid}"/><g class="lp-mark"></g></svg></div>
-    <div class="pv-tools">${opt.extraTools || ''}${opt.bg ? `<button class="iconbtn pv-gridbtn ${bgOn() ? 'on' : ''}" data-z="bg" aria-pressed="${bgOn()}" title="下に敷いた図を出す・隠す">図</button>` : ''}${(plan.gsegs || []).length ? `<button class="iconbtn pv-gridbtn ${gridOn() ? 'on' : ''}" data-z="grid" aria-pressed="${gridOn()}" title="通り芯を出す・隠す">芯</button>` : ''}<button class="iconbtn" data-z="in" aria-label="拡大">＋</button><button class="iconbtn" data-z="out" aria-label="縮小">－</button><button class="iconbtn" data-z="fit" aria-label="全体を表示">⤢</button></div></div>`;
+    <div class="pv-tools">${opt.extraTools || ''}${opt.bg ? `<button class="iconbtn pv-gridbtn ${bgOn() ? 'on' : ''}" data-z="bg" aria-pressed="${bgOn()}" title="下に敷いた図を出す・隠す">図</button>` : ''}${(plan.gsegs || []).length ? `<button class="iconbtn pv-gridbtn ${gridOn() ? 'on' : ''}" data-z="grid" aria-pressed="${gridOn()}" title="通り芯を出す・隠す">芯</button>` : ''}${opt.dtexts ? `<button class="iconbtn pv-gridbtn ${txtOn() ? 'on' : ''}" data-z="txt" aria-pressed="${txtOn()}" title="図面の文字を出す・隠す">字</button>` : ''}<button class="iconbtn" data-z="in" aria-label="拡大">＋</button><button class="iconbtn" data-z="out" aria-label="縮小">－</button><button class="iconbtn" data-z="fit" aria-label="全体を表示">⤢</button></div></div>`;
   const svg = box.querySelector('svg');
   /* 区画の番号の字：区画の大きさに合わせた大きさにして、画面で小さすぎて読めない字（7px 未満）は出さない。
    * 区画が何百もある図面で、字が重なって図が見えなくなるため。拡大すると、その大きさで読める区画から順に出る */
@@ -248,6 +249,9 @@ export function planView(box, plan, opt = {}) {
   box.querySelector('.pv-tools').addEventListener('click', e => {
     const z = e.target.closest('[data-z]'); if (!z) return;
     const r = svg.getBoundingClientRect();
+    if (z.dataset.z === 'txt') { const on = !txtOn(); try { localStorage.setItem('kaku-dtext', on ? '1' : '0'); } catch (e2) { /* 覚えられなくても切り替える */ }
+      const g = svg.querySelector('.dtexts'); if (g) { if (on) g.removeAttribute('display'); else g.setAttribute('display', 'none'); }
+      z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); return; }
     if (z.dataset.z === 'grid') { const on = !gridOn(); try { localStorage.setItem('kaku-grid', on ? '1' : '0'); } catch (e2) { /* 覚えられなくても表示は切り替える */ }
       const g = svg.querySelector('.pv-grid'); if (g) { if (on) g.removeAttribute('display'); else g.setAttribute('display', 'none'); }
       z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); return; }

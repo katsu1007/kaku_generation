@@ -349,7 +349,7 @@ function sheetNotes(d) {
 function sheetOverlay(d, lw) {
   const S = sheetsOf(d); if (!S.length) return '';
   return S.map(x => { const [a, b, c, e] = x.box, col = x.use ? 'var(--accent)' : '#8a93a0', fz = Math.max(0.25, (c - a) * 0.028, (e - b) * 0.05);
-    return `<rect x="${a}" y="${-e}" width="${c - a}" height="${e - b}" fill="none" stroke="${col}" stroke-width="${lw * 3}" ${x.use ? '' : `stroke-dasharray="${lw * 8} ${lw * 6}"`} pointer-events="none"/><text x="${a + fz * 0.4}" y="${-e + fz * 1.2}" font-size="${fz}" fill="${col}" font-weight="700" stroke="var(--bg)" stroke-width="${fz * 0.15}" paint-order="stroke" pointer-events="none">${x.use ? '✓ ' : '× '}${esc(x.title || `図 ${x.k + 1}`)}</text>`; }).join('');
+    return `<rect x="${a}" y="${-e}" width="${c - a}" height="${e - b}" fill="none" stroke="${col}" stroke-width="2.5" vector-effect="non-scaling-stroke" ${x.use ? '' : 'stroke-dasharray="8 6"'} pointer-events="none"/><text x="${a + fz * 0.4}" y="${-e + fz * 1.2}" font-size="${fz}" fill="${col}" font-weight="700" stroke="var(--bg)" stroke-width="${fz * 0.15}" paint-order="stroke" pointer-events="none">${x.use ? '✓ ' : '× '}${esc(x.title || `図 ${x.k + 1}`)}</text>`; }).join('');
 }
 
 /* 新しい読み取り（試し）の切り替えと、見つけた図枠・表の数。解析の結果がある図面（JWW・DXF を読み込んだ時に作る）だけ出す */
@@ -607,23 +607,26 @@ function stepRooms(ctx) {
       const h0 = Math.max(0.05, Math.min(0.4, isFinite(gap) ? gap * 0.7 : fh * 0.45));
       L.forEach(q => { const room = x1 - q.x; q.h = Math.max(0.03, Math.min(h0, room > 0 ? room / Math.max(1, wOf(q.s)) : h0)); }); });
     return ftMap; };
-  /* 出す文字：表・表題欄の範囲（解析の regions。新しい読み取りでは表の罫線を外すのでマスが区画にならない）の文字と、「区画ではない」にした区画の中の文字 */
+  /* 図面に書いてある文字を、元の図面と同じ場所に全部出す（かつ「あると元図面みたく使いやすくなる」）。表・表題欄の中は範囲のふちを越えないように。
+     字の高さは図面から来ないので、近くの行（左右 2m 以内）との上下の間かくの7割（0.05〜0.4m）。右のとなりの文字を越えない（半角は幅0.6とみる） */
   let rtKey = null, rtList = null;
-  const wOf = v => [...v].reduce((a, c) => a + (/[\x20-\x7e\uff61-\uff9f]/.test(c) ? 0.6 : 1), 0);   // 字の幅（半角は細い）
-  const regionTexts = () => { const d = p.drawing || {}, A = d.analysis || {}, T = (d.src2 && d.src2.texts) || [];
-    if (rtKey === A && rtList) return rtList; rtKey = A; rtList = [];
+  const wOf = v => [...v].reduce((a, c) => a + (/[\x20-\x7e\uff61-\uff9f]/.test(c) ? 0.6 : 1), 0);
+  const allTexts = () => { const d = p.drawing || {}, A = d.analysis || {}, T = (d.src2 && d.src2.texts) || [];
+    if (rtKey === T && rtList) return rtList; rtKey = T; rtList = [];
+    if (!T.length) return rtList;
     const B = (A.regions || []).filter(r => r && (r.type === 'table' || r.type === 'title') && r.box).map(r => r.box);
-    if (!B.length || !T.length) return rtList;
-    const L = T.map(t => ({ s: normalizeText(t.t).trim(), x: t.x, y: t.y })).filter(q => q.s && B.some(b => q.x >= b[0] && q.x <= b[2] && q.y >= b[1] && q.y <= b[3]));
+    const L = T.map(t => ({ s: normalizeText(t.t).trim(), x: +t.x, y: +t.y })).filter(q => q.s && isFinite(q.x) && isFinite(q.y));
+    /* 2m のマス目に分けて、近くの文字だけ見る */
+    const G = new Map(), key = (i, j) => i + ',' + j; L.forEach(q => { const k = key(Math.floor(q.x / 2), Math.floor(q.y / 2)); (G.get(k) || G.set(k, []).get(k)).push(q); });
     L.forEach(q => { const b = B.find(b => q.x >= b[0] && q.x <= b[2] && q.y >= b[1] && q.y <= b[3]);
-      /* 字の高さ：近くの行（左右 2m 以内）との上下の間かくの7割。右のとなりの文字・範囲のふちを越えない */
-      let gap = Infinity, right = b[2] - q.x;
-      L.forEach(o => { if (o === q) return; const dy = Math.abs(o.y - q.y), dx = o.x - q.x; if (dy > 0.02 && Math.abs(dx) <= 2) gap = Math.min(gap, dy); if (dy <= 0.05 && dx > 0.02) right = Math.min(right, dx); });
-      const h0 = Math.max(0.05, Math.min(0.4, isFinite(gap) ? gap * 0.7 : 0.25));
-      q.h = Math.max(0.03, Math.min(h0, right / Math.max(1, wOf(q.s)))); });
+      let gap = Infinity, right = b ? b[2] - q.x : Infinity; const gi = Math.floor(q.x / 2), gj = Math.floor(q.y / 2);
+      for (let i = gi - 1; i <= gi + 1; i++) for (let j = gj - 1; j <= gj + 1; j++) (G.get(key(i, j)) || []).forEach(o => { if (o === q) return; const dy = Math.abs(o.y - q.y), dx = o.x - q.x; if (dy > 0.02 && Math.abs(dx) <= 2) gap = Math.min(gap, dy); if (dy <= 0.05 && dx > 0.02) right = Math.min(right, dx); });
+      q.g = isFinite(gap) ? Math.max(0.05, Math.min(0.4, gap * 0.7)) : 0; q.r = right; });
+    /* 近くに行が無い文字（寸法の数字など）は、図面の字の高さの真ん中にする。どの字も真ん中の2倍まで */
+    const H = L.filter(q => q.g).map(q => q.g).sort((a, b) => a - b), med = H.length ? H[H.length >> 1] : 0.2;
+    L.forEach(q => { const h0 = Math.min(q.g || med, med * 2); q.h = Math.max(0.03, Math.min(h0, isFinite(q.r) ? q.r / Math.max(1, wOf(q.s)) : h0)); delete q.g; delete q.r; });
     rtList = L; return rtList; };
-  const textMarksOf = (o) => { const FT = faceTexts(), out = regionTexts().slice(), seen = new Set(out.map(q => q.x + ',' + q.y));
-    Object.keys(o || {}).forEach(k => { const m = o[k]; if (m && m.s === 'out' && TXT_TYPES.has(m.type)) (FT.get(+k) || []).forEach(q => { if (!seen.has(q.x + ',' + q.y)) { seen.add(q.x + ',' + q.y); out.push(q); } }); }); return out; };
+  const textMarksOf = () => allTexts();
   const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); if (!(Object.keys(a).length || Object.keys(b).length || Object.keys(h).length)) return null;
     const o = { ...a, ...b, ...h };
     Object.keys(o).forEach(k => { if (o[k] && o[k].s === 'out' && TXT_TYPES.has(o[k].type)) o[k] = { ...o[k], hide: true }; });
