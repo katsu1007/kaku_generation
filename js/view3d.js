@@ -66,7 +66,12 @@ export function applyWin3d(p, list) {
   return n;
 }
 
-export async function open3D(p, { onClose } = {}) {
+/* 途中で失敗した時は「3Dを用意しています…」の幕を残さず、理由を出す（かつ「パソコンでこれでずっと止まってる」） */
+export async function open3D(p, opt = {}) {
+  try { return await open3D0(p, opt); }
+  catch (e) { close3D(); throw new Error('3Dを開けませんでした：' + (e && e.message ? e.message : String(e))); }
+}
+async function open3D0(p, { onClose } = {}) {
   if (!p.drawing || !p.drawing.plan) throw new Error('先に図面を読み込んでください');
   close3D();
   const f = document.createElement('iframe');
@@ -94,8 +99,14 @@ export async function open3D(p, { onClose } = {}) {
   W.document.head.appendChild(st);
   try { W.document.documentElement.dataset.theme = document.documentElement.dataset.theme || 'dark'; } catch (e) { /* なくてよい */ }
   W.__k3 = toOld(p);
+  { let gl = false; try { const c = W.document.createElement('canvas'); gl = !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { /* 判定できない */ }
+    if (!gl) throw new Error('このブラウザでは 3D の描画（WebGL）が使えません。ブラウザの設定でハードウェア アクセラレーションをオンにして、ブラウザを再起動してください'); }
+  /* 3Dの部品の中で起きたエラーも拾う（パソコンで WebGL が使えない時など） */
+  let inner = null; try { W.addEventListener('error', ev => { inner = inner || (ev.error && ev.error.message) || ev.message; }); } catch (e) { /* なくてよい */ }
   W.eval('KAKU_plan=window.__k3.plan;KAKU_fix=window.__k3.fix;current=window.__k3.cur;window.KW_calc=function(){return window.__k3.wire};KAKU_open3D()');
   await new Promise(r => setTimeout(r, 300));
+  if (inner) throw new Error(inner);
+
   f.style.visibility = 'visible'; cover.remove();
   const btn = W.document.querySelector('#k3d .k3close');
   if (btn) { btn.textContent = '閉じる'; btn.onclick = e => { e.preventDefault(); let wins = null; try { wins = JSON.parse(W.eval('JSON.stringify(current.win3d||[])')); } catch (er) { /* 読めなければそのまま */ } close3D(); onClose && onClose(wins); }; }

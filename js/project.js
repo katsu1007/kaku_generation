@@ -784,7 +784,7 @@ function stepRooms(ctx) {
           ${hasOut ? `<button class="btn sm" data-act="oAuto">コンセントだけ置き直す</button>` : ''}
           ${n ? `<button class="btn sm ghost danger" data-act="lClear">照明を全部消す</button>` : ''}${(p.drawing.outlets || []).length ? `<button class="btn sm ghost danger" data-act="oClear">コンセントを全部消す</button>` : ''}
           <div class="seg" style="width:100%" id="lTool">${[['light', '照明'], ['sw', 'スイッチ'], ['out', 'コンセント'], ['panel', '分電盤'], ['link', 'つなぎ替え']].map(t => `<button data-ltool="${t[0]}" class="${ltool === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
-          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（つながっていた照明は近くのスイッチにつなぎ直します）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: 'タップした所に分電盤を置く（なぞっても動かせます）', link: linkSel ? 'つなぐスイッチをタップしてください' : '照明をタップしてから、つなぎたいスイッチをタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
+          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（つながっていた照明は、近くの照明から線を引きます）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: 'タップした所に分電盤を置く（なぞっても動かせます）', link: linkSel ? 'つなぐスイッチをタップしてください' : '照明をタップしてから、つなぎたいスイッチをタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
           <div class="small muted" style="width:100%">照明 ${n} 台・スイッチ ${W.sw} 個（黄＝自動・青＝置いた物）・コンセント ${(p.drawing.outlets || []).length} 個・ケーブル ${W.mL + W.mH} m（余り${W.extra}%込み）。スイッチは入口のそばに自動で置きます${W.booths ? `。トイレのブース ${W.booths} か所は、外の部屋のスイッチで点けます` : ''}。${W.far ? `<b>分電盤から離れた所（別の階の図など）の ${W.far} 区画は、分電盤からの線を入れていません。</b>` : ''}</div>
           ${res ? (n && (p.drawing.lights || []).length && res.split('<span').length > 7 ? `<details style="width:100%"><summary class="small">部屋ごとの台数と明るさを見る${res.includes('pill warn') ? '（目標に届かない部屋あり）' : ''}</summary><div class="row" style="margin-top:6px">${res}</div></details>` : `<div class="row" style="width:100%">${res}</div>`) : ''}`;
         return;
@@ -1041,8 +1041,14 @@ function stepRooms(ctx) {
                 const sw0 = d.switches.map(q => ({ ...q })), link0 = { ...d.link };
                 d.switches = d.switches.filter(q => q.id !== hit.key); Object.keys(d.link).forEach(q => { if (d.link[q] === hit.key) delete d.link[q]; });
                 const L = new Map(d.lights.map(q => [q.id, q]));
-                mine.forEach(k2 => { const lt = L.get(k2); if (!lt) return; let b = null, bd = 1e9; rest.forEach(s0 => { const dd = Math.abs(s0.l[0] - lt.x) + Math.abs(s0.l[1] - lt.y); if (dd < bd) { bd = dd; b = s0; } }); if (b) d.link[k2] = b.key; });
-                redo(); undoT(mine.length ? `スイッチを消しました（照明 ${mine.length} 台を近くのスイッチにつなぎ直しました）` : 'スイッチを消しました', () => { d.switches = sw0; d.link = link0; }); return;
+                /* つなぎ直し先：消すスイッチにつながっていない照明のうち、いちばん近い照明と同じスイッチ。線はその照明から引く（lighting.js の渡り。かつ「近くの照明からひくように」）。
+                   ほかに照明が無ければ、いちばん近いスイッチ */
+                const others = d.lights.filter(q => W.assign[q.id] && W.assign[q.id] !== hit.key && rest.some(s0 => s0.key === W.assign[q.id]));
+                mine.forEach(k2 => { const lt = L.get(k2); if (!lt) return; let b = null, bd = 1e9;
+                  others.forEach(o => { const dd = Math.abs(o.x - lt.x) + Math.abs(o.y - lt.y); if (dd < bd) { bd = dd; b = W.assign[o.id]; } });
+                  if (!b) rest.forEach(s0 => { const dd = Math.abs(s0.l[0] - lt.x) + Math.abs(s0.l[1] - lt.y); if (dd < bd) { bd = dd; b = s0.key; } });
+                  if (b) d.link[k2] = b; });
+                redo(); undoT(mine.length ? `スイッチを消しました（照明 ${mine.length} 台を、近くの照明から線を引くようにしました）` : 'スイッチを消しました', () => { d.switches = sw0; d.link = link0; }); return;
               }
               d.switches.push({ id: uid('S'), x: r3(x), y: r3(y) }); redo(); return;
             }

@@ -130,6 +130,10 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
     let S = switches.filter(s => polyD(s.l, f.poly) <= .35);
     if (!S.length) { const as = { key: 'a:' + f.i, l: autoSwitch(f, faces, plan.segs || [], doors), auto: true }; S = [as]; allSw[as.key] = as; }
     faceS[fi] = S; });
+  /* 先に全部の照明のつなぐスイッチを決める（ほかの区画の照明から線を引くため） */
+  const pickS = (d, S) => { let s = link[d.key] && allSw[link[d.key]] ? allSw[link[d.key]] : null;
+    if (!s) { let bd = 1e9; S.forEach(x => { const dd = man(x.l, d.l); if (dd < bd) { bd = dd; s = x; } }); } return s; };
+  const lightsOf = {}; order.forEach(fi => { const { L } = byFace[fi]; if (!L.length) return; L.forEach(d => { const s = pickS(d, faceS[fi]); (lightsOf[s.key] = lightsOf[s.key] || []).push({ d, fi }); }); });
   order.forEach(fi => { const { f, L, O } = byFace[fi], ch = chOf(f.i); let head = null;
     if (L.length) {
       const S = faceS[fi];
@@ -138,9 +142,13 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
         if (!s) { let bd = 1e9; S.forEach(x => { const dd = man(x.l, d.l); if (dd < bd) { bd = dd; s = x; } }); }
         res.assign[d.key] = s.key; if (!grp[s.key]) { grp[s.key] = { s, L: [] }; gk.push(s.key); } grp[s.key].L.push(d); });
       gk.forEach(k => { const g = grp[k], s = g.s; if (!used[s.key]) { used[s.key] = 1; res.sws.push(s); if (s.auto) res.autoSw++; }
-        const ord = chain(s.l, g.L), pts = [s.l]; let cur = s.l, len = 0;
+        /* スイッチがこの区画の外にあり、同じスイッチの照明がほかの区画にある時は、いちばん近いその照明から線を引く（渡り。スイッチの立ち下がりは無い）
+           （かつ「スイッチを消したら、近くのスイッチにつなぎ直すのではなく、近くの照明から引くように」） */
+        let st = s.l, fromL = false;
+        if (polyD(s.l, f.poly) > .35) { let bd = 1e9; (lightsOf[s.key] || []).forEach(o => { if (o.fi === fi) return; g.L.forEach(d => { const dd = man(o.d.l, d.l); if (dd < bd) { bd = dd; st = o.d.l; fromL = true; } }); }); }
+        const ord = chain(st, g.L), pts = [st]; let cur = st, len = 0;
         ord.forEach(d => { leg(cur, d.l, f.poly).forEach(q => pts.push(q)); len += man(cur, d.l); cur = d.l; });
-        res.paths.push({ pts }); res.circ++; res.lenL += len + Math.max(0, ch - 1.2) + ord.length * .2; if (!head) head = s.l; });
+        res.paths.push({ pts }); res.circ++; res.lenL += len + (fromL ? 0 : Math.max(0, ch - 1.2)) + ord.length * .2; if (!head) head = fromL ? ord[0].l : s.l; });
     }
     if (O.length) { const st = head || O[0].l, ordO = chain(st, O); let c2 = st, l2 = 0;
       ordO.forEach((d, i) => { if (i || head) l2 += man(c2, d.l); c2 = d.l; });
