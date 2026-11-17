@@ -56,7 +56,7 @@ export function luxOf(P, ch, use, lm, n) {
  * 分電盤→部屋：縦横の長さ＋（天井高−1.5m）。1枚の図面に階を横に並べてある時は、横に1m以上離れた所で分けて、同じまとまりの分電盤だけ使う。
  * ケーブルの数量は 余り（既定10%）を足して切り上げ */
 const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)) : 0, q = [a[0] + dx * t, a[1] + dy * t]; return { d: Math.hypot(p[0] - q[0], p[1] - q[1]), q, t }; };
-const polyD = (p, poly) => { if (pip(p[0], p[1], poly)) return 0; let d = 1e9; for (let k = 0; k < poly.length; k++) d = Math.min(d, segD(p, poly[k], poly[(k + 1) % poly.length]).d); return d; };
+export const polyD = (p, poly) => { if (pip(p[0], p[1], poly)) return 0; let d = 1e9; for (let k = 0; k < poly.length; k++) d = Math.min(d, segD(p, poly[k], poly[(k + 1) % poly.length]).d); return d; };
 export const man = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
 
 export function autoSwitch(f, faces, segs, doors) {
@@ -131,17 +131,22 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
     if (!S.length) { const as = { key: 'a:' + f.i, l: autoSwitch(f, faces, plan.segs || [], doors), auto: true }; S = [as]; allSw[as.key] = as; }
     faceS[fi] = S; });
   /* 先に全部の照明のつなぐスイッチを決める（ほかの区画の照明から線を引くため） */
-  const pickS = (d, S) => { let s = link[d.key] && allSw[link[d.key]] ? allSw[link[d.key]] : null;
+  /* link が 'none' の照明はスイッチ無し（人感センサー付きなど。スイッチを消した時。電源だけを、その区画の照明どうしでつなぐ） */
+  const NONE = fi => ({ key: 'n:' + byFace[fi].f.i, l: null, none: true });
+  const pickS = (d, S, fi) => { if (link[d.key] === 'none') return NONE(fi); let s = link[d.key] && allSw[link[d.key]] ? allSw[link[d.key]] : null;
     if (!s) { let bd = 1e9; S.forEach(x => { const dd = man(x.l, d.l); if (dd < bd) { bd = dd; s = x; } }); } return s; };
-  const lightsOf = {}; order.forEach(fi => { const { L } = byFace[fi]; if (!L.length) return; L.forEach(d => { const s = pickS(d, faceS[fi]); (lightsOf[s.key] = lightsOf[s.key] || []).push({ d, fi }); }); });
+  const lightsOf = {}; order.forEach(fi => { const { L } = byFace[fi]; if (!L.length) return; L.forEach(d => { const s = pickS(d, faceS[fi], fi); (lightsOf[s.key] = lightsOf[s.key] || []).push({ d, fi }); }); });
   order.forEach(fi => { const { f, L, O } = byFace[fi], ch = chOf(f.i); let head = null;
     if (L.length) {
       const S = faceS[fi];
       const grp = {}, gk = [];
-      L.forEach(d => { let s = link[d.key] && allSw[link[d.key]] ? allSw[link[d.key]] : null;
-        if (!s) { let bd = 1e9; S.forEach(x => { const dd = man(x.l, d.l); if (dd < bd) { bd = dd; s = x; } }); }
+      L.forEach(d => { const s = pickS(d, S, fi);
         res.assign[d.key] = s.key; if (!grp[s.key]) { grp[s.key] = { s, L: [] }; gk.push(s.key); } grp[s.key].L.push(d); });
-      gk.forEach(k => { const g = grp[k], s = g.s; if (!used[s.key]) { used[s.key] = 1; res.sws.push(s); if (s.auto) res.autoSw++; }
+      gk.forEach(k => { const g = grp[k], s = g.s;
+        if (s.none) { const st = g.L[0].l, ord = chain(st, g.L), pts = [st]; let cur = st, len = 0;
+          ord.forEach(d => { leg(cur, d.l, f.poly).forEach(q => pts.push(q)); len += man(cur, d.l); cur = d.l; });
+          res.paths.push({ pts }); res.circ++; res.lenL += len + ord.length * .2; if (!head) head = ord[0].l; return; }
+        if (!used[s.key]) { used[s.key] = 1; res.sws.push(s); if (s.auto) res.autoSw++; }
         /* スイッチがこの区画の外にあり、同じスイッチの照明がほかの区画にある時は、いちばん近いその照明から線を引く（渡り。スイッチの立ち下がりは無い）
            （かつ「スイッチを消したら、近くのスイッチにつなぎ直すのではなく、近くの照明から引くように」） */
         let st = s.l, fromL = false;
