@@ -1069,10 +1069,18 @@ function stepRooms(ctx) {
         const d = p.drawing, pr = p.rooms.filter(r => r.src === 'plan'), own = owner();
         /* 並べる所：部屋（部屋の区画をまとめて）と、部屋にしていない区画（0.6㎡以上） */
         let groups;
-        if (lset.room === 'faces') groups = [...pr.map(r => ({ r, faces: r.faces || [] })), ...d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6).map(f => ({ r: null, faces: [f.i] }))];
+        /* 部屋にしていない区画のうち、照明を並べない所：
+           ほかの区画を2つ以上中に含む区画（図面の枠の内側・建物の外まわり。並べると図面じゅうが照明で埋まる）、
+           図面の表・表題欄と見た区画（新しい読み取りの解析で「除外」の物） */
+        const marks = (d.analysis && d.analysis.marks) || {};
+        const wraps = (f) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of d.plan.faces) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
+        let skipped = 0;
+        const freeFaces = lset.room !== 'faces' ? [] : d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6).filter(f => { const m = marks[f.i] || marks[String(f.i)]; if ((m && m.s === 'out') || wraps(f)) { skipped++; return false; } return true; });
+        if (lset.room === 'faces') groups = [...pr.map(r => ({ r, faces: r.faces || [] })), ...freeFaces.map(f => ({ r: null, faces: [f.i] }))];
         else groups = pr.filter(r => lset.room === 'all' || r.id === lset.room).map(r => ({ r, faces: r.faces || [] }));
         const facesOf = new Set(groups.flatMap(g => g.faces));
-        d.lights = (d.lights || []).filter(x => x.room ? !groups.some(g => g.r && g.r.id === x.room) : !d.plan.faces.some(f => facesOf.has(f.i) && pip(x.x, x.y, f.poly)));
+        const skipSet = new Set(lset.room !== 'faces' ? [] : d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6 && !freeFaces.includes(f)).map(f => f.i));
+        d.lights = (d.lights || []).filter(x => x.room ? !groups.some(g => g.r && g.r.id === x.room) : !(x.auto && skipSet.has(x.face)) && !d.plan.faces.some(f => facesOf.has(f.i) && pip(x.x, x.y, f.poly)));
         let n = 0;
         (async () => {
           toast('照明を並べています…');
@@ -1084,7 +1092,7 @@ function stepRooms(ctx) {
             res.forEach(o => o.pts.forEach(q => { d.lights.push({ id: uid('L'), x: q[0], y: q[1], item: lset.item, room: g.r ? g.r.id : null, face: g.r ? undefined : o.i, auto: true }); n++; }));
           }
           const no = withOut ? placeOutlets() : 0;
-          syncDemoLines(p); touch(p); paintSel(); toast(`照明 ${n} 台${withOut ? `・コンセント ${no} 個` : ''}を並べました。スイッチと配線も明細に入れました`, { ms: 4000 });
+          syncDemoLines(p); touch(p); paintSel(); toast(`照明 ${n} 台${withOut ? `・コンセント ${no} 個` : ''}を並べました。スイッチと配線も明細に入れました${skipped ? `（図面の枠・表など ${skipped} か所には並べていません）` : ''}`, { ms: 4000 });
         })().catch(e => showError(e));
         return;
       }

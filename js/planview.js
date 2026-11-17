@@ -40,10 +40,20 @@ function fixBox(x, lw, on) {
 const bgOn = () => { try { return localStorage.getItem('kaku-bg') !== '0'; } catch (e) { return true; } };
 const gridOn = () => { try { return localStorage.getItem('kaku-grid') === '1'; } catch (e) { return false; } };
 export function planView(box, plan, opt = {}) {
-  const xs = [], ys = [];
-  plan.segs.forEach(s => { xs.push(s[0], s[2]); ys.push(s[1], s[3]); });
-  plan.faces.forEach(f => f.poly.forEach(p => { xs.push(p[0]); ys.push(p[1]); }));
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  /* 全体の大きさ：図面のずっと遠くにぽつんとある線（三井屋の図面は 600m 下に1本）まで入れると、
+     図面が点のように小さくなる。線の端の 1%〜99% の範囲を芯にして、芯の大きさの半分より外に出る線は入れない（区画は全部入れる） */
+  const qs = (a) => { a.sort((p, q) => p - q); const k = Math.floor(a.length * 0.01); return [a[k], a[a.length - 1 - k]]; };
+  const ax = [], ay = [];
+  plan.segs.forEach(s => { ax.push(s[0], s[2]); ay.push(s[1], s[3]); });
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const add = (x, y) => { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; };
+  if (ax.length) {
+    const [qx0, qx1] = qs(ax), [qy0, qy1] = qs(ay), mx = Math.max(1, qx1 - qx0) * 0.5, my = Math.max(1, qy1 - qy0) * 0.5;
+    const inC = (x, y) => x >= qx0 - mx && x <= qx1 + mx && y >= qy0 - my && y <= qy1 + my;
+    plan.segs.forEach(s => { if (inC(s[0], s[1]) && inC(s[2], s[3])) { add(s[0], s[1]); add(s[2], s[3]); } });
+  }
+  plan.faces.forEach(f => f.poly.forEach(p => add(p[0], p[1])));
+  if (!isFinite(minX)) { minX = minY = 0; maxX = maxY = 1; }
   const W = Math.max(1, maxX - minX), H = Math.max(1, maxY - minY), pad = Math.max(W, H) * 0.04;
   const base = [minX - pad, -maxY - pad, W + pad * 2, H + pad * 2];   // y は上向きなので反転して描く
   let vb = base.slice();
