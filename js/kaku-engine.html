@@ -1600,7 +1600,9 @@ function findDoors(segs,arcs,M){
 /* 区画の形（m）：見つけた区画のマス目のふちをなぞって、角の点だけ残す */
 function rgFacePoly(f){
   const G=RG&&RG.grid;if(!G||!f)return null;const {W,H,c,ox,oy,lab,root}=G,parts=new Set(f.parts);
-  const inn=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&lab[y*W+x]>0&&parts.has(root[lab[y*W+x]]);
+  /* 新しい読み取り（試し）の区画は、広さに数えた線のマス（f.xc）も形に入れる。机などで割れた所をつないで、形と広さを合わせる（kaku_generation で追加） */
+  const XS=f.xc&&f.xc.length?new Set(f.xc):null;
+  const inn=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&((lab[y*W+x]>0&&parts.has(root[lab[y*W+x]]))||(XS!==null&&XS.has(y*W+x)));
   /* 区画のふち（内側を左に見る向きの辺）。同じ点から2本出る所（区画が斜めに接する所）があるので、点ごとに全部覚える（kaku_generation で直した） */
   const next=new Map();const key=(x,y)=>x+","+y;let n=0;const addE=(x1,y1,x2,y2)=>{const k=key(x1,y1);let v=next.get(k);if(!v){v=[];next.set(k,v)}v.push([x2,y2]);n++};
   /* 速さのため：区画のまとまり（root）ごとのマス目の範囲を、図面ごとに1回だけ数えて覚えておく。
@@ -1609,6 +1611,7 @@ function rgFacePoly(f){
     for(let i=0;i<W*H;i++){const l=lab[i];if(l<=0||l>=nr)continue;const k=root[l],o=4*k,x=i%W,y=(i/W)|0;if(x<b[o])b[o]=x;if(y<b[o+1])b[o+1]=y;if(x>b[o+2])b[o+2]=x;if(y>b[o+3])b[o+3]=y}
     G._rbb=b}
   let fx0=W,fy0=H,fx1=-1,fy1=-1;parts.forEach(k=>{if(!(k>=0&&k<root.length))return;const o=4*k,b=G._rbb;if(b[o+2]<0)return;if(b[o]<fx0)fx0=b[o];if(b[o+1]<fy0)fy0=b[o+1];if(b[o+2]>fx1)fx1=b[o+2];if(b[o+3]>fy1)fy1=b[o+3]});
+  if(XS)XS.forEach(i=>{const x=i%W,y=(i/W)|0;if(x<fx0)fx0=x;if(y<fy0)fy0=y;if(x>fx1)fx1=x;if(y>fy1)fy1=y});
   for(let y=fy0;y<=fy1;y++)for(let x=fx0;x<=fx1;x++){if(!inn(x,y))continue;
     if(!inn(x,y-1)){addE(x+1,y,x,y)}
     if(!inn(x+1,y)){addE(x+1,y+1,x+1,y)}
@@ -1826,6 +1829,26 @@ function rgCompute0(X){
     return {area:(n+e*0.5)*c*c,peri:e*c}};
   const agg=new Map();
   for(let l=1;l<=nl;l++){if(isOut(l))continue;const r=root(l);if(!agg.has(r))agg.set(r,{cells:0,parts:[]});const g2=agg.get(r);g2.cells+=cnt[l];g2.parts.push(l)}
+  /* 新しい読み取り（試し）だけ（RG.segOff がある時）：机・テーブルなどの線で細かく割れて、小さすぎ・細すぎで捨てる所を、
+     まわりが1つの部屋だけなら、その部屋に入れる（色が付かない・床の㎡から抜ける・形が斜めになるのを防ぐ）。
+     外（建物の外）に当たる所、2つ以上の部屋に面する所（壁の中など）は入れない。内側から順に6回までくり返す（kaku_generation で追加） */
+  if(RG.segOff){
+    const okR=new Set(),drop=new Set();
+    agg.forEach((g2,r)=>{const big=g2.parts.reduce((m,l)=>cnt[l]>cnt[m]?l:m,g2.parts[0]);if((thick(big)*c<0.25&&g2.parts.length===1)||g2.cells*c*c<0.4)drop.add(r);else okR.add(r)});
+    /* 3㎡未満で、名前もドアも無い小さい区画（机の仕切りなど）も、まわりが1つの部屋だけなら入れる。便所のブースなどドアのある所は入れない */
+    agg.forEach((g2,r)=>{if(!okR.has(r)||g2.cells*c*c>=3)return;if(g2.parts.some(l=>named[l]||hasDoor[l]))return;okR.delete(r);drop.add(r)});
+    const alias=new Map(),res=x=>{while(alias.has(x))x=alias.get(x);return x};
+    for(let it=0;it<6&&drop.size;it++){let ch=false;
+      drop.forEach(r=>{const g2=agg.get(r);const votes=new Map();let nOut=0,nIn=0;
+        for(const l of g2.parts){const o=4*l;if(lbb[o+2]<0)continue;
+          for(let y=lbb[o+1];y<=lbb[o+3];y++)for(let x=lbb[o];x<=lbb[o+2];x++){if(lab[y*W+x]!==l)continue;
+            for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){let xx=x,yy=y;for(let k=0;k<6;k++){xx+=dx;yy+=dy;if(xx<0||yy<0||xx>=W||yy>=H){nOut++;break}const m=lab[yy*W+xx];if(m===-2)continue;
+              if(m>0){if(isOut(m)){nOut++;break}const rm=res(root(m));if(rm!==r&&okR.has(rm)){votes.set(rm,(votes.get(rm)||0)+1);nIn++}}break}}}}
+        /* 外に当たるのが、まわりの4割以下なら入れる（外壁の中は窓で外とつながっているので、外壁ぎわの机も外に当たる） */
+        if(votes.size===1&&nIn>0&&nOut<=0.4*(nOut+nIn)){const [to]=[...votes.keys()];const t=agg.get(to);t.parts.push(...g2.parts);t.cells+=g2.cells;alias.set(r,to);drop.delete(r);agg.delete(r);ch=true}});
+      if(!ch)break}
+    /* 入れられなかった小さい区画（3㎡未満）は、今まで通り区画として残る（下で、広さ・細さの決まりで判断） */
+  }
   const faces=[];const prev=RG.faces||[];
   agg.forEach((g2,r)=>{
     // 機器の外周の線も部屋の床に含める
@@ -1838,7 +1861,7 @@ function rgCompute0(X){
       for(let y0=sy0;y0<=sy1;y0++)for(let x0=sx0;x0<=sx1;x0++){const i=y0*W+x0;if(!sub.has(lab[i]))continue;const x=x0,y=y0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx;if(lab[j]===-2)X2.add(j)}}}
     const sh=shape(new Set(g2.parts),X2);const a=sh.area;if(a<0.5)return;
     const per=sh.peri;const bi=best[big];
-    faces.push({lab:r,parts:g2.parts,area:a,peri:per,c:[(bi%W)*c+ox+c/2,((bi/W)|0)*c+oy+c/2],name:"",h:"",win:0,door:0,sel:false})});
+    faces.push({lab:r,parts:g2.parts,area:a,peri:per,c:[(bi%W)*c+ox+c/2,((bi/W)|0)*c+oy+c/2],name:"",h:"",win:0,door:0,sel:false,xc:RG.segOff&&X2.size?Int32Array.from(X2):undefined})});
   /* 番号の順番：図面のかたまり（1F・2F…のように離れて描いた図）ごとに、左から右（上から下）へ。
      かたまりの中は、上の段から下の段へ、段の中は左から右へ（本を読む順番） */
   {const fOf=new Map();faces.forEach((f,k)=>f.parts.forEach(l=>fOf.set(l,k)));
