@@ -573,7 +573,9 @@ function stepRooms(ctx) {
   /* 新しい読み取りの印（「新しい読み取り」を選んだ図面だけ。選んでいなければ今まで通り何も出さない） */
   const r2marks = () => (p.drawing && p.drawing.reader === 'v2' && p.drawing.analysis && p.drawing.analysis.marks) || null;
   /* 区画の印：新しい読み取りの印（選んだ図面だけ）＋使わない図の中の区画（どちらの読み取りでも） */
-  const faceMarks = () => { const a = r2marks(), b = p.drawing ? sheetMarks(p.drawing) : {}; return a || Object.keys(b).length ? { ...(a || {}), ...b } : null; };
+  /* 今の読み取りでも、表題欄・表と言い切れる区画（解析の「除外」）は灰色にする（決めきれない「保留」は新しい読み取りの時だけ） */
+  const outMarks = () => { const M = (p.drawing && p.drawing.analysis && p.drawing.analysis.marks) || {}, o = {}; Object.keys(M).forEach(k => { if (M[k] && M[k].s === 'out' && (M[k].type === 'title' || M[k].type === 'table')) o[k] = M[k]; }); return o; };
+  const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}; return Object.keys(a).length || Object.keys(b).length ? { ...a, ...b } : null; };
   const FIX_SIZE = { toilet: [0.46, 0.8], urinal: [0.4, 0.36], counter: [1.2, 0.5], sink: [0.45, 0.36], slop: [0.8, 0.52], trough: [3.6, 0.6], bath: [1.6, 1.6], kitchen: [2.55, 0.65] };
   const BACKS = [['N', '上'], ['E', '右'], ['S', '下'], ['W', '左']];
   const fxList = () => (p.drawing && p.drawing.fixtures) || [];
