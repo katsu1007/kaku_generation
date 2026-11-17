@@ -823,7 +823,7 @@ function stepRooms(ctx) {
         bar.innerHTML = `<span class="small muted">${P.length ? '' : '測りたい所を2点タップしてください。線の端・交点・線の上にくっつきます。長押しすると虫めがねで大きく見えます（指を動かして、離した所に決まります）。'}</span>
           ${P.length > 1 ? `<span class="pill acc" style="font-size:15px">長さ ${last.toFixed(3)} m</span>${meas.cont && P.length > 2 ? `<span class="pill info" style="font-size:15px">合計 ${total.toFixed(3)} m</span><span class="pill ok" style="font-size:15px">囲んだ広さ ${polyArea(P).toFixed(2)} ㎡</span><button class="btn sm primary" data-act="measFace" title="壁の線で囲まれていない部屋（広い事務室・つながった部屋など）を、タップした角で囲んで区画にします">${icon('plus')}この形を区画にする</button>` : ''}` : ''}
           <span class="spacer"></span><label class="row small muted" style="gap:6px"><input type="checkbox" data-meas-cont ${meas.cont ? 'checked' : ''} style="width:20px;height:20px">続けて測る（合計・囲んだ広さを出す。区画にもできます）</label>
-          <button class="btn sm" data-act="measClear">やり直す</button>`;
+          ${P.length ? `<button class="btn sm" data-act="measBack" title="最後に打った点だけ消します">${icon('undo')}1つ戻す</button>` : ''}<button class="btn sm" data-act="measClear">全部やり直す</button>`;
       } else {
         const fx = fxList();
         const x = fx[fsel];
@@ -1232,6 +1232,7 @@ function stepRooms(ctx) {
       if (a === 'fixLines') return fixLinesDialog(p, () => {});
       if (a === 'r2name') { const v = (((p.drawing.analysis || {}).title || {}).project || [])[0]; if (v) { p.name = v; touch(p); refresh(); toast(`案件の名前を「${v}」にしました`); } return; }
       if (a === 'measClear') { meas.pts = []; paintSel(); return; }
+      if (a === 'measBack') { meas.pts.pop(); paintSel(); return; }   // 最後に打った点だけ消す（かつ「やり直すだと全部消える。1回ずつ戻せると良い」）
       if (a === 'measFace') {
         /* 壁の線で囲まれていなくて区画として拾えなかった部屋を、タップした角で囲んで区画にする（読み取りは変えない。図面に区画を1つ足すだけ）。
          * 図面の中身（plan）は「元に戻す」が同じ物を指しているので、書き換えずに新しい入れ物に替える */
