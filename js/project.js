@@ -700,10 +700,11 @@ function stepRooms(ctx) {
     if (!view) return '';
     const lw = view.lw, P = meas.pts;
     if (!P.length) return '';
-    let h = `<polyline points="${P.map(q => q[0] + ',' + -q[1]).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="${lw * 3}"/>`;
-    P.forEach(q => { h += `<circle cx="${q[0]}" cy="${-q[1]}" r="${lw * 5}" fill="var(--accent)"/>`; });
-    if (P.length > 1) { const a = P[P.length - 2], b = P[P.length - 1]; h += `<text x="${(a[0] + b[0]) / 2}" y="${-(a[1] + b[1]) / 2}" font-size="${lw * 18}" fill="var(--accent)" stroke="var(--bg)" stroke-width="${lw * 4}" paint-order="stroke" text-anchor="middle" font-weight="800">${Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3)}m</text>`; }
-    if (addAt) h += `<circle cx="${addAt[0]}" cy="${-addAt[1]}" r="${lw * 6}" fill="none" stroke="var(--accent)" stroke-width="${lw * 3}"/>`;
+    /* 線・点・長さの字は、拡大しても画面で同じ大きさ（かつ「字が大きすぎて次押したいところ見れない」）。長さの字は線の少し上に小さく出す（下の欄にも出ている） */
+    let h = `<polyline points="${P.map(q => q[0] + ',' + -q[1]).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
+    P.forEach(q => { h += `<circle cx="${q[0]}" cy="${-q[1]}" r="${lw * 5}" data-r="5" fill="var(--accent)"/>`; });
+    if (P.length > 1) { const a = P[P.length - 2], b = P[P.length - 1]; h += `<text x="${(a[0] + b[0]) / 2}" y="${-(a[1] + b[1]) / 2}" dy="-0.7em" font-size="${lw * 6}" data-px="14" fill="var(--accent)" stroke="var(--bg)" stroke-width="${lw * 1.5}" paint-order="stroke" text-anchor="middle" font-weight="800" pointer-events="none">${Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(3)}m</text>`; }
+    if (addAt) h += `<circle cx="${addAt[0]}" cy="${-addAt[1]}" r="${lw * 6}" data-r="7" fill="none" stroke="var(--accent)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`;
     return h;
   };
   const wallRoomSel = (id, cur, guess = []) => { const pr = p.rooms.filter(r => r.src === 'plan'), ids = new Set(guess.map(r => r.id)), order = [...guess, ...pr.filter(r => !ids.has(r.id))];

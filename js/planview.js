@@ -90,6 +90,9 @@ export function planView(box, plan, opt = {}) {
       const r = svg.getBoundingClientRect(); if (!r.width) return;
       const sc = Math.min(r.width / vb[2], r.height / vb[3]); let hid = 0;
       svg.querySelectorAll('.labels text').forEach(t => { const fz = +t.dataset.fz || fs, on = fz * sc >= 7; if (on) { t.removeAttribute('display'); t.setAttribute('font-size', Math.min(fz, (+t.dataset.cap || 17) / sc)); } else { t.setAttribute('display', 'none'); hid++; } });   // 大きく拡大した時は、字を画面で 17px までにする
+      /* 上に重ねる印（測った長さなど）で、画面の大きさを決めた物：data-px＝字の大きさ（px）、data-r＝丸の半径（px）。拡大しても画面で同じ大きさ */
+      svg.querySelectorAll('.overlay [data-px]').forEach(t => { const px = +t.dataset.px; t.setAttribute('font-size', px / sc); t.setAttribute('stroke-width', px * 0.25 / sc); });
+      svg.querySelectorAll('.overlay [data-r]').forEach(c => c.setAttribute('r', +c.dataset.r / sc));
       const note = box.querySelector('.pv-note'); if (note) note.hidden = !hid;
     });
   }
@@ -138,7 +141,7 @@ export function planView(box, plan, opt = {}) {
     vis();
   }
   paint();
-  const overlay = html => { svg.querySelector('.overlay').innerHTML = html; };
+  const overlay = html => { svg.querySelector('.overlay').innerHTML = html; vis(); };
   const scale = () => toUser(0, 0)[2];
 
   /* ---- 指・マウスの操作 ---- */
