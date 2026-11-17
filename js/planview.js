@@ -74,7 +74,7 @@ export function planView(box, plan, opt = {}) {
       <g class="labels" font-size="${fs}" text-anchor="middle"></g></g></svg>
     <div class="pv-note" hidden>拡大すると、区画の番号が出ます</div>
     <div class="pv-loupe" hidden><svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><use href="#${gid}"/><g class="lp-mark"></g></svg></div>
-    <div class="pv-tools">${opt.bg ? `<button class="iconbtn pv-gridbtn ${bgOn() ? 'on' : ''}" data-z="bg" aria-pressed="${bgOn()}" title="下に敷いた図を出す・隠す">図</button>` : ''}${(plan.gsegs || []).length ? `<button class="iconbtn pv-gridbtn ${gridOn() ? 'on' : ''}" data-z="grid" aria-pressed="${gridOn()}" title="通り芯を出す・隠す">芯</button>` : ''}<button class="iconbtn" data-z="in" aria-label="拡大">＋</button><button class="iconbtn" data-z="out" aria-label="縮小">－</button><button class="iconbtn" data-z="fit" aria-label="全体を表示">⤢</button></div></div>`;
+    <div class="pv-tools">${opt.extraTools || ''}${opt.bg ? `<button class="iconbtn pv-gridbtn ${bgOn() ? 'on' : ''}" data-z="bg" aria-pressed="${bgOn()}" title="下に敷いた図を出す・隠す">図</button>` : ''}${(plan.gsegs || []).length ? `<button class="iconbtn pv-gridbtn ${gridOn() ? 'on' : ''}" data-z="grid" aria-pressed="${gridOn()}" title="通り芯を出す・隠す">芯</button>` : ''}<button class="iconbtn" data-z="in" aria-label="拡大">＋</button><button class="iconbtn" data-z="out" aria-label="縮小">－</button><button class="iconbtn" data-z="fit" aria-label="全体を表示">⤢</button></div></div>`;
   const svg = box.querySelector('svg');
   /* 区画の番号の字：区画の大きさに合わせた大きさにして、画面で小さすぎて読めない字（7px 未満）は出さない。
    * 区画が何百もある図面で、字が重なって図が見えなくなるため。拡大すると、その大きさで読める区画から順に出る */
@@ -94,7 +94,7 @@ export function planView(box, plan, opt = {}) {
   const set = () => { svg.setAttribute('viewBox', vb.join(' ')); vis(); };
   set();
   /* 図面の縦横の比に合わせて高さを決める（横長の図面で下が空かないように） */
-  const fitH = () => { const w = box.clientWidth || 600; svg.style.height = Math.round(Math.max(240, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
+  const fitH = () => { if (box.closest('.dwg-fs')) { svg.style.height = ''; return; } const w = box.clientWidth || 600; svg.style.height = Math.round(Math.max(240, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
   fitH();
   window.addEventListener('resize', fitH);
 

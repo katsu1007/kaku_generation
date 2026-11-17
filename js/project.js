@@ -241,6 +241,8 @@ function elecRow(p) {
     <span class="muted" style="flex:1;min-width:200px">${E && E.summary ? `${esc(E.file)} から ${esc(E.summary)} を入れています。` : '電気屋さんが書き込んだ JWW・DXF から、照明・コンセント・スイッチなどの数と配線の長さを出します。'}</span>
     ${E && E.summary ? '<button class="btn sm ghost danger" data-act="elecOff">入れた分を外す</button>' : ''}</div>`;
 }
+/* 図面を全画面で編集する（プレビューの右上のボタン）。描き直しても全画面のまま */
+let dwgFs = false;
 function drawingCard(p) {
   const d = p.drawing;
   if (!d || !d.plan) return `<div class="card" style="margin-bottom:14px"><div class="row"><div style="flex:1;min-width:220px"><h2>図面から部屋を作る</h2>
@@ -257,9 +259,10 @@ function drawingCard(p) {
       <button class="btn sm" data-act="cadOut">${icon('down')}JWW・DXF</button>
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
+    <div id="dwgEdit" class="${dwgFs ? 'dwg-fs' : ''}"><div class="dwg-fs-head"><b class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name || '図面')}</b><button class="btn sm" data-act="dwgFs">${icon('shrink')}全画面をやめる</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
     ${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
-    <div class="addbar" style="margin-top:10px" id="dwgBar"></div>
+    <div class="addbar" style="margin-top:10px" id="dwgBar"></div></div>
     <div id="dwgDemo"></div>
     <div id="dwgFix">${fixSummary(d)}</div>${elecRow(p)}
     <details class="more"><summary>区画の一覧から選ぶ（図面で押しにくい小さい区画など）</summary><div class="facelist" id="dwgFaces"></div></details>
@@ -314,13 +317,13 @@ function titleRow(p) {
   const d = p.drawing, v = ((((d && d.analysis) || {}).title || {}).project || [])[0];
   if (!v) return '';
   const same = (p.name || '').trim() === v;
-  return `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center"><span class="small">図面の工事名称：<b>${esc(v)}</b></span>${same ? '<span class="small muted">（案件の名前と同じです）</span>' : `<button class="btn sm" data-act="r2name" style="min-height:40px">案件の名前に入れる</button>`}</div>`;
+  return `<div class="row dwg-fs-hide" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center"><span class="small">図面の工事名称：<b>${esc(v)}</b></span>${same ? '<span class="small muted">（案件の名前と同じです）</span>' : `<button class="btn sm" data-act="r2name" style="min-height:40px">案件の名前に入れる</button>`}</div>`;
 }
 function sheetRow(d) {
   const S = sheetsOf(d); if (!S.length) return '';
   const kindTag = x => x.kind === 'now' ? '今の図' : x.kind === 'plan' ? '改修' : x.kind === 'table' ? '表' : '';
-  return `<div style="margin-top:8px"><div class="small" style="margin-bottom:4px"><b>この図面の中の図</b><span class="muted">（名前を押すとその図を大きく出します。印は使う図です）</span></div>
-    <div class="row" style="gap:6px;flex-wrap:wrap">
+  return `<div style="margin-top:8px"><div class="small dwg-fs-hide" style="margin-bottom:4px"><b>この図面の中の図</b><span class="muted">（名前を押すとその図を大きく出します。印は使う図です）</span></div>
+    <div class="row dwg-sheets" style="gap:6px;flex-wrap:wrap">
       <button class="btn sm" data-sheetzoom="" style="min-height:40px">全体</button>
       ${S.map(x => `<span class="row" style="gap:0;border:1px solid ${x.use ? 'var(--accent)' : 'var(--line)'};border-radius:10px;overflow:hidden;background:${x.use ? 'rgba(255,138,61,.10)' : 'transparent'}">
         <label style="display:flex;align-items:center;padding:0 8px;min-height:40px;cursor:pointer"><input type="checkbox" data-sheet="${x.key}" ${x.use ? 'checked' : ''} style="width:20px;height:20px" aria-label="${esc(x.title || `図 ${x.k + 1}`)}を使う"></label>
@@ -330,7 +333,7 @@ function sheetRow(d) {
 function sheetNotes(d) {
   const S = sheetsOf(d); if (!S.length) return '';
   const alts = S.filter(x => x.use && x.alt);
-  return `<div style="margin-top:8px">
+  return `<div class="dwg-fs-hide" style="margin-top:8px">
     <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span>
     ${S.some(x => /（\dつ目）$/.test(x.title)) ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 同じ名前の図が2つ以上あります。名前からは今の図か改修の図か分からないので、全部使うにしてあります。図面を見て、使わない方の印を外してください（そのままだと同じ所を二重に数えます）。</div>` : ''}
     ${alts.length >= 2 ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 改修の案が ${alts.length} つとも使うになっています（${alts.map(x => esc(x.title)).join('・')}）。同じ所の別の案なので、見積もりに使う案だけに印を付けてください（そのままだと同じ所を二重に数えます）。</div>` : ''}
@@ -913,6 +916,7 @@ function stepRooms(ctx) {
     if (p.drawing && p.drawing.plan) {
       view = planView(body.querySelector('#dwgView'), p.drawing.plan, {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
+        extraTools: `<button class="iconbtn" data-act="dwgFs" title="${dwgFs ? '全画面をやめる' : '全画面で編集する'}" aria-label="${dwgFs ? '全画面をやめる' : '全画面で編集する'}">${icon(dwgFs ? 'shrink' : 'full')}</button>`,
         marks: () => faceMarks(),
         onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.type === 'off' || m.type === 'join') ? m.why : (m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
@@ -1097,6 +1101,8 @@ function stepRooms(ctx) {
     if (k && fsel >= 0) { const x = fxList()[fsel]; if (!x) return; x[k] = e.target.value; x.edited = true; if (k === 'back' || k === 't') x.out = null; touch(p); paintSel(); }
   });
   body.addEventListener('click', async e => {
+    const fsb = e.target.closest('[data-act="dwgFs"]');
+    if (fsb) { dwgFs = !dwgFs; document.body.classList.toggle('dwg-fs-on', dwgFs); draw(); return; }
     const sz = e.target.closest('[data-sheetzoom]');
     if (sz) { sheetZoom = sz.dataset.sheetzoom; const x = sheetsOf(p.drawing).find(q => q.key === sheetZoom); if (view && view.zoomTo) view.zoomTo(x ? x.box : null); return; }
     const mb = e.target.closest('[data-mode]');

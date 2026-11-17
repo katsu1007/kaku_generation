@@ -455,3 +455,22 @@ table.basis th:first-child { text-align: left; }
 .kspin{display:inline-block;width:14px;height:14px;margin-right:6px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:kspin .8s linear infinite;will-change:transform;opacity:.7}
 @keyframes kspin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.kspin{animation-duration:2.4s}}
+
+/* 図面を全画面で編集する（project.js の dwgFs）。モードの切り替え・図面・下のボタンを、画面いっぱいに並べ直す */
+.dwg-fs-head { display: none; }
+.dwg-fs { position: fixed; inset: 0; z-index: 3000; background: var(--bg); display: flex; flex-direction: column; padding: max(6px, env(safe-area-inset-top)) 6px max(6px, env(safe-area-inset-bottom)); gap: 4px; }
+.dwg-fs .dwg-fs-head { display: flex; align-items: center; gap: 8px; }
+.dwg-fs #dwgMode { margin: 0 !important; display: flex !important; flex-wrap: nowrap !important; overflow-x: auto; flex: none; width: 100%; }
+.dwg-fs #dwgMode button { flex: none; min-height: 36px; padding: 0 10px; font-size: 13px; }
+.dwg-fs > div:not(#dwgView):not(.dwg-fs-head):not(#dwgMode):not(#dwgBar) { flex: none; max-height: 22vh; overflow: auto; }
+.dwg-fs #dwgView { flex: 1; min-height: 0; }
+.dwg-fs #dwgView .pv-wrap { height: 100%; }
+.dwg-fs #dwgView .pv { height: 100% !important; }
+.dwg-fs #dwgBar { margin: 0 !important; flex: none; max-height: 30vh; overflow: auto; font-size: 13px; }
+.dwg-fs #dwgBar .btn { min-height: 38px; padding: 0 10px; }
+body.dwg-fs-on { overflow: hidden; }
+.dwg-fs .dwg-fs-hide { display: none !important; }
+.dwg-fs [data-sheetzoom], .dwg-fs [data-sheet] { min-height: 32px !important; }
+.dwg-fs .dwg-sheets { flex-wrap: nowrap !important; overflow-x: auto; }
+.dwg-fs .dwg-sheets > * { flex: none; }
+.dwg-fs > div:not(#dwgView):not(.dwg-fs-head):not(#dwgMode):not(#dwgBar) { margin-top: 0 !important; }
