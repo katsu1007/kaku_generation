@@ -338,3 +338,15 @@ test('廃材：解体の面積×厚み（名前の「厚○」、無ければ0.0
   assert.deepEqual(missingWaste({ ...q, noWaste: { 'w-gara': true } }, items).map(l => l.itemId), ['w-waste', 'w-wGyp']);
   assert.deepEqual(missingWaste({ rooms, lines: [...q.lines, { id: 'm', itemId: 'w-waste', name: '廃材処分', qty: 1 }] }, items).map(l => l.itemId), ['w-gara', 'w-wGyp']);
 });
+
+test('検算：壁ごとに入れた分（wallOff）と板物の枚数切り上げで、誤ったエラーを出さない', () => {
+  /* 4×3×2.4 の壁 33.6㎡ − 壁ごとに入れた 11.7㎡ ＝ 21.9㎡ × 1,000円 ＝ 21,900円（手計算） */
+  const r = { id: 'r1', name: 'A', shape: 'rect', w: 4, d: 3, h: 2.4, doors: 0, winCount: 0, qty: 1, wallOff: { fin: 11.7 } };
+  const pa = { rooms: [r], lines: [{ id: 'l1', name: 'クロス', kind: 'labor', unit: '㎡', price: 1000, cat: 'wall', basis: { measure: 'wall', rooms: 'all' } }] };
+  assert.equal(totals(pa).subtotal, 21900);
+  assert.deepEqual(check(pa).filter(x => x.level === 'error'), []);
+  /* 10㎡×1.1＝11㎡ → 1.656㎡の板で7枚＝11.592㎡ × 500円 ＝ 5,796円（手計算） */
+  const pb = { rooms: [r], lines: [{ id: 'l2', name: 'ボード', kind: 'mat', unit: '㎡', qty: 10, sheet: 1.656, loss: 10, applyLoss: true, price: 500 }] };
+  assert.equal(totals(pb).subtotal, 5796);
+  assert.deepEqual(check(pb).filter(x => x.level === 'error'), []);
+});

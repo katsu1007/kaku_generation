@@ -320,11 +320,14 @@ export function check(project, opt = DEFAULTS) {
       q = len * num(l.basis.rate);
       q = l.basis.ceil ? Math.ceil(round3(q) - 1e-9) : q;
     } else if (!auto && l.applyLoss && l.kind !== 'labor' && q > 0) {
-      q = ceilTo(round3(q) * (1 + lossOf(l) / 100), 0.1);
+      /* 板物（1枚の大きさ sheet）は枚数に切り上げる（本計算の lineQty と同じ決まり） */
+      q = l.sheet > 0 ? Math.ceil(round3(q) * (1 + lossOf(l) / 100) / l.sheet - 1e-9) * l.sheet : ceilTo(round3(q) * (1 + lossOf(l) / 100), 0.1);
     }
     if (auto) {
       const sel = l.basis.rooms === 'all' || !Array.isArray(l.basis.rooms) ? rooms : rooms.filter(r => l.basis.rooms.includes(r.id));
-      sel.forEach(r => { q += roomGeom(r, o)[l.basis.measure] || 0; });
+      /* 図面で壁ごとに入れた分（wallOff）は、その部屋の壁から引く（本計算の netQty と同じ決まり） */
+      const g0 = l.basis.measure === 'wall' ? wallGroup(l.cat) : null, g = g0 && (l.layer || 1) > 1 ? g0 + l.layer : g0;
+      sel.forEach(r => { let w = roomGeom(r, o)[l.basis.measure] || 0; if (g && r.wallOff && r.wallOff[g] > 0) w = Math.max(0, w - r.wallOff[g]); q += w; });
       if (l.kind !== 'labor' && q > 0) {
         const loss = l.loss === '' || l.loss == null ? o.loss : num(l.loss);
         q = l.sheet > 0 ? Math.ceil(round3(q) * (1 + loss / 100) / l.sheet - 1e-9) * l.sheet : ceilTo(round3(q) * (1 + loss / 100), 0.1);
