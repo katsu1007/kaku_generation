@@ -84,3 +84,15 @@ test('開いていない案件は何もしない。忘れると控えの大き�
   const s = U.size(); assert.ok(s > 0);
   U.forget(p.id); assert.ok(U.size() < s);
 });
+
+test('自動で直した物（rebase）は控えに積まず、戻した後のやり直しも効く／境目（reset）で控えを捨てる', () => {
+  const p = { id: 'rb1', name: 'A', rooms: [] };
+  U.track(p);
+  p.name = 'B'; U.commit(p);
+  assert.equal(U.undo(p), true); assert.equal(p.name, 'A');
+  p.auto = 1; U.rebase(p);            // 開いた時に解析を作り直した、など
+  assert.equal(U.commit(p), false);   // 積まない
+  assert.equal(U.redo(p), true); assert.equal(p.name, 'B');
+  U.reset(p);
+  assert.equal(U.canUndo('rb1'), false); assert.equal(U.canRedo('rb1'), false);
+});

@@ -1,5 +1,5 @@
 /* 案件の画面：① 現場 → ② 部屋 → ③ 工事 → ④ 確認 → ⑤ 書類 */
-import { state, registerView, setTop, go, touch, opts, findProject, masterItems, categories, removeProject, restoreProject, newProject, flush, trackUndo, paintUndo, stepUndo } from './app.js';
+import { state, registerView, setTop, go, touch, opts, findProject, masterItems, categories, removeProject, restoreProject, newProject, flush, trackUndo, paintUndo, stepUndo, rebaseUndo, resetUndo } from './app.js';
 import { roomGeom, lineQty, netQty, totals, check, MEASURES, KINDS, isRoomBased, hatsuCalc, hatsuItem, cutItem, ZANDO_F, wallGroup, lineBasis, okState, okMark, hasCode, missingWaste, isDemoArea, wasteRows } from './calc.js';
 import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
@@ -541,7 +541,7 @@ export function lightWires(p) {
   const d = p.drawing || {}, ch0 = planCH(d.plan) || opts().ceilH;
   const chOf = fi => { const r = p.rooms.find(rr => rr.src === 'plan' && (rr.faces || []).includes(fi)); return (r && Number(r.h) > 0) ? Number(r.h) : ch0; };
   const W = wirePlan({ plan: d.plan || { faces: [] }, doors: d.doors || [], fixtures: d.fixtures || [], lights: (d.lights || []).map(x => ({ key: x.id, l: [x.x, x.y] })),
-    outlets: (d.outlets || []).map(x => ({ key: x.id, l: [x.x, x.y] })), switches: (d.switches || []).map(x => ({ key: x.id, l: [x.x, x.y] })), link: d.link || {}, panels: panelsOf(d).map(q => [q.x, q.y]), chOf });
+    outlets: (d.outlets || []).map(x => ({ key: x.id, l: [x.x, x.y] })), switches: (d.switches || []).map(x => ({ key: x.id, l: [x.x, x.y] })), link: d.link || {}, via: d.linkVia || {}, sheets: ((d.analysis && d.analysis.sheets) || []).filter(x => x && x.box && x.kind !== 'table'), panels: panelsOf(d).map(q => [q.x, q.y]), chOf });
   const extra = d.wireExtra ?? 10;
   const ws = wireSetOf(d);
   return { ...W, sw: W.sws.length, mL: cableQty(W.lenL, extra), mH: cableQty((ws.out ? W.lenO : 0) + W.lenH, extra), extra, ws };
@@ -801,7 +801,7 @@ function stepRooms(ctx) {
           ${hasOut ? `<button class="btn sm" data-act="oAuto">コンセントだけ置き直す</button>` : ''}
           ${n ? `<button class="btn sm ghost danger" data-act="lClear">照明を全部消す</button>` : ''}${(p.drawing.outlets || []).length ? `<button class="btn sm ghost danger" data-act="oClear">コンセントを全部消す</button>` : ''}
           <div class="seg" style="width:100%" id="lTool">${[['light', '照明'], ['sw', 'スイッチ'], ['out', 'コンセント'], ['panel', '分電盤'], ['link', 'つなぎ替え']].map(t => `<button data-ltool="${t[0]}" class="${ltool === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
-          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（同じ部屋にほかのスイッチが無ければ、スイッチ無しになります。人感センサー付きの照明など）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: '何も無い所をタップで分電盤を置く（何個でも）・分電盤をタップで向きを90°回す（消す時は知らせの「消す」）・なぞって動かす', link: linkSel ? 'つなぐスイッチか照明をタップしてください（照明をタップすると、その照明から線を引きます）' : '照明をタップしてから、つなぎたいスイッチか照明をタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
+          <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（同じ部屋にほかのスイッチが無ければ、スイッチ無しになります。人感センサー付きの照明など）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: '何も無い所をタップで分電盤を置く（何個でも）・分電盤をタップで向きを90°回す（消す時は知らせの「消す」）・なぞって動かす', link: linkSel ? 'つなぐスイッチか照明をタップしてください（照明をタップすると、その照明から線を引きます）' : '照明をタップしてから、つなぎたいスイッチか照明をタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.values(p.drawing.link || {}).some(v => v !== 'none') ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.values(p.drawing.link).filter(v => v !== 'none').length} 件を元に戻す</button>` : ''}</div>
           ${(() => { const ws = wireSetOf(p.drawing), M = masterItems(), cab = M.filter(i => i.cat === 'wire' && i.unit === 'm'), sws = M.filter(i => i.cat === 'elec' && /スイッチ/.test(i.name));
             const sel = (k, list) => `<select class="in" data-wset="${k}" style="min-height:36px">${list.map(i => `<option value="${esc(i.id)}" ${ws[k] === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</option>`).join('')}</select>`;
             return `<details style="width:100%"><summary class="small">配線の設定（ケーブル・スイッチの種類・余り）</summary><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:6px">
@@ -809,7 +809,7 @@ function stepRooms(ctx) {
               <label class="f" style="flex:1;min-width:180px">自動で置くスイッチ${sel('sw', sws)}</label>
               <label class="f" style="width:110px">余りを足す<div class="unitwrap"><input class="in num" data-wset="extra" type="number" inputmode="numeric" min="0" max="100" step="5" value="${p.drawing.wireExtra ?? 10}"><span>%</span></div></label>
               <label class="row small" style="gap:6px;width:100%"><input type="checkbox" data-wset="out" ${ws.out ? 'checked' : ''} style="width:20px;height:20px">コンセントの線も長さに入れる（図には描きません）</label></div></details>`; })()}
-          <div class="small muted" style="width:100%">照明 ${n} 台・スイッチ ${W.sw} 個（黄＝自動・青＝置いた物）・コンセント ${(p.drawing.outlets || []).length} 個・ケーブル ${W.mL + W.mH} m（余り${W.extra}%込み）。スイッチは入口のそばに自動で置きます${W.booths ? `。トイレのブース ${W.booths} か所は、外の部屋のスイッチで点けます` : ''}。${W.far ? `<b>分電盤から離れた所（別の階の図など）の ${W.far} 区画は、分電盤からの線を入れていません。</b>` : ''}</div>
+          <div class="small muted" style="width:100%">照明 ${n} 台・スイッチ ${W.sw} 個（黄＝自動・青＝置いた物）・コンセント ${(p.drawing.outlets || []).length} 個・ケーブル ${W.mL + W.mH} m（余り${W.extra}%込み）。スイッチは入口のそばに自動で置きます${W.booths ? `。トイレのブース ${W.booths} か所は、外の部屋のスイッチで点けます` : ''}。${W.far ? `<b>分電盤から離れた所（別の階の図など）の ${W.far} 区画は、分電盤からの線を入れていません。その階にも分電盤を置いてください。</b>` : ''}${W.dropped && W.dropped.length ? ` <b style="color:var(--bad,#c33)">区画の外にある照明 ${W.dropped.length} 台は、配線・スイッチに入っていません（器具の数には入ります）。区画の中へ動かしてください。</b>` : ''}</div>
           ${res ? (n && (p.drawing.lights || []).length && res.split('<span').length > 7 ? `<details style="width:100%"><summary class="small">部屋ごとの台数と明るさを見る${res.includes('pill warn') ? '（目標に届かない部屋あり）' : ''}</summary><div class="row" style="margin-top:6px">${res}</div></details>` : `<div class="row" style="width:100%">${res}</div>`) : ''}`;
         return;
       }
@@ -1007,14 +1007,14 @@ function stepRooms(ctx) {
       const mk = (faces, shapes) => analyzeFrame({ segs: d.src2.segs.length ? d.src2.segs : d.plan.segs, faces, texts: d.src2.texts, fixtures: d.fixtures || [], doors: d.src2.doors || [], shapes });
       if (d.reader === 'v2' && d.v1) { d.analysis = mk(d.plan.faces, true); d.v1.analysis = mk(d.v1.faces, false); }
       else { d.analysis = mk(d.plan.faces, false); if (d.v2 && d.v2.faces) d.v2.analysis = mk(d.v2.faces, true); }
-      touch(p); } catch (e) { console.warn('解析を作り直せませんでした', e); } } }
+      touch(p); rebaseUndo(p); } catch (e) { console.warn('解析を作り直せませんでした', e); } } }   // 自動で直しただけなので、元に戻すの控えには積まない
     body.innerHTML = drawingCard(p) + `<div class="rooms">${p.rooms.map((r, i) => roomCard(r, i, p)).join('') || `<div class="card empty"><b>まだ部屋がありません</b>下のボタンで部屋を足してください。</div>`}</div>
       <div class="addbar" style="margin-top:12px"><button class="btn primary" id="addRoom">${icon('plus')}部屋を足す</button>
       </div>`;
     const keepV = view && view.keep ? view.keep() : keep0; keep0 = null;   // 描き直しても拡大・位置をそのままに（かつ「戻す・進むを押すと全体に戻る」）
     view = null;
     /* 前の版で読み込んだ図面は、区画の番号を前のKAKUと同じ付け方に直す（部屋とのつながりは区画の i なので変わらない） */
-    if (p.drawing && p.drawing.plan && p.drawing.plan.order !== 2) { orderFacesOf(p.drawing.plan); p.drawing.plan.order = 2; touch(p); }
+    if (p.drawing && p.drawing.plan && p.drawing.plan.order !== 2) { orderFacesOf(p.drawing.plan); p.drawing.plan.order = 2; touch(p); rebaseUndo(p); }
     if (p.drawing && p.drawing.plan) {
       view = planView(body.querySelector('#dwgView'), p.drawing.plan, {
         keep: keepV,
@@ -1044,7 +1044,7 @@ function stepRooms(ctx) {
           }
           if (mode === 'light') {
             const d = p.drawing; d.lights = d.lights || []; d.switches = d.switches || []; d.outlets = d.outlets || []; d.link = d.link || {};
-            const tol = Math.max(0.2, sc * 14), near = list => list.findIndex(q => Math.hypot(q.x - x, q.y - y) < tol);
+            const tol = Math.min(Math.max(0.2, sc * 14), 0.6), near = list => { let b = -1, bd = tol; list.forEach((q, k) => { const dd = Math.hypot(q.x - x, q.y - y); if (dd < bd) { bd = dd; b = k; } }); return b; };   // 広い図面の全体表示で許容が何mにもならないように（上限60cm）。いちばん近い物
             const redo = () => { syncDemoLines(p); touch(p); paintSel(); };
             const undoT = (msg, fn) => toast(msg, { action: '元に戻す', onAction: () => { fn(); redo(); } });
             /* 分電盤は何個でも置ける（前のKAKUと同じ。かつ「分電盤連続で置けなくなった？」）：何も無い所をタップで置く・分電盤をタップで消す・なぞって動かす。各部屋は同じ階のまとまりのいちばん近い分電盤から引く */
@@ -1062,7 +1062,8 @@ function stepRooms(ctx) {
               if (!best) { const k2 = near(d.lights); const lt = k2 >= 0 ? d.lights[k2] : null;
                 if (lt && lt.id !== linkSel && W.assign[lt.id]) { viaL = lt; best = /^n:/.test(W.assign[lt.id]) ? { key: 'none' } : all.find(s0 => s0.key === W.assign[lt.id]) || { key: W.assign[lt.id] }; } }   // スイッチ無しの照明にタップした時は、スイッチ無しにする
               if (!best) { linkSel = null; paintSel(); toast('スイッチか照明をタップしてください。やめました'); return; }
-              const id = linkSel, was = d.link[id]; d.link[id] = best.key; linkSel = null; redo(); undoT(viaL ? '照明から線を引くようにつなぎ替えました' : 'つなぎ替えました', () => { if (was) d.link[id] = was; else delete d.link[id]; }); return;
+              const id = linkSel, was = d.link[id], wasV = (d.linkVia || {})[id]; d.link[id] = best.key; d.linkVia = d.linkVia || {}; if (viaL) d.linkVia[id] = 1; else delete d.linkVia[id];   // 渡り（照明から引く）は照明をタップして選んだ時だけ
+              linkSel = null; redo(); undoT(viaL ? '照明から線を引くようにつなぎ替えました' : 'つなぎ替えました', () => { if (was) d.link[id] = was; else delete d.link[id]; if (wasV) d.linkVia[id] = 1; else delete d.linkVia[id]; }); return;
             }
             if (ltool === 'sw') {
               /* スイッチ（黄＝自動・青＝置いた物のどちらも）をタップで消す。つながっていた照明は、残っているスイッチのうちいちばん近い物につなぎ直す
@@ -1073,14 +1074,18 @@ function stepRooms(ctx) {
                 const rest = shown.filter(s0 => s0.key !== hit.key), mine = Object.keys(W.assign).filter(k2 => W.assign[k2] === hit.key);
                                 const sw0 = d.switches.map(q => ({ ...q })), link0 = { ...d.link };
                 d.switches = d.switches.filter(q => q.id !== hit.key); Object.keys(d.link).forEach(q => { if (d.link[q] === hit.key) delete d.link[q]; });
-                /* つなぎ直し先：同じ区画の中にほかのスイッチがあれば、いちばん近いそのスイッチ。無ければスイッチ無し（'none'。電源だけを区画の中の照明どうしでつなぐ）。
-                   ほかの部屋の照明・スイッチにはつながない（かつ「女子トイレと男子トイレが配線つながる。人感センサーのダウンライトだとおかしい」） */
-                const L = new Map(d.lights.map(q => [q.id, q])), F = p.drawing.plan.faces;
+                /* つなぎ直し先：同じ部屋（図面から作った部屋は、その部屋の区画・まとめた区画ぜんぶ。部屋にしていなければその区画）の、ほかの照明がつながっているスイッチ（いちばん近い照明の物）。
+                   無ければスイッチ無し（'none'。電源だけを部屋の中の照明どうしでつなぐ）。ほかの部屋の照明・スイッチにはつながない
+                   （かつ「女子トイレと男子トイレが配線つながる。人感センサーのダウンライトだとおかしい」。前は区画から35cm以内のスイッチを見ていたので、隣の部屋のスイッチを拾うことがあった） */
+                const L = new Map(d.lights.map(q => [q.id, q])), F = d.plan.faces;
                 const fOf = q => { let b = null; F.forEach(f => { if (pip(q[0], q[1], f.poly) && (!b || f.area < b.area)) b = f; }); return b; };
+                const J = d.faceJoin || {}, roomFaces = lt => { const f = fOf([lt.x, lt.y]); const r = lt.room ? p.rooms.find(rr => rr.id === lt.room) : f ? p.rooms.find(rr => rr.src === 'plan' && (rr.faces || []).includes(f.i)) : null;
+                  const S0 = new Set(r && r.faces ? r.faces : f ? [f.i] : []); Object.keys(J).forEach(k => { if (S0.has(J[k])) S0.add(+k); }); return S0; };
                 let nNone = 0;
-                mine.forEach(k2 => { const lt = L.get(k2); if (!lt) return; const f = fOf([lt.x, lt.y]); let b = null, bd = 1e9;
-                  if (f) rest.forEach(s0 => { if (polyD(s0.l, f.poly) > .35) return; const dd = Math.abs(s0.l[0] - lt.x) + Math.abs(s0.l[1] - lt.y); if (dd < bd) { bd = dd; b = s0.key; } });
-                  if (b) d.link[k2] = b; else { d.link[k2] = 'none'; nNone++; } });
+                mine.forEach(k2 => { const lt = L.get(k2); if (!lt) return; const RF = roomFaces(lt); let b = null, bd = 1e9;
+                  d.lights.forEach(o => { if (o.id === k2 || mine.includes(o.id)) return; const sk = W.assign[o.id]; if (!sk || /^n:/.test(sk) || sk === hit.key) return; const fo = fOf([o.x, o.y]); if (!fo || !RF.has(fo.i)) return;
+                    const dd = Math.abs(o.x - lt.x) + Math.abs(o.y - lt.y); if (dd < bd) { bd = dd; b = sk; } });
+                  if (b) d.link[k2] = b; else { d.link[k2] = 'none'; nNone++; } if (d.linkVia) delete d.linkVia[k2]; });
                 redo(); undoT(mine.length ? (nNone ? `スイッチを消しました（照明 ${nNone} 台はスイッチ無しで、同じ部屋の照明どうしだけでつなぎます）` : `スイッチを消しました（照明 ${mine.length} 台を、同じ部屋のほかのスイッチにつなぎました）`) : 'スイッチを消しました', () => { d.switches = sw0; d.link = link0; }); return;
               }
               d.switches.push({ id: uid('S'), x: r3(x), y: r3(y) }); redo(); return;
@@ -1095,7 +1100,10 @@ function stepRooms(ctx) {
             const r = p.rooms.find(rr => rr.src === 'plan' && (rr.faces || []).some(i => { const f = d.plan.faces.find(z => z.i === i); return f && pip(x, y, f.poly); }));
             const fc = r ? null : d.plan.faces.find(f => pip(x, y, f.poly));
             if (!r && !fc) { toast('区画の中をタップしてください', { bad: true }); return; }
-            d.lights.push({ id: uid('L'), x: Math.round(x * 20) / 20, y: Math.round(y * 20) / 20, item: lset.item, room: r ? r.id : null, face: fc ? fc.i : undefined });
+            const nl = { id: uid('L'), x: Math.round(x * 20) / 20, y: Math.round(y * 20) / 20, item: lset.item, room: r ? r.id : null, face: fc ? fc.i : undefined };
+            /* 同じ部屋（区画）の照明が全部スイッチ無しなら、足した照明もスイッチ無し（自動のスイッチが戻ってこないように） */
+            const same = d.lights.filter(o => r ? o.room === r.id || (r.faces || []).some(i => { const f = d.plan.faces.find(z => z.i === i); return f && pip(o.x, o.y, f.poly); }) : fc && pip(o.x, o.y, fc.poly));
+            d.lights.push(nl); if (same.length && same.every(o => d.link[o.id] === 'none')) d.link[nl.id] = 'none';
             redo(); return;
           }
           if (mode === 'place') {
@@ -1238,13 +1246,15 @@ function stepRooms(ctx) {
       if (!on) fxs.forEach(x => { if (x.r2) { if (x.t === 'other') x.t = x.r2; delete x.r2; } });
       if (swap) {
         p.rooms.forEach(r => { if (r.src === 'plan') { r.src = 'plan-old'; delete r.faces; } }); sel.clear();
-        if (on) { d.v1 = { faces: d.plan.faces, open: d.open, analysis: d.analysis }; d.plan = { ...d.plan, faces: d.v2.faces }; d.open = d.v2.open; d.analysis = d.v2.analysis; }
-        else { d.v2 = { ...d.v2, faces: d.plan.faces }; d.plan = { ...d.plan, faces: d.v1.faces }; d.open = d.v1.open; d.analysis = d.v1.analysis; delete d.v1; }
+        /* 手で囲んで足した区画（hand）は、どちらの読み取りにも持って行く（切り替えで黙って消えないように） */
+        const hands = d.plan.faces.filter(f => f.hand), withHand = F => F.filter(f => !f.hand).concat(hands);
+        if (on) { d.v1 = { faces: d.plan.faces.filter(f => !f.hand), open: d.open, analysis: d.analysis }; d.plan = { ...d.plan, faces: withHand(d.v2.faces) }; d.open = d.v2.open; d.analysis = d.v2.analysis; }
+        else { d.v2 = { ...d.v2, faces: d.plan.faces.filter(f => !f.hand) }; d.plan = { ...d.plan, faces: withHand(d.v1.faces) }; d.open = d.v1.open; d.analysis = d.v1.analysis; delete d.v1; }
       }
       const outs = (d.analysis && d.analysis.fxOut) || [];
       if (on) { p.drawing.reader = 'v2'; outs.forEach(o => { const x = fxs[o.k]; if (x && x.t === o.t && !x.edited) { x.r2 = x.t; x.t = 'other'; } }); }
       else delete p.drawing.reader;
-      touch(p); draw(); return;
+      touch(p); if (swap) { resetUndo(p); toast('読み取りを切り替えました。区画が入れ替わったので、これより前には「元に戻す」で戻せません', { ms: 5000 }); } draw(); return;
     }
     if (e.target.matches('[data-wset]')) { const k = e.target.dataset.wset, d = p.drawing;
       if (k === 'extra') d.wireExtra = Math.max(0, Math.min(100, Number(e.target.value) || 0));
@@ -1297,9 +1307,9 @@ function stepRooms(ctx) {
         const old = p.drawing.plan, i = Math.max(-1, ...old.faces.map(f => f.i)) + 1, no = Math.max(0, ...old.faces.map(f => f.no || 0)) + 1;
         const face = { i, no, name: '', area, peri, ch: 0, poly: P, cx: r3(P.reduce((s, q) => s + q[0], 0) / P.length), cy: r3(P.reduce((s, q) => s + q[1], 0) / P.length), hand: true };
         p.drawing.plan = { ...old, faces: [...old.faces, face] };
-        meas.pts = []; mode = 'room'; sel.clear(); sel.add(i);
-        touch(p); draw();
-        toast(`区画${no}（${fmt(area, 2)}㎡・周り ${fmt(peri, 2)}m）を足しました。選んであるので、そのまま「終了：1部屋にする」で部屋にできます`, { ms: 6000 });
+        meas.pts = []; meas.redo = []; mode = 'room'; sel.clear(); sel.add(i);
+        touch(p); resetUndo(p); draw();   // 区画を足すと図面の線（plan）が変わる。plan は元に戻すの控えに写していないので、ここが境目
+        toast(`区画${no}（${fmt(area, 2)}㎡・周り ${fmt(peri, 2)}m）を足しました。選んであるので、そのまま「終了：1部屋にする」で部屋にできます（区画を足す前には「元に戻す」で戻せません）`, { ms: 6000 });
         return;
       }
       if (a && a[0] === 'p' && /^p(Add|Del|DelItem|DelOne|Rot|SelNone|SelClear)$/.test(a)) {
@@ -1325,7 +1335,8 @@ function stepRooms(ctx) {
         if (!wins || JSON.stringify(wins) === JSON.stringify(p.drawing.win3d || [])) return;
         const n = applyWin3d(p, wins); touch(p); draw(); if (wins.length) toast(`3Dの窓 ${wins.length} か所を、面している部屋の窓に入れました（${n} 部屋）`, { ms: 4000 });
       } }).catch(e => showError(e)); return; }
-      if (a === 'linkClear') { const was = p.drawing.link; p.drawing.link = {}; syncDemoLines(p); touch(p); paintSel(); toast('つなぎ替えを元に戻しました', { action: '取り消す', onAction: () => { p.drawing.link = was; syncDemoLines(p); touch(p); paintSel(); } }); return; }
+      if (a === 'linkClear') { const was = p.drawing.link, wasV = p.drawing.linkVia; p.drawing.link = Object.fromEntries(Object.entries(was || {}).filter(([, v]) => v === 'none')); delete p.drawing.linkVia;   // スイッチ無し（消したスイッチ）は残す
+        syncDemoLines(p); touch(p); paintSel(); toast('つなぎ替えを元に戻しました（スイッチを消した照明はスイッチ無しのまま）', { action: '取り消す', onAction: () => { p.drawing.link = was; p.drawing.linkVia = wasV; syncDemoLines(p); touch(p); paintSel(); } }); return; }
       if (a === 'oClear') { const was = p.drawing.outlets; p.drawing.outlets = []; syncDemoLines(p); touch(p); paintSel(); toast('コンセントを全部消しました', { action: '元に戻す', onAction: () => { p.drawing.outlets = was; syncDemoLines(p); touch(p); paintSel(); } }); return; }
       if (a === 'oAuto') { const k = placeOutlets(); syncDemoLines(p); touch(p); paintSel(); toast(`コンセントを ${k} 個置きました（便器の横・洗面台の背面）`); return; }
       if (a === 'lClear') { const before = p.drawing.lights; p.drawing.lights = []; syncDemoLines(p); touch(p); paintSel(); toast('照明を全部消しました', { action: '元に戻す', onAction: () => { p.drawing.lights = before; syncDemoLines(p); touch(p); paintSel(); } }); return; }

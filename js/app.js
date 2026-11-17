@@ -65,6 +65,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ---------- 案件全体の「元に戻す」「やり直す」（js/undo.js。保存のたびに変わる前を控える） ---------- */
 export const trackUndo = p => { undoer.track(p); };
+export const rebaseUndo = p => { undoer.rebase(p); };
+export const resetUndo = p => { undoer.reset(p); paintUndo(); };
 export function paintUndo() {
   const r = state.route, id = r && r.name === 'project' ? r.id : null;
   const u = document.getElementById('undoBtn'), d = document.getElementById('redoBtn');

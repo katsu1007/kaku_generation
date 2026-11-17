@@ -73,5 +73,11 @@ export function redo(p) {
   if (!same(st.base, pack(p))) return false;   // 戻した後で何か変えたら、やり直しはできない（commit が redo を消す）
   return step(p, 'redo', 'undo');
 }
+/* 自動で直した物（解析の作り直し・区画の番号の付け直しなど）を、変わる前の控えに入れずに「今の中身」として覚え直す。
+ * これをしないと、開いただけで控えが積まれ、戻した後の「やり直す」が効かなくなる */
+export function rebase(p) { const st = S.get(p && p.id); if (st) st.base = pack(p); }
+/* 元に戻せない境目（読み取りの切り替え・手で区画を足す・図面を読み直す）：控えを全部捨てて、今の中身から始め直す。
+ * 図面の線（plan）は控えに写していないので、境目をまたいで戻すと区画と部屋が食い違うため */
+export function reset(p) { if (!p || !p.id) return; forget(p.id); track(p); }
 export function forget(id) { const st = S.get(id); if (!st) return; [...st.undo, ...st.redo].forEach(e => { total -= e.json.length; }); S.delete(id); }
 export const size = () => total;

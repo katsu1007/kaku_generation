@@ -108,12 +108,21 @@ export function boothHosts(faces, fixtures = [], doors = []) {
 
 /* plan: {faces, segs}, lights/outlets: [{key, l:[x,y]}], switches: [{key, l}] 置いたスイッチ, panels: [[x,y]], link: {照明key: スイッチkey}, chOf(faceI)
  * 前のKAKUの KW_calc と同じ計算。コンセント：入口のスイッチ（なければ1個目）から近い順に縦横の長さ＋1個ごとに（天井高−0.25m） */
-export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets = [], switches = [], panels = [], link = {}, chOf = () => 2.4, booth = true }) {
-  const res = { paths: [], home: [], sws: [], lenL: 0, lenO: 0, lenH: 0, circ: 0, autoSw: 0, far: 0, nL: lights.length, nO: 0, assign: {}, booths: 0 };
+export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets = [], switches = [], panels = [], link = {}, via = {}, sheets = [], chOf = () => 2.4, booth = true }) {
+  const res = { paths: [], home: [], sws: [], lenL: 0, lenO: 0, lenH: 0, circ: 0, autoSw: 0, far: 0, nL: lights.length, nO: 0, assign: {}, booths: 0, dropped: [] };
   const faces = (plan.faces || []).filter(f => f.poly && (f.area || areaOf(f.poly)) >= .6).map(f => ({ ...f, area: f.area || areaOf(f.poly) }));
-  const bx = f => { let a = 1e9, b = -1e9; f.poly.forEach(q => { a = Math.min(a, q[0]); b = Math.max(b, q[0]); }); return [a, b]; };
-  const fgrp = {}; let gi = 0, mx = -1e9;
-  faces.map(f => ({ f, b: bx(f) })).sort((a, b) => a.b[0] - b.b[0]).forEach(o => { if (o.b[0] - mx > 1 && mx > -1e8) gi++; fgrp[o.f.i] = gi; mx = Math.max(mx, o.b[1]); });
+  /* 分電盤から引くまとまり（階・図）：①図の範囲（sheets：[{box:[x0,y0,x1,y1]}]）に入る区画は同じ図 ②それ以外は、外の四角が縦・横とも1m以内に近づく区画どうしをつなぐ。
+   * 前は x の範囲だけで分けていたので、上下に並べた階が同じまとまりになり、2階の分電盤から1階へ引いていた */
+  const bb = f => { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; f.poly.forEach(q => { a = Math.min(a, q[0]); b = Math.min(b, q[1]); c = Math.max(c, q[0]); d = Math.max(d, q[1]); }); return [a, b, c, d]; };
+  const fgrp = {}, B = faces.map(bb), par = faces.map((_, k) => k), root = k => { while (par[k] !== k) k = par[k] = par[par[k]]; return k; };
+  const shOf = k => { const b = B[k], cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2; return sheets.findIndex(x => x && x.box && cx >= x.box[0] && cx <= x.box[2] && cy >= x.box[1] && cy <= x.box[3]); };
+  const SH = faces.map((_, k) => shOf(k));
+  const ord0 = faces.map((_, k) => k).sort((a, b) => B[a][0] - B[b][0]);
+  for (let x = 0; x < ord0.length; x++) { const a = ord0[x];
+    for (let y = x + 1; y < ord0.length; y++) { const b = ord0[y]; if (B[b][0] - B[a][2] > 1) break;
+      if (SH[a] >= 0 || SH[b] >= 0) { if (SH[a] === SH[b]) par[root(a)] = root(b); continue; }
+      if (B[b][1] - B[a][3] <= 1 && B[a][1] - B[b][3] <= 1) par[root(a)] = root(b); } }
+  faces.forEach((f, k) => { fgrp[f.i] = SH[k] >= 0 ? 's' + SH[k] : 'g' + root(k); });
   const pg = l => { let f = null, bd = 1e9; faces.forEach(x => { const dd = polyD(l, x.poly); if (dd < bd) { bd = dd; f = x; } }); return f ? fgrp[f.i] : -1; };
   const pns = panels.map(l => ({ l, grp: pg(l) }));
   const owner = (l, tol) => { let b = null; faces.forEach(f => { const dd = polyD(l, f.poly); if (dd <= tol && (!b || dd < b.dd - 1e-6 || (Math.abs(dd - b.dd) < 1e-6 && f.area < b.f.area))) b = { f, dd }; }); return b && b.f; };
@@ -121,13 +130,16 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
   res.booths = Object.keys(host).length;
   const byFace = {}, order = [];
   const put = (f, k, d) => { if (host[f.i]) f = host[f.i]; if (!byFace[f.i]) { byFace[f.i] = { f, L: [], O: [] }; order.push(f.i); } byFace[f.i][k].push(d); };
-  lights.forEach(d => { const f = owner(d.l, .05); if (f) put(f, 'L', d); });
+  /* 照明は区画の中（5cm）を先に、無ければ 35cm まで（コンセントと同じ）。どの区画にも入らない照明は dropped に返して画面で知らせる（黙って配線から落とさない） */
+  lights.forEach(d => { const f = owner(d.l, .05) || owner(d.l, .35); if (f) put(f, 'L', d); else res.dropped.push(d.key); });
   outlets.forEach(d => { const f = owner(d.l, .35); if (f) put(f, 'O', d); });
   const allSw = {}; switches.forEach(s => { allSw[s.key] = s; });
   const used = {}, faceS = {};
   /* 先に全部の区画のスイッチを決める（つなぎ替えで、後の区画のスイッチにもつなげるように） */
   order.forEach(fi => { const { f, L } = byFace[fi]; if (!L.length) return;
     let S = switches.filter(s => polyD(s.l, f.poly) <= .35);
+    /* 区画の外（廊下側の壁の外など）に置いたスイッチ：60cm 以内で、いちばん近い区画がこの区画なら、この区画のスイッチにする */
+    if (!S.length) S = switches.filter(s => { const dd = polyD(s.l, f.poly); if (dd > .6) return false; return !faces.some(g => g !== f && polyD(s.l, g.poly) < dd - 1e-6); });
     if (!S.length) { const as = { key: 'a:' + f.i, l: autoSwitch(f, faces, plan.segs || [], doors), auto: true }; S = [as]; allSw[as.key] = as; }
     faceS[fi] = S; });
   /* 先に全部の照明のつなぐスイッチを決める（ほかの区画の照明から線を引くため） */
@@ -136,7 +148,9 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
   const pickS = (d, S, fi) => { if (link[d.key] === 'none') return NONE(fi); let s = link[d.key] && allSw[link[d.key]] ? allSw[link[d.key]] : null;
     if (!s) { let bd = 1e9; S.forEach(x => { const dd = man(x.l, d.l); if (dd < bd) { bd = dd; s = x; } }); } return s; };
   const lightsOf = {}; order.forEach(fi => { const { L } = byFace[fi]; if (!L.length) return; L.forEach(d => { const s = pickS(d, faceS[fi], fi); (lightsOf[s.key] = lightsOf[s.key] || []).push({ d, fi }); }); });
-  order.forEach(fi => { const { f, L, O } = byFace[fi], ch = chOf(f.i); let head = null;
+  const fed = {};   // 分電盤から電気を送ったスイッチ（同じスイッチを2回数えない）
+  order.forEach(fi => { const { f, L, O } = byFace[fi], ch = chOf(f.i); const heads = [];   // この区画で電気を送る所（スイッチ・スイッチ無しの1つ目の照明）
+    let first = null;   // コンセントを続ける所
     if (L.length) {
       const S = faceS[fi];
       const grp = {}, gk = [];
@@ -145,21 +159,26 @@ export function wirePlan({ plan, doors = [], fixtures = [], lights = [], outlets
       gk.forEach(k => { const g = grp[k], s = g.s;
         if (s.none) { const st = g.L[0].l, ord = chain(st, g.L), pts = [st]; let cur = st, len = 0;
           ord.forEach(d => { leg(cur, d.l, f.poly).forEach(q => pts.push(q)); len += man(cur, d.l); cur = d.l; });
-          res.paths.push({ pts }); res.circ++; res.lenL += len + ord.length * .2; if (!head) head = ord[0].l; return; }
+          res.paths.push({ pts }); res.circ++; res.lenL += len + ord.length * .2; heads.push({ l: ord[0].l, drop: 0 }); if (!first) first = ord[0].l; return; }
         if (!used[s.key]) { used[s.key] = 1; res.sws.push(s); if (s.auto) res.autoSw++; }
-        /* スイッチがこの区画の外にあり、同じスイッチの照明がほかの区画にある時は、いちばん近いその照明から線を引く（渡り。スイッチの立ち下がりは無い）
-           （かつ「スイッチを消したら、近くのスイッチにつなぎ直すのではなく、近くの照明から引くように」） */
+        /* 渡り：照明どうしのつなぎ替えで選んだ時（via）だけ、ほかの区画の同じスイッチの照明から線を引く（スイッチの立ち下がりは無い）。
+           それ以外は、スイッチが区画の外でもスイッチから引く */
         let st = s.l, fromL = false;
-        if (polyD(s.l, f.poly) > .35) { let bd = 1e9; (lightsOf[s.key] || []).forEach(o => { if (o.fi === fi) return; g.L.forEach(d => { const dd = man(o.d.l, d.l); if (dd < bd) { bd = dd; st = o.d.l; fromL = true; } }); }); }
+        if (polyD(s.l, f.poly) > .35 && g.L.some(d => via[d.key])) { let bd = 1e9; (lightsOf[s.key] || []).forEach(o => { if (o.fi === fi) return; g.L.forEach(d => { const dd = man(o.d.l, d.l); if (dd < bd) { bd = dd; st = o.d.l; fromL = true; } }); }); }
         const ord = chain(st, g.L), pts = [st]; let cur = st, len = 0;
         ord.forEach(d => { leg(cur, d.l, f.poly).forEach(q => pts.push(q)); len += man(cur, d.l); cur = d.l; });
-        res.paths.push({ pts }); res.circ++; res.lenL += len + (fromL ? 0 : Math.max(0, ch - 1.2)) + ord.length * .2; if (!head) head = fromL ? ord[0].l : s.l; });
+        res.paths.push({ pts }); res.circ++; res.lenL += len + (fromL ? 0 : Math.max(0, ch - 1.2)) + ord.length * .2;
+        if (!fromL && !fed[s.key]) { fed[s.key] = 1; heads.push({ l: s.l, drop: Math.max(0, ch - 1.2) }); }
+        if (!first) first = fromL ? ord[0].l : s.l; });
     }
-    if (O.length) { const st = head || O[0].l, ordO = chain(st, O); let c2 = st, l2 = 0;
-      ordO.forEach((d, i) => { if (i || head) l2 += man(c2, d.l); c2 = d.l; });
-      res.lenO += l2 + ordO.length * Math.max(0, ch - .25); res.nO += ordO.length; if (!head) head = O[0].l; }
-    if (pns.length && head) { let pn = null, pd = 1e9; pns.forEach(d => { if (d.grp !== fgrp[f.i]) return; const dd = man(d.l, head); if (dd < pd) { pd = dd; pn = d; } });
-      if (pn) { res.lenH += pd + Math.max(0, ch - 1.5); res.home.push({ pts: [pn.l].concat(leg(pn.l, head, f.poly)) }); } else res.far++; }
+    if (O.length) { const st = first || O[0].l, ordO = chain(st, O); let c2 = st, l2 = 0;
+      ordO.forEach((d, i) => { if (i || first) l2 += man(c2, d.l); c2 = d.l; });
+      res.lenO += l2 + ordO.length * Math.max(0, ch - .25); res.nO += ordO.length; if (!heads.length && !first) heads.push({ l: O[0].l, drop: 0 }); }
+    /* 分電盤から：この区画の送り先のうち分電盤にいちばん近い所へ1本、ほかの送り先（2つ目のスイッチ・スイッチ無しの照明）へはそこから天井を渡す */
+    if (pns.length && heads.length) { let pn = null, pd = 1e9, hk = 0; pns.forEach(d => { if (d.grp !== fgrp[f.i]) return; heads.forEach((h, k) => { const dd = man(d.l, h.l); if (dd < pd) { pd = dd; pn = d; hk = k; } }); });
+      if (pn) { const h0 = heads[hk]; res.lenH += pd + Math.max(0, ch - 1.5);   // 分電盤から天井へ上がる分（前のKAKUと同じ） res.home.push({ pts: [pn.l].concat(leg(pn.l, h0.l, f.poly)) });
+        heads.forEach((h, k) => { if (k === hk) return; res.lenH += man(h0.l, h.l) + h.drop; res.home.push({ pts: [h0.l].concat(leg(h0.l, h.l, f.poly)) }); }); }
+      else res.far++; }
   });
   return res;
 }
