@@ -898,7 +898,11 @@ function stepRooms(ctx) {
     if (fi) fi.onchange = async e => {
       const files = [...e.target.files]; if (!files.length) return;
       if (p.drawing && p.rooms.some(r => r.src === 'plan') && !(await ask('図面を読み直しますか？', '今の図面から作った部屋は残りますが、図面とのつながりは外れます。', { ok: '読み直す' }))) { e.target.value = ''; return; }
-      const st = body.querySelector('#dwgStatus'); if (st) st.textContent = '図面を読み込んでいます…（大きい図面は少し時間がかかります）';
+      const st = body.querySelector('#dwgStatus');
+      /* 読み込み中の表示：くるくる（計算で画面が止まっていても回る）と、今どの段階か */
+      const t0 = Date.now();
+      const showStep = msg => { if (!st) return; st.innerHTML = `<span class="kspin" aria-hidden="true"></span><span>${esc(msg)}…</span><span class="muted">（${Math.round((Date.now() - t0) / 1000)}秒）</span><div class="small muted">大きい図面は少し時間がかかります。そのままお待ちください。</div>`; };
+      showStep('図面を読み込んでいます');
       try {
         const cad = files.find(f => /\.(jww|jwc|dxf)$/i.test(f.name));
         let res;
@@ -906,7 +910,7 @@ function stepRooms(ctx) {
         if (pic) { if (st) st.textContent = ''; openSk(pic); e.target.value = ''; return; }
         if (cad) {
           /* 新しい読み取り・段階3：壁ではなさそうな線のまとまり（細かい線・寸法・表や図枠）を外して、区画を探し直した結果も一緒にもらう（別に覚えるだけ） */
-          res = await readWithFixtures(cad, { regroup: (out, raw) => {
+          res = await readWithFixtures(cad, { step: showStep, regroup: (out, raw) => {
             try { const A1 = analyzeFrame({ segs: out.longSegs && out.longSegs.length ? out.longSegs : out.plan.segs, faces: out.plan.faces, texts: out.texts || [], fixtures: out.fixtures || [], doors: out.doorList || [] });
               const g = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions });
               out.roles = {}; Object.keys(g.off).forEach(i => { const r = g.off[i], o = g.stats.find(x => x.gi === +i); out.roles[r] = (out.roles[r] || 0) + (o ? o.n : 0); });

@@ -450,3 +450,8 @@ table.basis th:first-child { text-align: left; }
 /* 図面：区画の番号を出していない時の案内 */
 .pv-wrap { position: relative; }
 .pv-note { position: absolute; left: 10px; bottom: 10px; font-size: 12px; color: var(--muted); background: color-mix(in srgb, var(--panel) 85%, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 4px 9px; pointer-events: none; }
+
+/* 図面の読み込み中のくるくる（回転だけなので、計算で画面が止まっていても回り続ける） */
+.kspin{display:inline-block;width:14px;height:14px;margin-right:6px;vertical-align:-2px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:kspin .8s linear infinite;will-change:transform;opacity:.7}
+@keyframes kspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.kspin{animation-duration:2.4s}}

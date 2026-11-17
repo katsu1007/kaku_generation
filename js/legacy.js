@@ -31,6 +31,10 @@ const wait = (fn, ms) => new Promise(res => { const t0 = Date.now(); const t = s
  * 前のKAKUの変数（KAKU_plan・current・data など）は let で宣言されていて window から見えないので、
  * 前のKAKUの中で式を評価して読み書きする（W.eval） */
 export async function readWithFixtures(file, opt = {}) {
+  /* 進み具合を画面に出す（opt.step）。出した後、画面が描き直せるように少しだけ待つ */
+  const step = async msg => { if (!opt.step) return; try { opt.step(msg); } catch (e) { /* 表示だけなので続ける */ }
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))); };
+  await step('読み取りの準備をしています');
   const W = await getReader();
   const G = code => W.eval(code);
   const before = G('data.map(p=>p.id)');
@@ -41,10 +45,12 @@ export async function readWithFixtures(file, opt = {}) {
     const dt = new W.DataTransfer();
     dt.items.add(new W.File([await file.arrayBuffer()], file.name, { type: file.type || 'application/octet-stream' }));
     W.document.getElementById('file').files = dt.files;
+    await step('線を読んで、部屋の区画を探しています');
     G('KAKU_plan=null;KAKU_fix=null;runDrawingImport()');
     const ok = await wait(() => G('KAKU_plan'), 90000);
     if (!ok) throw new Error('図面を読めませんでした（時間切れ）');
     await wait(() => G('KAKU_fix'), 8000);
+    await step('器具・ドア・開口を調べています');
     const R = G(`(()=>{const P=KAKU_plan,F=KAKU_fix,q=v=>Math.round(v*1000)/1000;
       const plan={segs:P.segs.map(s=>s.map(q)),dsegs:(P.dsegs||[]).map(s=>s.map(q)),gsegs:(P.gsegs||[]).map(s=>s.map(q)),
         faces:P.faces.map(f=>({i:f.i,name:f.name||'',area:f.area,peri:f.peri,ch:f.ch||0,poly:f.poly.map(p=>[q(p[0]),q(p[1])])})),titles:(P.titles||[]).slice(0,40)};
@@ -68,6 +74,7 @@ export async function readWithFixtures(file, opt = {}) {
      * opt.regroup(out, raw) が「使わないにするまとまりの番号」を返した時だけ回す。回した後は元の選び方に戻して探し直すので、今の読み取りの結果は変わらない。
      * 開口（ドア・扉の無い開口）は、前のKAKUの調べ方に、探し直した区画を一時的に渡して出す */
     if (opt.regroup) {
+      await step('新しい読み取り（試し）の区画を探しています');
       try {
         const E = W.document.getElementById('engineFrame').contentWindow;
         const raw = JSON.parse(E.eval(`(()=>{const M=rgM(),ix=new Map(RG.groups.map((g,i)=>[g.key,i])),q=v=>Math.round(v*1000)/1000;
