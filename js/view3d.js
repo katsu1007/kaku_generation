@@ -1,9 +1,9 @@
 /* 3Dで見る。
-import { oldType } from './legacy.js';
  * 前のKAKUの3D（壁の組み立て・ドアの切り抜き・質感・タップで寸法と数量の根拠）をそのまま使う。
  * 新しい画面の案件（図面・部屋・器具・照明・分電盤）を前のKAKUの形に直して渡し、全画面の層に出す。
  * 前のKAKUの保存（案件一覧）には何も足さない。閉じたら層ごと消す。 */
 import { opts } from './app.js';
+import { oldType } from './legacy.js';
 import { planCH } from './drawing.js';
 import { lightWires } from './project.js';
 import { pip } from './lighting.js';
