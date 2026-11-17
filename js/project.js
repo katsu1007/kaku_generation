@@ -551,6 +551,7 @@ function stepRooms(ctx) {
   const sel = new Set();
   let view = null;
   let mode = 'room', fsel = -1, addAt = null, cutA = null, ltool = 'light', linkSel = null;
+  let holesOn = true, selGeoKey = '', selGeo = null;   // 選んでいる区画の中の「囲まれた所」を床に入れるか（部屋にする前に決める）
   let sheetZoom = '';   // 大きく出している図（図枠・段の位置のキー）。'' は全体
   const lset = state.lightSet || (state.lightSet = { room: 'all', use: '', item: 'e-dl100', lm: 800 });
   const wsel = new Set(), wpts = []; let wway = 'seg';
@@ -680,7 +681,12 @@ function stepRooms(ctx) {
   const paintSel = () => {
     if (!p.drawing || !p.drawing.plan) return;
     $$('#dwgMode button', body).forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-    if (view) { view.paint(); view.overlay(sheetOverlay(p.drawing, view.lw) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
+    /* 部屋を作るで区画を選んでいる間は、選んだ区画の中の「囲まれた所」（机・棚など）を先に見せる（部屋にした後で分かるのではなく、決める前に） */
+    let selHoles = '';
+    if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(','); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
+      if (selGeo && selGeo.holes && holesOn) { const cs = selGeo.holes.cs; selHoles = `<path d="${selGeo.holes.runs.map(q => `M${q[0]} ${-(q[2] + cs)}H${q[1]}V${-q[2]}H${q[0]}Z`).join('')}" fill="var(--accent)" fill-opacity=".35" stroke="none" pointer-events="none"/>`; } }
+    else { selGeoKey = ''; selGeo = null; }
+    if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
     const demoBox = body.querySelector('#dwgDemo'); if (demoBox) demoBox.innerHTML = demoList();
     const fxBox = body.querySelector('#dwgFix'); if (fxBox) fxBox.innerHTML = fixSummary(p.drawing);
     if (mode !== 'room') {
@@ -788,7 +794,7 @@ function stepRooms(ctx) {
     if (fl) fl.innerHTML = [...p.drawing.plan.faces].sort((a, b) => a.no - b.no).map(f => `<button data-face="${f.i}" class="${sel.has(f.i) ? 'on' : ''} ${own.has(f.i) && !sel.has(f.i) ? 'used' : ''}">区画${f.no}${f.name ? ' ' + esc(f.name) : ''} ${Math.round(f.area * 100) / 100}㎡</button>`).join('');
     const bar = body.querySelector('#dwgBar');
     if (bar) bar.innerHTML = sel.size
-      ? `<span class="small"><b>${sel.size} 区画</b>を選んでいます。続けてタップで足す・もう一度で外す。</span><span class="spacer"></span><button class="btn primary" data-act="mkOne">${icon('check')}終了：1部屋にする</button>${sel.size > 1 ? `<button class="btn" data-act="mkEach">1区画ずつ部屋にする</button>` : ''}<button class="btn" data-act="selSame" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button>${[...sel].some(i => own.has(i)) ? `<button class="btn" data-act="unassign">部屋から外す</button>` : ''}<button class="btn" data-act="faceJoin" title="棚や机で割れた小さい区画を、接している長さがいちばん長い隣の区画（部屋）の床に入れます">隣の部屋にまとめる</button><button class="btn" data-act="faceOff" title="部屋ではない所（表・家具・外など）を、灰色にして数えないようにします">区画ではない</button>${[...sel].some(i => (p.drawing.faceOff || {})[i] || (p.drawing.faceJoin || {})[i] != null) ? `<button class="btn" data-act="faceBack">元に戻す</button>` : ''}<button class="btn ghost" data-act="selClear">選ぶのをやめる</button>`
+      ? `<span class="small"><b>${sel.size} 区画</b>を選んでいます${selGeo ? `（床 ${Math.round((selGeo.area - (selGeo.holes && !holesOn ? selGeo.holes.area : 0)) * 100) / 100}㎡）` : ''}。続けてタップで足す・もう一度で外す。</span>${selGeo && selGeo.holes ? `<label class="row small" style="gap:6px;width:100%;cursor:pointer"><input type="checkbox" data-holes ${holesOn ? 'checked' : ''} style="width:20px;height:20px">中の机・棚などで囲まれた所 ${selGeo.holes.area}㎡ も床に入れる（図面で橙に塗った所）</label>` : ''}<span class="spacer"></span><button class="btn primary" data-act="mkOne">${icon('check')}終了：1部屋にする</button>${sel.size > 1 ? `<button class="btn" data-act="mkEach">1区画ずつ部屋にする</button>` : ''}<button class="btn" data-act="selSame" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button>${[...sel].some(i => own.has(i)) ? `<button class="btn" data-act="unassign">部屋から外す</button>` : ''}<button class="btn" data-act="faceJoin" title="棚や机で割れた小さい区画を、接している長さがいちばん長い隣の区画（部屋）の床に入れます">隣の部屋にまとめる</button><button class="btn" data-act="faceOff" title="部屋ではない所（表・家具・外など）を、灰色にして数えないようにします">区画ではない</button>${[...sel].some(i => (p.drawing.faceOff || {})[i] || (p.drawing.faceJoin || {})[i] != null) ? `<button class="btn" data-act="faceBack">元に戻す</button>` : ''}<button class="btn ghost" data-act="selClear">選ぶのをやめる</button>`
       : `<span class="small muted">部屋にする区画を順番にタップして、選び終わったら「終了」。そのまま床・壁・天井の仕上げを決められます。</span><span class="spacer"></span><button class="btn sm" data-act="selRest">まだ部屋にしていない区画を全部選ぶ</button>`;
   };
   /* コンセントを器具に合わせて置く（自分で置いた物は残す）。「反対側へ」にした器具は器具の真ん中で反対側 */
@@ -907,7 +913,8 @@ function stepRooms(ctx) {
       const chs = F.map(f => +f.ch || 0).filter(v => v > 0);
       const runs = p.drawing.open ? roomOpenRuns(g, plan, p.drawing.open) : [];
       p.rooms.push({ id: uid('r'), name: names.join('・') || `区画 ${F.map(f => f.no).join('・')}`, shape: 'free', area: geo.area, perim: geo.perim,
-        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs, ...(geo.holes ? { holes: geo.holes } : {}) });
+        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs, ...(geo.holes ? { holes: geo.holes, ...(holesOn ? {} : { noHoles: true }) } : {}) });
+      if (geo.holes && !holesOn) p.rooms[p.rooms.length - 1].area = Math.round((geo.area - geo.holes.area) * 100) / 100;
     });
     /* 区画を外した部屋の開口も決め直す */
     if (p.drawing.open) p.rooms.forEach(r => { if (r.src === 'plan' && r.faces) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); });
@@ -1094,6 +1101,7 @@ function stepRooms(ctx) {
     touch(p); refresh();
   });
   body.addEventListener('change', e => {
+    if (e.target.matches('[data-holes]')) { holesOn = e.target.checked; paintSel(); return; }
     if (e.target.matches('[data-sheet]')) {
       const d = p.drawing; d.sheetUse = { ...(d.sheetUse || {}), [e.target.dataset.sheet]: e.target.checked };
       touch(p); draw(); toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
