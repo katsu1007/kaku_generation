@@ -115,7 +115,7 @@ export function planView(box, plan, opt = {}) {
       const o = owner.get(f.i), s = sel.has(f.i);
       const m = !s && o == null ? mk(f) : null;
       const fz = fzOf.get(f.i) || fs;
-      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : '表') : '？'}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
+      if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${m.s === 'out' ? (m.type === 'frame' ? '図枠' : m.type === 'title' ? '表題欄' : m.type === 'sheet' ? '使わない図' : '表') : '？'}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
       return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}" fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
     }).join('');
     vis();
@@ -225,5 +225,7 @@ export function planView(box, plan, opt = {}) {
       z.classList.toggle('on', on); z.setAttribute('aria-pressed', on); return; }
     if (z.dataset.z === 'fit') { vb = base.slice(); set(); } else zoomAt(r.left + r.width / 2, r.top + r.height / 2, z.dataset.z === 'in' ? 1.4 : 1 / 1.4);
   });
-  return { paint, overlay, scale, lw };
+  /* 図面の中の1か所（図枠や段の範囲）を大きく出す。null で全体に戻す */
+  const zoomTo = (b) => { if (!b) { vb = base.slice(); set(); return; } const w = b[2] - b[0], h = b[3] - b[1], pd = Math.max(w, h) * 0.03; vb = [b[0] - pd, -b[3] - pd, w + pd * 2, h + pd * 2]; set(); };
+  return { paint, overlay, scale, lw, zoomTo };
 }

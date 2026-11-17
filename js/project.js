@@ -258,7 +258,7 @@ function drawingCard(p) {
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
-    <div id="dwgView"></div>${titleRow(p)}${sheetRow(d)}
+    ${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div>
     <div id="dwgDemo"></div>
     <div id="dwgFix">${fixSummary(d)}</div>${elecRow(p)}
@@ -318,11 +318,29 @@ function titleRow(p) {
 }
 function sheetRow(d) {
   const S = sheetsOf(d); if (!S.length) return '';
-  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><b class="small">この図面の中の図（使う図に印を付けてください）</b>
-    ${S.map(x => `<label class="row" style="gap:8px;min-height:44px;cursor:pointer"><input type="checkbox" data-sheet="${x.key}" ${x.use ? 'checked' : ''} style="width:22px;height:22px"><span class="small">${esc(x.title || `図 ${x.k + 1}`)}${x.kind === 'now' ? '<span class="muted">（今の図）</span>' : x.kind === 'plan' ? '<span class="muted">（改修の図）</span>' : x.kind === 'table' ? '<span class="muted">（表）</span>' : ''}</span></label>`).join('')}
+  const kindTag = x => x.kind === 'now' ? '今の図' : x.kind === 'plan' ? '改修' : x.kind === 'table' ? '表' : '';
+  return `<div style="margin-top:8px"><div class="small" style="margin-bottom:4px"><b>この図面の中の図</b><span class="muted">（名前を押すとその図を大きく出します。印は使う図です）</span></div>
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      <button class="btn sm" data-sheetzoom="" style="min-height:40px">全体</button>
+      ${S.map(x => `<span class="row" style="gap:0;border:1px solid ${x.use ? 'var(--accent)' : 'var(--line)'};border-radius:10px;overflow:hidden;background:${x.use ? 'rgba(255,138,61,.10)' : 'transparent'}">
+        <label style="display:flex;align-items:center;padding:0 8px;min-height:40px;cursor:pointer"><input type="checkbox" data-sheet="${x.key}" ${x.use ? 'checked' : ''} style="width:20px;height:20px" aria-label="${esc(x.title || `図 ${x.k + 1}`)}を使う"></label>
+        <button data-sheetzoom="${x.key}" style="border:0;background:none;color:${x.use ? 'var(--text)' : 'var(--faint)'};padding:0 10px 0 2px;min-height:40px;font-size:13px;cursor:pointer">${esc(x.title || `図 ${x.k + 1}`)}${kindTag(x) ? `<span style="opacity:.7">（${kindTag(x)}）</span>` : ''}</button></span>`).join('')}
+    </div></div>`;
+}
+function sheetNotes(d) {
+  const S = sheetsOf(d); if (!S.length) return '';
+  const alts = S.filter(x => x.use && x.alt);
+  return `<div style="margin-top:8px">
     <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span>
     ${S.some(x => /（\dつ目）$/.test(x.title)) ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 同じ名前の図が2つ以上あります。名前からは今の図か改修の図か分からないので、全部使うにしてあります。図面を見て、使わない方の印を外してください（そのままだと同じ所を二重に数えます）。</div>` : ''}
+    ${alts.length >= 2 ? `<div class="small" style="margin-top:6px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ 改修の案が ${alts.length} つとも使うになっています（${alts.map(x => esc(x.title)).join('・')}）。同じ所の別の案なので、見積もりに使う案だけに印を付けてください（そのままだと同じ所を二重に数えます）。</div>` : ''}
     <div class="small muted" style="margin-top:6px">※ 印を外す前に並べた照明は、自動では消えません。照明を自動で並べ直すと、使わない図の中の照明は消えます。</div></div>`;
+}
+/* 図面の上に、図の範囲の枠と名前を出す（使う図は橙の枠、使わない図は灰色の点線） */
+function sheetOverlay(d, lw) {
+  const S = sheetsOf(d); if (!S.length) return '';
+  return S.map(x => { const [a, b, c, e] = x.box, col = x.use ? 'var(--accent)' : '#8a93a0', fz = Math.max(0.25, (c - a) * 0.028, (e - b) * 0.05);
+    return `<rect x="${a}" y="${-e}" width="${c - a}" height="${e - b}" fill="none" stroke="${col}" stroke-width="${lw * 3}" ${x.use ? '' : `stroke-dasharray="${lw * 8} ${lw * 6}"`} pointer-events="none"/><text x="${a + fz * 0.4}" y="${-e + fz * 1.2}" font-size="${fz}" fill="${col}" font-weight="700" stroke="var(--bg)" stroke-width="${fz * 0.15}" paint-order="stroke" pointer-events="none">${x.use ? '✓ ' : '× '}${esc(x.title || `図 ${x.k + 1}`)}</text>`; }).join('');
 }
 
 /* 新しい読み取り（試し）の切り替えと、見つけた図枠・表の数。解析の結果がある図面（JWW・DXF を読み込んだ時に作る）だけ出す */
@@ -529,6 +547,7 @@ function stepRooms(ctx) {
   const sel = new Set();
   let view = null;
   let mode = 'room', fsel = -1, addAt = null, cutA = null, ltool = 'light', linkSel = null;
+  let sheetZoom = '';   // 大きく出している図（図枠・段の位置のキー）。'' は全体
   const lset = state.lightSet || (state.lightSet = { room: 'all', use: '', item: 'e-dl100', lm: 800 });
   const wsel = new Set(), wpts = []; let wway = 'seg';
   const pset = state.placeSet || (state.placeSet = { item: 'e-hwh', where: 'pt', how: 'grid', cols: 2, rows: 2, gap: 1800, edge: '', n: 2 });
@@ -618,7 +637,7 @@ function stepRooms(ctx) {
   const paintSel = () => {
     if (!p.drawing || !p.drawing.plan) return;
     $$('#dwgMode button', body).forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
-    if (view) { view.paint(); view.overlay(demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
+    if (view) { view.paint(); view.overlay(sheetOverlay(p.drawing, view.lw) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
     const demoBox = body.querySelector('#dwgDemo'); if (demoBox) demoBox.innerHTML = demoList();
     const fxBox = body.querySelector('#dwgFix'); if (fxBox) fxBox.innerHTML = fixSummary(p.drawing);
     if (mode !== 'room') {
@@ -946,6 +965,8 @@ function stepRooms(ctx) {
           }
         }
       });
+      /* 図を大きく出していた時は、描き直しても同じ図のまま */
+      if (sheetZoom) { const x = sheetsOf(p.drawing).find(q => q.key === sheetZoom); if (x && view.zoomTo) view.zoomTo(x.box); else sheetZoom = ''; }
       paintSel();
     }
     const fi = body.querySelector('#dwgFile');
@@ -1013,7 +1034,7 @@ function stepRooms(ctx) {
   body.addEventListener('change', e => {
     if (e.target.matches('[data-sheet]')) {
       const d = p.drawing; d.sheetUse = { ...(d.sheetUse || {}), [e.target.dataset.sheet]: e.target.checked };
-      touch(p); refresh(); toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
+      touch(p); draw(); toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
     }
     if (e.target.matches('[data-reader2]')) {
       /* 入れる：表題欄・表の中の「器具」を「器具ではない」にする（元の種類は r2 に覚える）。外す：元の種類に戻す */
@@ -1048,6 +1069,8 @@ function stepRooms(ctx) {
     if (k && fsel >= 0) { const x = fxList()[fsel]; if (!x) return; x[k] = e.target.value; x.edited = true; if (k === 'back' || k === 't') x.out = null; touch(p); paintSel(); }
   });
   body.addEventListener('click', async e => {
+    const sz = e.target.closest('[data-sheetzoom]');
+    if (sz) { sheetZoom = sz.dataset.sheetzoom; const x = sheetsOf(p.drawing).find(q => q.key === sheetZoom); if (view && view.zoomTo) view.zoomTo(x ? x.box : null); return; }
     const mb = e.target.closest('[data-mode]');
     const ww = e.target.closest('[data-wway]');
     if (ww) { wway = ww.dataset.wway; wsel.clear(); wpts.length = 0; paintSel(); return; }
