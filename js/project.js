@@ -995,6 +995,10 @@ function stepRooms(ctx) {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
         extraTools: `<button class="iconbtn" data-act="dwgFs" title="${dwgFs ? '全画面をやめる' : '全画面で編集する'}" aria-label="${dwgFs ? '全画面をやめる' : '全画面で編集する'}">${icon(dwgFs ? 'shrink' : 'full')}</button>`,
         marks: () => faceMarks(),
+        /* 部屋にした区画は、区画ごとの番号を消して、部屋に1つだけ名前と広さを出す（かつ「まとめたら細かい区画の数字消して真ん中にまとめた数字に」） */
+        rooms: () => { const J = (p.drawing && p.drawing.faceJoin) || {}; return p.rooms.filter(r => r.src === 'plan' && (r.faces || []).length).map(r => {
+          const fs = new Set(r.faces); Object.entries(J).forEach(([a, b]) => { if (fs.has(b)) fs.add(+a); });
+          return { faces: [...fs], color: r.color, name: r.name || '部屋', area: r.area }; }); },
         dtexts: () => textMarksOf(faceMarks()),
         onTap: (i, how) => { if (how && how.around && !sel.has(i) && !owner().has(i)) { const f = p.drawing.plan.faces.find(z => z.i === i); toast(`区画の無い所（机・棚などの所）を押したので、まわりの区画${f ? f.no : ''} を選びました`, { ms: 4000 }); }
           if (!sel.has(i) && owner().has(i)) {

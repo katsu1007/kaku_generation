@@ -104,6 +104,8 @@ export function planView(box, plan, opt = {}) {
     const fsel = opt.fixSel ? opt.fixSel() : -1;
     svg.querySelector('.fixes').innerHTML = (opt.fixtures ? opt.fixtures() : []).map((x, k) => x.t === 'other' && k !== fsel ? '' : fixBox(x, lw, k === fsel)).join('');
     const sel = opt.selected ? opt.selected() : new Set();
+    const byI = new Map(plan.faces.map(f => [f.i, f]));
+    const RL = opt.rooms ? opt.rooms() : [], roomOf = new Map(); RL.forEach((r, k) => r.faces.forEach(i => roomOf.set(i, k)));
     const owner = opt.owner ? opt.owner() : new Map();
     /* 新しい読み取りの印（図枠・表）：除外は灰色、保留は点線の枠。選んだ時・部屋にした時は、いつもの色が先 */
     const marks = (opt.marks && opt.marks()) || null, mk = f => (marks && (marks[f.i] || marks[String(f.i)])) || null;
@@ -116,6 +118,7 @@ export function planView(box, plan, opt = {}) {
     }).join('');
     svg.querySelector('.labels').innerHTML = plan.faces.map(f => {
       const o = owner.get(f.i), s = sel.has(f.i);
+      if (o != null && !s && roomOf.has(f.i)) return '';   // 部屋にした区画は、部屋の名前を1つだけ出す（下の roomLabels）
       const m = !s && o == null ? mk(f) : null;
       /* 図面の文字を出している時は、まだ部屋にしていない区画の番号を小さく薄くする（図面の文字が先。選んだ・部屋にした区画はそのまま） */
       const dim = !!opt.dtexts && txtOn() && !s && o == null, fz = (fzOf.get(f.i) || fs) * (dim ? 0.6 : 1), dz = dim ? ' data-cap="11" opacity=".55"' : '';
@@ -123,6 +126,11 @@ export function planView(box, plan, opt = {}) {
       if (m && m.hide) return '';   // 表・表題欄・区画ではない所は、区画の字を出さない（図面の文字を下の dtexts で出す）
       if (m) return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}"${dz} fill="${m.s === 'out' ? 'var(--faint)' : 'var(--warn)'}" font-weight="700" pointer-events="none">${kind}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">区画${f.no}</tspan></text>`;
       return `<text x="${f.cx}" y="${-f.cy}" font-size="${fz}" data-fz="${fz}"${dz} fill="${s ? 'var(--accent)' : o != null ? roomColor(o) : 'var(--muted)'}" font-weight="700" pointer-events="none">区画${f.no}<tspan x="${f.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${(Math.round(f.area * 100) / 100)}㎡</tspan></text>`;
+    }).join('') + RL.map(r => {
+      /* 部屋の名前の位置：いちばん広い区画の字の位置。字の大きさもその区画に合わせて少し大きく */
+      const F = r.faces.map(i => byI.get(i)).filter(Boolean); if (!F.length || F.every(f => sel.has(f.i))) return '';
+      const big = F.reduce((a, b) => (b.area > a.area ? b : a)), bx = big.poly ? big.poly.map(q => q[0]) : [0, 1], bw = Math.max(...bx) - Math.min(...bx), fz = Math.max(0.02, Math.min((fzOf.get(big.i) || fs) * 1.15, bw / (String(r.name).length + 1.5))), E2 = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      return `<text x="${big.cx}" y="${-big.cy}" font-size="${fz}" data-fz="${fz}" fill="${roomColor(r.color)}" font-weight="700" pointer-events="none">${E2(r.name)}<tspan x="${big.cx}" dy="1.15em" font-weight="400" font-size="0.8em">${Math.round((r.area || F.reduce((a, f) => a + f.area, 0)) * 100) / 100}㎡${F.length > 1 ? `（${F.length}区画）` : ''}</tspan></text>`;
     }).join('');
     /* 区画ではない所（表・表題欄など）に書いてある図面の文字を、その場所にそのまま出す（左下が文字の位置） */
     const E = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
