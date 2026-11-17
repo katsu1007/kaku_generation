@@ -248,6 +248,8 @@ export function planView(box, plan, opt = {}) {
       return;
     }
     if (drag && moved) { const d = drag; drag = null; d.end(e.type !== 'pointerup'); return; }
+    /* なぞる用に掴んだが動かさずに離した＝タップ：掴んだ時の準備（自動のスイッチを置いたスイッチに変える など）を取り消してから、タップとして扱う */
+    if (drag && !moved) { const d = drag; drag = null; try { d.end(true); } catch (err) { console.error(err); } }
     drag = null;
     if (was === 1 && !moved && e.type === 'pointerup') {
       const t = document.elementFromPoint(e.clientX, e.clientY);
