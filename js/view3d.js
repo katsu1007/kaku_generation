@@ -33,7 +33,7 @@ export function toOld(p) {
     color: Number.isFinite(r.color) ? r.color : k, area: Number(r.area) || 0, openW: 0, ...finishes(p, r)
   }));
   const places = (d.lights || []).map(x => ({ id: x.id, item: x.item, where: 'pt', p: [x.x, x.y], count: 1 }));
-  (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).forEach((q, k) => places.push({ id: 'panel' + k, item: 'e-panel', where: 'pt', p: [q.x, q.y], count: 1 }));
+  (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).forEach((q, k) => places.push({ id: 'panel' + k, item: 'e-panel', where: 'pt', p: [q.x, q.y], rot: q.rot || 0, count: 1 }));
   (d.outlets || []).forEach(x => places.push({ id: x.id, item: x.item || 'e-cone', where: 'pt', p: [x.x, x.y], count: 1 }));
   (d.places || []).forEach(x => (x.where === 'pt' ? [x.p] : (x.pts || [])).forEach((q, k) => q && places.push({ id: x.id + '_' + k, item: x.item, where: 'pt', p: q, rot: x.rot || 0, count: 1 })));
   /* スイッチ：新しい画面で決めた位置（自動の物も）を置いた物として渡し、照明をそのスイッチにつなぐ（ブースの照明も外の部屋のスイッチへ） */
