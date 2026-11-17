@@ -56,5 +56,8 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   const equip = equipment(J.texts, A.regions.filter(r => r.type === 'table').map(r => r.box)).slice(0, 40);
   const title = titleInfo(J.texts, A.regions.filter(r => r.type === 'title').map(r => r.box));
   const sheets = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
+  /* 図面の名前は、図枠ごとに読んだ物（sheetTitles）の方が確か（表題欄の見出しの右だけ見ると会社名などを拾う） */
+  const st = [...new Set(sheets.map(x => x.title).filter(Boolean))];
+  if (sheets.length >= 2 && st.length) title.sheet = st;
   return { ...A, ver: VER, names, fxOut, equip, title, sheets, text: { total: texts.length, after: J.texts.length, joined: J.joined, parts: J.parts, kinds } };
 }

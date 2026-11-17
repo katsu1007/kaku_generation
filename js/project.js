@@ -258,7 +258,7 @@ function drawingCard(p) {
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
-    <div id="dwgView"></div>${sheetRow(d)}
+    <div id="dwgView"></div>${titleRow(p)}${sheetRow(d)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div>
     <div id="dwgDemo"></div>
     <div id="dwgFix">${fixSummary(d)}</div>${elecRow(p)}
@@ -275,7 +275,7 @@ function r2more(A, on) {
   if ((A.fxOut || []).length) o.push(`表題欄・表の中の「器具」${A.fxOut.length} 個は、会社のマークなどの見間違いと見ています${on ? '（器具の数から外しました）' : ''}`);
   if ((A.equip || []).length) o.push(`表の設備機器：${A.equip.slice(0, 8).map(e => `${esc(e.name)} ${esc(e.model)}`).join('／')}${A.equip.length > 8 ? ` ほか${A.equip.length - 8}件` : ''}`);
   const ti = A.title || {};
-  if ((ti.project || []).length || (ti.sheet || []).length) o.push(`表題欄：${(ti.project || []).length ? `工事の名前「${esc(ti.project[0])}」` : ''}${(ti.sheet || []).length ? ` 図面の名前「${ti.sheet.slice(0, 4).map(esc).join('」「')}」` : ''}${(ti.scale || []).length ? ` 縮尺 ${esc(ti.scale[0])}` : ''}${(ti.date || []).length ? ` 日付 ${esc(ti.date[0])}` : ''}${(ti.project || []).length ? ` <button class="btn sm" data-act="r2name" style="min-height:36px;margin-left:6px">案件の名前に入れる</button>` : ''}`);
+  if ((ti.project || []).length || (ti.sheet || []).length) o.push(`表題欄：${(ti.project || []).length ? `工事の名前「${esc(ti.project[0])}」` : ''}${(ti.sheet || []).length ? ` 図面の名前「${ti.sheet.slice(0, 4).map(esc).join('」「')}」` : ''}${(ti.scale || []).length ? ` 縮尺 ${esc(ti.scale[0])}` : ''}${(ti.date || []).length ? ` 日付 ${esc(ti.date[0])}` : ''}`);
   return o.length ? '<br>' + o.join('<br>') : '';
 }
 
@@ -308,6 +308,13 @@ export function sheetMarks(d) {
   if (!off.length) return out;
   (d.plan.faces || []).forEach(f => { const x = f.cx, y = f.cy; const sh = off.find(o => x >= o.box[0] && x <= o.box[2] && y >= o.box[1] && y <= o.box[3]); if (sh) out[f.i] = { s: 'out', type: 'sheet', why: `使わない図（${sh.title || `図 ${sh.k + 1}`}）の中です` }; });
   return out;
+}
+/* 表題欄の工事名称（どちらの読み取りでも出す）。案件の名前と違う時だけ「案件の名前に入れる」 */
+function titleRow(p) {
+  const d = p.drawing, v = ((((d && d.analysis) || {}).title || {}).project || [])[0];
+  if (!v) return '';
+  const same = (p.name || '').trim() === v;
+  return `<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center"><span class="small">図面の工事名称：<b>${esc(v)}</b></span>${same ? '<span class="small muted">（案件の名前と同じです）</span>' : `<button class="btn sm" data-act="r2name" style="min-height:40px">案件の名前に入れる</button>`}</div>`;
 }
 function sheetRow(d) {
   const S = sheetsOf(d); if (!S.length) return '';

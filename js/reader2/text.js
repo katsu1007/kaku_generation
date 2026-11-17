@@ -94,6 +94,7 @@ export function modelFor(type, equip = []) {
  * 見出しの言葉が混ざった物・長すぎる物は、読み取りとして信用しない（間違った名前を出すより「読めなかった」にする）。
  * 戻り：{ project:[…], sheet:[…], scale:[…], date:[…] }（枠ごとに読めた値。同じ値は1つにまとめる） */
 const TITLE_LABELS = { project: /^(工事名称|工事名|工事件名)$/, sheet: /^(図面名称|図面名)$/, scale: /^(SCALE|縮尺)$/i, date: /^(DATE|日付|作成日)$/i };
+const STAMP = /PROTECTED|CONFIDENTIAL|関係者外秘|社外秘|部外秘|取扱注意/i;
 const ANY_LABEL = /工事名|図面名|図面番号|SCALE|縮尺|DATE|日付|承認|審査|照査|検査|設計|製図|検図|作成|担当|No[.．]?$|^備考/i;
 export function titleInfo(texts = [], boxes = []) {
   const out = { project: [], sheet: [], scale: [], date: [] };
@@ -106,7 +107,18 @@ export function titleInfo(texts = [], boxes = []) {
         const right = T.filter(t => ok(t) && t.x > lab.x && t.x - lab.x <= w * 0.5 && Math.abs(t.y - lab.y) <= h * 0.12).sort((p, q) => p.x - q.x)[0];
         const below = right ? null : T.filter(t => ok(t) && lab.y - t.y > 0 && lab.y - t.y <= h * 0.35 && Math.abs(t.x - lab.x) <= w * 0.2).sort((p, q) => q.y - p.y)[0];
         const v = right || below; if (!v) return;
-        const val = String(v.t).replace(/[\u3000\s]+/g, ' ').trim();
+        let val = String(v.t).replace(/[\u3000\s]+/g, ' ').trim();
+        /* 工事の名前は「日本モウルド工業株式会社」「本社工場」「事務所棟」のように切れて並ぶので、同じ行の続きをつなぐ
+           （秘密の印・見出し・前の文字の終わりから 1.2m 以上のすき間で止める。字の幅は1字 0.3m とみる） */
+        if (k === 'project') {
+          const row = T.filter(t => t !== lab && Math.abs(t.y - v.y) <= 0.06 && t.x > v.x).sort((p, q) => p.x - q.x);
+          let px = v.x, pl = v.s.length;
+          for (const t of row) {
+            if (ANY_LABEL.test(t.s) || STAMP.test(t.s) || t.x - (px + pl * 0.3) > 1.2) break;
+            val += (/^(株式会社|有限会社|合同会社)$/.test(val) ? '' : ' ') + String(t.t).replace(/[\u3000\s]+/g, ' ').trim();
+            px = t.x; pl = t.s.length;
+          }
+        }
         /* 値として形が合わない物は読まない：縮尺は「1/50」の形、日付は数字と区切り、名前は日本語の字を含む物 */
         const fit = k === 'scale' ? /\d\s*[\/:：]\s*\d|NON|ノンスケール/i.test(val) : k === 'date' ? /\d{2,4}\s*[.\/年-]\s*\d{1,2}/.test(val) : /[\u3040-\u30ff\u4e00-\u9fff]/.test(val);
         if (fit && !out[k].includes(val)) out[k].push(val);
@@ -131,7 +143,7 @@ export function sheetTitles(texts = [], frames = [], titles = []) {
     const lab = T.length ? texts.filter(t => t.x >= tb[0] && t.x <= tb[2] && t.y >= tb[1] && t.y <= tb[3] && TITLE_LABELS.sheet.test(String(t.t).replace(/[\s\u3000]+/g, '')))[0] : null;
     if (lab) {
       const W = (tb[2] - tb[0]) * 0.25;
-      const V = T.filter(t => t.x > lab.x + 0.2 && t.x <= lab.x + W && t.y <= lab.y + 0.1 && t.y >= lab.y - 0.6 && t.s.length <= 20);
+      const V = T.filter(t => t.x > lab.x + 0.2 && t.x <= lab.x + W && t.y <= lab.y + 0.1 && t.y >= lab.y - 0.6 && t.s.length <= 20 && !/\d\s*[\/:：]\s*\d|\d{4}\s*[.\/年-]\s*\d/.test(t.s));
       if (V.length) {
         const y0 = V.sort((p, q) => q.s.length - p.s.length)[0].y;
         const title = V.filter(t => Math.abs(t.y - y0) <= 0.08).sort((p, q) => p.x - q.x).map(t => t.s).join('').replace(/([\u30a1-\u30f6])[-ｰ]/g, '$1ー');
