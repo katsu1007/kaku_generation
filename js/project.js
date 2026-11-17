@@ -560,8 +560,11 @@ function stepRooms(ctx) {
   const pOpts = () => ({ how: pset.how, cols: pset.cols, rows: pset.rows, gap: pset.gap, edge: pset.edge, n: pset.n });
   const pPreview = () => { const plan = p.drawing.plan; if (pset.where === 'line') return linePts([...psegs].map(i => plan.segs[i]).filter(Boolean), pOpts());
     if (pset.where === 'area') { const F = [...pfaces].map(i => plan.faces.find(f => f.i === i)).filter(Boolean).map(f => f.poly); return F.length ? areaPts(F, pOpts()) : []; } return []; };
+  /* 照明・スイッチ・コンセント・置いた器具の印の大きさ。図面の大きさで決まる太さ（view.lw）を使うと、広い図面（3つの図が並ぶ物）で
+     照明1つが直径2m 以上になり図面が埋まる。図面の縮尺に合わせ、1単位を 3cm までにする（照明の丸は直径 約54cm） */
+  const symLw = () => Math.min(view.lw, 0.03);
   const placeOverlay = () => {
-    const d = p.drawing, lw = view.lw, R = lw * 13;
+    const d = p.drawing, lw = symLw(), R = lw * 13;
     const sym = (id, q, c, rot, cls) => { const t = symText(id, itemName(id)); return `<g${cls ? ` class="${cls}"` : ''}${rot ? ` transform="rotate(${-rot} ${q[0]} ${-q[1]})"` : ''}><circle cx="${q[0]}" cy="${-q[1]}" r="${R}" fill="${c}" fill-opacity="${cls === 'new' ? .25 : .85}" stroke="${cls === 'new' ? '#fff' : c}" stroke-width="${lw * 1.6}"${cls === 'new' ? ` stroke-dasharray="${lw * 3} ${lw * 2}"` : ''}/><text x="${q[0]}" y="${-q[1]}" font-size="${R * (t.length > 2 ? .62 : t.length > 1 ? .8 : 1.05)}" text-anchor="middle" dominant-baseline="central" fill="#fff" font-weight="800">${esc(t)}</text>${rot ? `<line x1="${q[0]}" y1="${-q[1] - R}" x2="${q[0]}" y2="${-q[1] - R * 1.5}" stroke="${c}" stroke-width="${lw * 2}"/>` : ''}</g>`; };
     let h = '';
     if (mode === 'place') {
@@ -610,7 +613,7 @@ function stepRooms(ctx) {
     Object.entries((p.drawing && p.drawing.faceJoin) || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); });
     return m; };
   const demoOverlay = () => {
-    const lw = view.lw, plan = p.drawing.plan, d = p.drawing;
+    const lw = symLw(), plan = p.drawing.plan, d = p.drawing;
     let h = '';
     (d.walls || []).forEach(w => (w.segs || []).forEach(i => { const s = plan.segs[i]; if (s) h += `<line x1="${s[0]}" y1="${-s[1]}" x2="${s[2]}" y2="${-s[3]}" stroke="#ff6b6b" stroke-width="${lw * 7}" stroke-linecap="round" opacity=".75"/>`; }));
     wsel.forEach(i => { const s = plan.segs[i]; if (s) h += `<line x1="${s[0]}" y1="${-s[1]}" x2="${s[2]}" y2="${-s[3]}" stroke="var(--accent)" stroke-width="${lw * 7}" stroke-linecap="round"/>`; });
