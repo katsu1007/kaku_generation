@@ -7,7 +7,7 @@
  *   title { project, sheet, scale, date }：表題欄から読めた工事の名前・図面の名前・縮尺・日付
  *   text { total, joined, parts, kinds }：文字の数、つないだ数、種類ごとの数 */
 import { analyze as analyzeFrame } from './frame.js';
-import { joinTexts, classify, equipment, titleInfo } from './text.js';
+import { joinTexts, classify, equipment, titleInfo, sheetTitles } from './text.js';
 
 export const VER = 2;
 const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
@@ -55,5 +55,6 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   });
   const equip = equipment(J.texts, A.regions.filter(r => r.type === 'table').map(r => r.box)).slice(0, 40);
   const title = titleInfo(J.texts, A.regions.filter(r => r.type === 'title').map(r => r.box));
-  return { ...A, ver: VER, names, fxOut, equip, title, text: { total: texts.length, after: J.texts.length, joined: J.joined, parts: J.parts, kinds } };
+  const sheets = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
+  return { ...A, ver: VER, names, fxOut, equip, title, sheets, text: { total: texts.length, after: J.texts.length, joined: J.joined, parts: J.parts, kinds } };
 }

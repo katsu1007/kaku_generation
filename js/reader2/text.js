@@ -94,7 +94,7 @@ export function modelFor(type, equip = []) {
  * 見出しの言葉が混ざった物・長すぎる物は、読み取りとして信用しない（間違った名前を出すより「読めなかった」にする）。
  * 戻り：{ project:[…], sheet:[…], scale:[…], date:[…] }（枠ごとに読めた値。同じ値は1つにまとめる） */
 const TITLE_LABELS = { project: /^(工事名称|工事名|工事件名)$/, sheet: /^(図面名称|図面名)$/, scale: /^(SCALE|縮尺)$/i, date: /^(DATE|日付|作成日)$/i };
-const ANY_LABEL = /工事名|図面名|図面番号|SCALE|縮尺|DATE|日付|承認|設計|製図|検図|作成|担当|No[.．]?$|^備考/i;
+const ANY_LABEL = /工事名|図面名|図面番号|SCALE|縮尺|DATE|日付|承認|審査|照査|検査|設計|製図|検図|作成|担当|No[.．]?$|^備考/i;
 export function titleInfo(texts = [], boxes = []) {
   const out = { project: [], sheet: [], scale: [], date: [] };
   boxes.forEach(b => {
@@ -114,4 +114,40 @@ export function titleInfo(texts = [], boxes = []) {
     });
   });
   return out;
+}
+
+/* 図枠ごとの図の名前（「1階平面図（現況）」「2階平面図（改修プラン）」など）と、今の図か改修の図か。
+   図枠の表題欄の中の、図の名前らしい文字（〜図・プラン・現況・改修）を拾う。同じ行で続いている切れ端（「1階平面図(」「改修プラン)」）はつなぐ。
+   入力：texts（つないだ後の文字）、frames（図枠の box の並び）、titles（表題欄の box の並び）
+   出力：[{ box, title, kind: 'now'（今の図）| 'plan'（改修・計画の図）| '' }] */
+const SHEET_WORD = /(平面|立面|断面|天井|展開|配置|詳細|伏|姿)図|プラン|現況|改修|計画/;
+export function sheetTitles(texts = [], frames = [], titles = []) {
+  return frames.map(fb => {
+    const tb = titles.find(b => b[0] >= fb[0] - 0.01 && b[2] <= fb[2] + 0.01 && b[1] >= fb[1] - 0.01 && b[3] <= fb[3] + 0.01) || fb;
+    const T = texts.filter(t => t.x >= tb[0] && t.x <= tb[2] && t.y >= tb[1] && t.y <= tb[3]).map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
+      .filter(t => t.s.length <= 30 && !/^※/.test(t.s) && !ANY_LABEL.test(t.s));
+    const kindOf = (title) => /仕上表|仕上げ表|凡例|一覧表|求積表|特記/.test(title) ? 'table' : /改修|プラン|計画|提案|変更後/.test(title) ? 'plan' : /現況|既存|改修前/.test(title) ? 'now' : '';
+    /* まず「図面名称」の欄の値：見出しの右・同じ高さか少し下に並ぶ文字を左からつなぐ */
+    const lab = T.length ? texts.filter(t => t.x >= tb[0] && t.x <= tb[2] && t.y >= tb[1] && t.y <= tb[3] && TITLE_LABELS.sheet.test(String(t.t).replace(/[\s\u3000]+/g, '')))[0] : null;
+    if (lab) {
+      const W = (tb[2] - tb[0]) * 0.25;
+      const V = T.filter(t => t.x > lab.x + 0.2 && t.x <= lab.x + W && t.y <= lab.y + 0.1 && t.y >= lab.y - 0.6 && t.s.length <= 20);
+      if (V.length) {
+        const y0 = V.sort((p, q) => q.s.length - p.s.length)[0].y;
+        const title = V.filter(t => Math.abs(t.y - y0) <= 0.08).sort((p, q) => p.x - q.x).map(t => t.s).join('').replace(/([\u30a1-\u30f6])[-ｰ]/g, '$1ー');
+        if (title) return { box: fb, title, kind: kindOf(title) };
+      }
+    }
+    const hits = T.filter(t => SHEET_WORD.test(t.s));
+    if (!hits.length) return { box: fb, title: '', kind: '' };
+    /* いちばん長い物の行で、近くに続く切れ端をつなぐ */
+    const best = hits.sort((p, q) => q.s.length - p.s.length)[0];
+    const row = T.filter(t => Math.abs(t.y - best.y) <= 0.08).sort((p, q) => p.x - q.x);
+    let k = row.indexOf(best), a = k, b = k;
+    const near = (p, q) => q.x - p.x > 0 && q.x - p.x <= p.s.length * 0.6 + 0.8;
+    while (a > 0 && row[a - 1].s.length <= 8 && near(row[a - 1], row[a]) && SHEET_WORD.test(row[a - 1].s)) a--;
+    while (b < row.length - 1 && row[b + 1].s.length <= 12 && near(row[b], row[b + 1]) && (/[(（]$/.test(row[b].s) || /^[（(]/.test(row[b + 1].s))) b++;
+    const title = row.slice(a, b + 1).map(t => t.s).join('');
+    return { box: fb, title, kind: kindOf(title) };
+  });
 }

@@ -258,7 +258,7 @@ function drawingCard(p) {
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
-    <div id="dwgView"></div>
+    <div id="dwgView"></div>${sheetRow(d)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div>
     <div id="dwgDemo"></div>
     <div id="dwgFix">${fixSummary(d)}</div>${elecRow(p)}
@@ -286,6 +286,34 @@ function r2lines(d, on) {
     .concat(v.single ? [`机・椅子・テーブルなどの1本線 ${v.single.toLocaleString()}本`] : []).join('・');
   const n1 = (d.v1 ? d.v1.faces : d.plan.faces).length, n2 = (d.v1 ? d.plan.faces : v.faces).length;
   return `<br>壁ではなさそうな線（${rs}）を外して、区画を探し直しました：区画 ${n1} → ${n2} 個${on ? '（探し直した区画を出しています。印を外すと今までの区画に戻ります）' : '（印を付けると、探し直した区画に入れ替わります）'}${v.openDrop ? `。形が壁の線に合っていない区画 ${v.openDrop} 個は、扉の無い開口を壁から引いていません` : ''}`;
+}
+
+/* 1枚の図面に図がいくつも並んでいる時（1階の今・1階の改修・2階の改修 など）、使う図を選ぶ。
+   図は図枠ごと（解析の sheets）。選んだ結果は drawing.sheetUse に図枠の位置をキーにして覚える。
+   覚えていない時は、改修の図と今の図が両方ある図面だけ、今の図を使わない（それ以外は全部使う） */
+const sheetKey = (b) => `${Math.round(b[0] * 10)},${Math.round(b[1] * 10)}`;
+export function sheetsOf(d) {
+  const S = ((d && d.analysis && d.analysis.sheets) || []).filter(x => x && x.box);
+  if (S.length < 2) return [];
+  const both = S.some(x => x.kind === 'plan') && S.some(x => x.kind === 'now'), U = d.sheetUse || {};
+  /* 図面の上の図から順に（左右は左から）。同じ名前の図が2つ以上ある時は「（1つ目）」などを付ける */
+  const T = [...S].sort((p, q) => Math.abs(q.box[3] - p.box[3]) > 1 ? q.box[3] - p.box[3] : p.box[0] - q.box[0]);
+  const cnt = {}, seen = {}; T.forEach(x => { cnt[x.title] = (cnt[x.title] || 0) + 1; });
+  return T.map((x, k) => { const key = sheetKey(x.box); const dup = x.title && cnt[x.title] > 1 ? `（${(seen[x.title] = (seen[x.title] || 0) + 1)}つ目）` : '';
+    return { ...x, title: x.title ? x.title + dup : '', key, k, use: key in U ? !!U[key] : !(x.kind === 'table' || (both && x.kind === 'now')) }; });
+}
+/* 使わない図の中の区画（区画の真ん中が図枠の中）に「除外」の印 */
+export function sheetMarks(d) {
+  const out = {}, off = sheetsOf(d).filter(x => !x.use);
+  if (!off.length) return out;
+  (d.plan.faces || []).forEach(f => { const x = f.cx, y = f.cy; const sh = off.find(o => x >= o.box[0] && x <= o.box[2] && y >= o.box[1] && y <= o.box[3]); if (sh) out[f.i] = { s: 'out', type: 'sheet', why: `使わない図（${sh.title || `図 ${sh.k + 1}`}）の中です` }; });
+  return out;
+}
+function sheetRow(d) {
+  const S = sheetsOf(d); if (!S.length) return '';
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><b class="small">この図面の中の図（使う図に印を付けてください）</b>
+    ${S.map(x => `<label class="row" style="gap:8px;min-height:44px;cursor:pointer"><input type="checkbox" data-sheet="${x.key}" ${x.use ? 'checked' : ''} style="width:22px;height:22px"><span class="small">${esc(x.title || `図 ${x.k + 1}`)}${x.kind === 'now' ? '<span class="muted">（今の図）</span>' : x.kind === 'plan' ? '<span class="muted">（改修の図）</span>' : x.kind === 'table' ? '<span class="muted">（表）</span>' : ''}</span></label>`).join('')}
+    <span class="small muted">印を外した図の区画は灰色になり、「全部選ぶ」や照明の自動配置に入りません。${S.some(x => x.kind === 'now') && S.some(x => x.kind === 'plan') ? '今の図は、最初は使わないにしてあります（改修の図と同じ所を二重に数えないため）。' : ''}${S.some(x => x.kind === 'table') ? '表の図は、最初は使わないにしてあります。' : ''}</span></div>`;
 }
 
 /* 新しい読み取り（試し）の切り替えと、見つけた図枠・表の数。解析の結果がある図面（JWW・DXF を読み込んだ時に作る）だけ出す */
@@ -516,6 +544,8 @@ function stepRooms(ctx) {
   const meas = { pts: [], cont: false };
   /* 新しい読み取りの印（「新しい読み取り」を選んだ図面だけ。選んでいなければ今まで通り何も出さない） */
   const r2marks = () => (p.drawing && p.drawing.reader === 'v2' && p.drawing.analysis && p.drawing.analysis.marks) || null;
+  /* 区画の印：新しい読み取りの印（選んだ図面だけ）＋使わない図の中の区画（どちらの読み取りでも） */
+  const faceMarks = () => { const a = r2marks(), b = p.drawing ? sheetMarks(p.drawing) : {}; return a || Object.keys(b).length ? { ...(a || {}), ...b } : null; };
   const FIX_SIZE = { toilet: [0.46, 0.8], urinal: [0.4, 0.36], counter: [1.2, 0.5], sink: [0.45, 0.36], slop: [0.8, 0.52], trough: [3.6, 0.6], bath: [1.6, 1.6], kitchen: [2.55, 0.65] };
   const BACKS = [['N', '上'], ['E', '右'], ['S', '下'], ['W', '左']];
   const fxList = () => (p.drawing && p.drawing.fixtures) || [];
@@ -827,8 +857,8 @@ function stepRooms(ctx) {
     if (p.drawing && p.drawing.plan) {
       view = planView(body.querySelector('#dwgView'), p.drawing.plan, {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
-        marks: () => r2marks(),
-        onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const m = r2marks() && (r2marks()[i] || r2marks()[String(i)]); if (m) toast((m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
+        marks: () => faceMarks(),
+        onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
         /* 虫めがねの吸い付き：測る・カッター・壁の範囲・照明の置き場所で、線の端や線の上に吸い付く */
         snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 16) : [x, y],
@@ -972,6 +1002,10 @@ function stepRooms(ctx) {
     touch(p); refresh();
   });
   body.addEventListener('change', e => {
+    if (e.target.matches('[data-sheet]')) {
+      const d = p.drawing; d.sheetUse = { ...(d.sheetUse || {}), [e.target.dataset.sheet]: e.target.checked };
+      touch(p); refresh(); toast(e.target.checked ? 'この図を使います' : 'この図の区画は使いません（灰色になります）'); return;
+    }
     if (e.target.matches('[data-reader2]')) {
       /* 入れる：表題欄・表の中の「器具」を「器具ではない」にする（元の種類は r2 に覚える）。外す：元の種類に戻す */
       const d = p.drawing, fxs = d.fixtures || [], on = e.target.checked;
@@ -1072,7 +1106,7 @@ function stepRooms(ctx) {
         /* 部屋にしていない区画のうち、照明を並べない所：
            ほかの区画を2つ以上中に含む区画（図面の枠の内側・建物の外まわり。並べると図面じゅうが照明で埋まる）、
            図面の表・表題欄と見た区画（新しい読み取りの解析で「除外」の物） */
-        const marks = (d.analysis && d.analysis.marks) || {};
+        const marks = { ...((d.analysis && d.analysis.marks) || {}), ...sheetMarks(d) };
         const wraps = (f) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of d.plan.faces) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
         let skipped = 0;
         const freeFaces = lset.room !== 'faces' ? [] : d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6).filter(f => { const m = marks[f.i] || marks[String(f.i)]; if ((m && m.s === 'out') || wraps(f)) { skipped++; return false; } return true; });
@@ -1092,7 +1126,7 @@ function stepRooms(ctx) {
             res.forEach(o => o.pts.forEach(q => { d.lights.push({ id: uid('L'), x: q[0], y: q[1], item: lset.item, room: g.r ? g.r.id : null, face: g.r ? undefined : o.i, auto: true }); n++; }));
           }
           const no = withOut ? placeOutlets() : 0;
-          syncDemoLines(p); touch(p); paintSel(); toast(`照明 ${n} 台${withOut ? `・コンセント ${no} 個` : ''}を並べました。スイッチと配線も明細に入れました${skipped ? `（図面の枠・表など ${skipped} か所には並べていません）` : ''}`, { ms: 4000 });
+          syncDemoLines(p); touch(p); paintSel(); toast(`照明 ${n} 台${withOut ? `・コンセント ${no} 個` : ''}を並べました。スイッチと配線も明細に入れました${skipped ? `（図面の枠・表・使わない図など ${skipped} か所には並べていません）` : ''}`, { ms: 4000 });
         })().catch(e => showError(e));
         return;
       }
@@ -1176,7 +1210,7 @@ function stepRooms(ctx) {
       if (a === 'mkOne') return makeRooms(false);
       if (a === 'mkEach') return makeRooms(true);
       if (a === 'selClear') { sel.clear(); paintSel(); return; }
-      if (a === 'lMakeAll') { const own = owner(), mk = r2marks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); return makeRooms(true); }
+      if (a === 'lMakeAll') { const own = owner(), mk = faceMarks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); return makeRooms(true); }
       if (a === 'selSame') {
         /* 選んだ区画と同じ大きさ（面積も周りの長さも 2% 以内か 0.02 以内）の、まだ部屋にしていない区画を足す。トイレのブースなどをまとめて選ぶ */
         const own = owner(), F = p.drawing.plan.faces, base = [...sel].map(i => F.find(f => f.i === i)).filter(Boolean);
@@ -1184,7 +1218,7 @@ function stepRooms(ctx) {
         let k = 0; F.forEach(f => { if (sel.has(f.i) || own.has(f.i)) return; if (base.some(b => near(f.area, b.area) && near(f.peri, b.peri))) { sel.add(f.i); k++; } });
         paintSel(); toast(k ? `同じ大きさの区画を ${k} 個足しました（全部で ${sel.size} 区画）` : '同じ大きさで、まだ部屋にしていない区画はありませんでした'); return;
       }
-      if (a === 'selRest') { const own = owner(), mk = r2marks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); paintSel(); return; }
+      if (a === 'selRest') { const own = owner(), mk = faceMarks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); paintSel(); return; }
       if (a === 'dwgClear') {
         if (!(await ask('図面を消しますか？', '図面から作った部屋は残ります（図面とのつながりだけ外れます）。', { ok: '消す', danger: true }))) return;
         const old = p.drawing; p.drawing = null; p.rooms.forEach(r => { if (r.src === 'plan') r.src = 'plan-old'; });
