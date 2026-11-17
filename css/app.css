@@ -466,7 +466,7 @@ table.basis th:first-child { text-align: left; }
 .dwg-fs #dwgView { flex: 1; min-height: 0; }
 .dwg-fs #dwgView .pv-wrap { height: 100%; }
 .dwg-fs #dwgView .pv { height: 100% !important; }
-.dwg-fs #dwgBar { margin: 0 !important; flex: none; max-height: 30vh; overflow: auto; font-size: 13px; }
+.dwg-fs #dwgBar { margin: 0 !important; flex: none; height: 26vh; max-height: 26vh; align-content: flex-start; overflow: auto; font-size: 13px; }
 .dwg-fs #dwgBar .btn { min-height: 38px; padding: 0 10px; }
 body.dwg-fs-on { overflow: hidden; }
 .dwg-fs .dwg-fs-hide { display: none !important; }
@@ -474,3 +474,4 @@ body.dwg-fs-on { overflow: hidden; }
 .dwg-fs .dwg-sheets { flex-wrap: nowrap !important; overflow-x: auto; }
 .dwg-fs .dwg-sheets > * { flex: none; }
 .dwg-fs > div:not(#dwgView):not(.dwg-fs-head):not(#dwgMode):not(#dwgBar) { margin-top: 0 !important; }
+/* 全画面の下のボタンの欄は高さを決めておく（区画を選ぶたびに図面の大きさが変わって、次のタップがずれないように） */

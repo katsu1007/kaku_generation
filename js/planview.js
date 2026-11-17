@@ -105,7 +105,8 @@ export function planView(box, plan, opt = {}) {
     const owner = opt.owner ? opt.owner() : new Map();
     /* 新しい読み取りの印（図枠・表）：除外は灰色、保留は点線の枠。選んだ時・部屋にした時は、いつもの色が先 */
     const marks = (opt.marks && opt.marks()) || null, mk = f => (marks && (marks[f.i] || marks[String(f.i)])) || null;
-    svg.querySelector('.faces').innerHTML = plan.faces.map(f => {
+    /* 大きい区画を先に描いて、小さい区画を上に重ねる（大きい区画の下に小さい区画が隠れて押せなくならないように） */
+    svg.querySelector('.faces').innerHTML = [...plan.faces].sort((a, b) => b.area - a.area).map(f => {
       const o = owner.get(f.i), s = sel.has(f.i), m = !s && o == null ? mk(f) : null;
       const fill = s ? 'var(--accent)' : o != null ? roomColor(o) : m && m.s === 'out' ? '#8a93a0' : 'transparent';
       const op = s ? 0.45 : o != null ? 0.22 : m && m.s === 'out' ? 0.32 : 0;
@@ -161,7 +162,8 @@ export function planView(box, plan, opt = {}) {
     lpEl.style.left = lx + 'px'; lpEl.style.top = ly + 'px'; lpEl.hidden = false;
   }
   const hideLoupe = () => { loupe = false; lpEl.hidden = true; };
-  svg.addEventListener('pointerdown', e => { svg.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = false;
+  let downAt = null;
+  svg.addEventListener('pointerdown', e => { svg.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); moved = false; downAt = [e.clientX, e.clientY];
     drag = null; clearTimeout(longT);
     if (pts.size === 1 && opt.onDragStart) {
       const [ux, uy, sc] = toUser(e.clientX, e.clientY);
@@ -185,19 +187,21 @@ export function planView(box, plan, opt = {}) {
     }
     if (pts.size === 1) {
       const dx = e.clientX - prev[0], dy = e.clientY - prev[1];
-      if (Math.abs(dx) + Math.abs(dy) > 0) { if (Math.hypot(dx, dy) > 1) moved = true; const s = toUser(0, 0)[2]; vb[0] -= dx * s; vb[1] -= dy * s; set(); }
+      if (Math.abs(dx) + Math.abs(dy) > 0) { if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 10) moved = true; const s = toUser(0, 0)[2]; vb[0] -= dx * s; vb[1] -= dy * s; set(); }
     } else if (pts.size === 2) {
       moved = true;
       const [a, b] = [...pts.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       vb = startVb.slice(); set(); zoomAt(startMid[0], startMid[1], d / startDist);
     }
   });
+  /* その点を含む区画のうち一番小さい物（図枠の内側のような大きい区画が、上に重なっていても小さい方を選ぶ） */
+  const faceAt = (x, y) => { let best = null; for (const z of plan.faces) { const P = z.poly; if (!P || P.length < 3 || (best && z.area >= best.area)) continue; let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > y) !== (P[j][1] > y)) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } if (c) best = z; } return best; };
   const up = e => {
     const was = pts.size; pts.delete(e.pointerId); clearTimeout(longT);
     if (loupe) {
       const at = lpAt; hideLoupe(); if (e.type !== 'pointerup' || !at) return;
       const mode = opt.mode ? opt.mode() : 'room';
-      if (mode === 'room' && opt.onTap) { const f = plan.faces.find(z => { let c = false; const P = z.poly; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > at[1]) !== (P[j][1] > at[1])) && at[0] < (P[j][0] - P[i][0]) * (at[1] - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } return c; }); if (f) opt.onTap(f.i); }
+      if (mode === 'room' && opt.onTap) { const f = faceAt(at[0], at[1]); if (f) opt.onTap(f.i); }
       else if (opt.onPoint) opt.onPoint(at[0], at[1], toUser(0, 0)[2], true);
       return;
     }
@@ -208,7 +212,8 @@ export function planView(box, plan, opt = {}) {
       const pg = t && t.closest && t.closest('polygon[data-i]');
       const [ux, uy, sc] = toUser(e.clientX, e.clientY);
       const mode = opt.mode ? opt.mode() : 'room';
-      if (mode === 'room' && pg && opt.onTap) opt.onTap(+pg.dataset.i);
+      const fa = mode === 'room' && opt.onTap ? faceAt(ux, -uy) : null;
+      if (mode === 'room' && opt.onTap) { if (fa) opt.onTap(fa.i); else if (pg) opt.onTap(+pg.dataset.i); }
       else if (opt.onPoint) opt.onPoint(ux, -uy, sc);
     }
   };

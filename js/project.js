@@ -924,7 +924,7 @@ function stepRooms(ctx) {
         onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.type === 'off' || m.type === 'join') ? m.why : (m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
         /* 虫めがねの吸い付き：測る・カッター・壁の範囲・照明の置き場所で、線の端や線の上に吸い付く */
-        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 16) : [x, y],
+        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 28) : [x, y],
         onPoint: (x, y, sc, lp) => {
           const snapAt = (t) => lp ? [x, y] : snapPt(p.drawing.plan, x, y, t);
           if (mode === 'fix') {
@@ -976,14 +976,14 @@ function stepRooms(ctx) {
             toast(itemName(np.item) + ' を置きました', { action: '元に戻す', onAction: () => { d.places = d.places.filter(q => q !== np); syncDemoLines(p); touch(p); paintSel(); } });
             return;
           }
-          if (mode === 'wall' && wway === 'range') { wpts.push(snapAt(sc * 16)); paintSel(); return; }
+          if (mode === 'wall' && wway === 'range') { wpts.push(snapAt(sc * 32)); paintSel(); return; }
           if (mode === 'wall') {
             const i = nearestSeg(p.drawing.plan, x, y, sc * 18);
             if (i >= 0) { if (wsel.has(i)) wsel.delete(i); else wsel.add(i); paintSel(); }
             return;
           }
           if (mode === 'cut') {
-            const q = snapAt(sc * 14);
+            const q = snapAt(sc * 32);
             if (!cutA) { cutA = q; paintSel(); return; }
             const rect = [Math.min(cutA[0], q[0]), Math.min(cutA[1], q[1]), Math.max(cutA[0], q[0]), Math.max(cutA[1], q[1])].map(r3);
             cutA = null;
@@ -994,7 +994,7 @@ function stepRooms(ctx) {
             return;
           }
           if (mode === 'meas') {
-            const q = snapAt(sc * 16);
+            const q = snapAt(sc * 32);
             if (!meas.cont && meas.pts.length >= 2) meas.pts = [];
             meas.pts.push(q); paintSel();
           }
