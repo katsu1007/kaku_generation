@@ -1531,7 +1531,30 @@ function rgSingleLines(){
   const touches=(x,y,k)=>{for(const j of near(k)){if(j===k||!keep[j])continue;const dx=X2[j]-X1[j],dy=Y2[j]-Y1[j],l2=dx*dx+dy*dy;let t=l2?((x-X1[j])*dx+(y-Y1[j])*dy)/l2:0;t=Math.max(0,Math.min(1,t));
     if(Math.hypot(x-X1[j]-t*dx,y-Y1[j]-t*dy)<=TOL)return true}return false};
   for(let it=0;it<3;it++){let ch=false;for(let k=0;k<N;k++){if(keep[k]||!(L[k]>0.02)||L[k]>1.2)continue;if(touches(X1[k],Y1[k],k)&&touches(X2[k],Y2[k],k)){keep[k]=1;ch=true}}if(!ch)break}
-  const off=new Set();for(let k=0;k<N;k++)if(!keep[k])off.add(ids[k]);return off;
+  const extra=[];
+  /* 吹き抜け・エレベーターなどの「四角の中の×」：×の線は外すが、×の4つの先を結んだ四角のふちの線は残す（ホールとの境目が1本線のことがある）。
+     ×＝長さ1m以上の1本線どうしが、どちらもまん中あたり（長さの2割以内）で交わる物。×の描いてある所を吹き抜けの広さとみて、線の無い辺には見えない線を足す */
+  const P=(k,e)=>e?[X2[k],Y2[k]]:[X1[k],Y1[k]];
+  /* 線 k が辺 a-b と同じ直線の上にあれば（両端が直線から6cm以内）、辺に重なる長さを返す */
+  const onEdge=(k,a,b)=>{const vx=b[0]-a[0],vy=b[1]-a[1],Le=Math.hypot(vx,vy);if(Le<0.3)return 0;const ux=vx/Le,uy=vy/Le;
+    const d1=Math.abs((X1[k]-a[0])*uy-(Y1[k]-a[1])*ux),d2=Math.abs((X2[k]-a[0])*uy-(Y2[k]-a[1])*ux);if(d1>0.06||d2>0.06)return 0;
+    const t1=(X1[k]-a[0])*ux+(Y1[k]-a[1])*uy,t2=(X2[k]-a[0])*ux+(Y2[k]-a[1])*uy;return Math.max(0,Math.min(Le,Math.max(t1,t2))-Math.max(0,Math.min(t1,t2)))};
+  const edgeCover=(a,b)=>{const Le=Math.hypot(b[0]-a[0],b[1]-a[1]);let cov=0;const seen=new Set();
+    const ax=Math.floor((Math.min(a[0],b[0])-0.1)/CS),bx=Math.floor((Math.max(a[0],b[0])+0.1)/CS),ay=Math.floor((Math.min(a[1],b[1])-0.1)/CS),by=Math.floor((Math.max(a[1],b[1])+0.1)/CS);
+    if((bx-ax+1)*(by-ay+1)>400)return {cov:0,list:[]};const list=[];
+    for(let gx=ax;gx<=bx;gx++)for(let gy=ay;gy<=by;gy++){const v=cell.get(gx+","+gy);if(!v)continue;for(const k of v){if(seen.has(k))continue;seen.add(k);const ov=onEdge(k,a,b);if(ov>0.05){cov+=ov;list.push(k)}}}
+    return {cov:cov/Math.max(Le,1e-9),list}};
+  for(let k=0;k<N;k++){if(keep[k]||!(L[k]>=1))continue;
+    for(const j of near(k)){if(j<=k||keep[j]||!(L[j]>=1))continue;
+      const dx1=X2[k]-X1[k],dy1=Y2[k]-Y1[k],dx2=X2[j]-X1[j],dy2=Y2[j]-Y1[j],den=dx1*dy2-dy1*dx2;if(Math.abs(den)<1e-9)continue;
+      const t=((X1[j]-X1[k])*dy2-(Y1[j]-Y1[k])*dx2)/den,u=((X1[j]-X1[k])*dy1-(Y1[j]-Y1[k])*dx1)/den;
+      if(Math.abs(t-0.5)>0.2||Math.abs(u-0.5)>0.2)continue;
+      const C=[P(k,0),P(j,0),P(k,1),P(j,1)];const E=[[C[0],C[1]],[C[1],C[2]],[C[2],C[3]],[C[3],C[0]]].map(([a,b])=>edgeCover(a,b));
+      if(E.filter(e=>e.cov>=0.5).length<1)continue;   // ×の四角の辺のどれか1つは線に乗っている（宙に浮いた×は使わない）
+      E.forEach(e=>e.list.forEach(m=>{keep[m]=1}));
+      /* 線の無い辺（ホールとの境目に線が無い吹き抜けなど）には、見えない線を足す */
+      [[C[0],C[1]],[C[1],C[2]],[C[2],C[3]],[C[3],C[0]]].forEach(([a,b],q)=>{if(E[q].cov<0.5)extra.push([a[0],a[1],b[0],b[1]])})}}
+  const off=new Set();for(let k=0;k<N;k++)if(!keep[k])off.add(ids[k]);off.extra=extra;return off;
 }
        // 図面の数字 → 実際のm
 function guessScale(segs,texts,arcs,uf){uf=uf||0.001;const k=uf*1000;  /* 寸法の数字はmm。図面の1単位＝uf m */
@@ -1700,6 +1723,7 @@ function rgCompute0(X){
   const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key));
   const doors=RG.autoDoor?findDoors(RG.segs,RG.arcs,M):new Set();
   const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;if(RG.segOff&&RG.segOff.has(i))return;segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
+  if(RG.segOff&&RG.segOff.extra)RG.segOff.extra.forEach(e=>segs.push(e.slice()));   // 新しい読み取り（試し）：吹き抜けの線の無い辺に足す見えない線
   RG.used=segs.length;RG.nHatch=RG.autoHatch?RG.hatch.size:0;RG.nDoor=doors.size;
   /* 出入口をふさぐ：壁の端（線が途切れた所、または壁の厚み分の短い線＝小口のある角）どうしを、
      決めた幅以内でまっすぐ向かい合っていれば、見えない線でつなぐ */
