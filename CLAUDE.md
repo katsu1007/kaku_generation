@@ -2,6 +2,16 @@
 
 最初に全部読んでから作業すること。分からないことは決めつけずに、かつに聞く。
 
+## このリポジトリ（kaku_generation）について — 2026-11-17
+
+- **kaku_generation は KAKU（kaku-estimate）を履歴ごと写した、独立の試し場**。かつの方針：「あくまでベースは KAKU。言語を変えたら良さそうになる機能だけ変更する」。サーバーは使わない
+- **KAKU 本体（kaku-estimate）は変更しない**。手元の写しでは remote `kaku-estimate` の push 先を止めてある。push は `origin`（katsu1007/kaku_generation）だけ。下の「コミットと公開」の `origin` もこちらを指す
+- 公開は https://katsu1007.github.io/kaku_generation/ （GitHub Pages を有効にした場合）。**KAKU と同じ katsu1007.github.io なので、保存場所の名前を分けてある**：IndexedDB `kaku_generation`、前のKAKUの保存キー `kaku-generation-v1`、キャッシュ `kaku-generation-`。戻さないこと
+- IPA は bundle ID が KAKU と同じ（com.katsu.kaku）。**作る前に bundle ID と名前を変える**（同じだと iPhone で KAKU とぶつかる）
+- 入れた物：読み取りの高速化（区画ごとに図面全体を見直していた所を、区画の範囲だけ見るように。結果は完全に同じ、約3.8倍）。次の候補は `rgCompute0`（線をマス目に描いて塗り分ける所。今の時間の半分以上）を C++/WebAssembly ＋裏で動かす
+- 読み取りの部品は **js/kaku-engine.html と old/index.html の `INLINE_ENGINE_B64`（base64）の2か所**。実際に読み取りで動くのは old/index.html の埋め込みの方。直したら両方を同じにする
+- 時間の測り方：正解付き図面を並べた大きい図面（時間を測るだけ。点数づけには使わない）で CPU プロファイル。直す前と後で区画（広さ・周り・形の座標）・開口・器具を全部書き出して厳密に比べる
+
 ## 相手と話し方
 
 - 持ち主は **かつ**。Claude のことは「くらちゃん」と呼ぶ
