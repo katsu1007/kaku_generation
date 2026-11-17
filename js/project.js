@@ -515,15 +515,17 @@ export function syncDemoLines(p) {
     const byItem = {}; L.forEach(x => { byItem[x.item] = (byItem[x.item] || 0) + 1; });
     Object.keys(byItem).sort().forEach(k => { add('l|' + k, k, byItem[k], '図面の照明'); add('l|on|' + k, /^e-dl/.test(k) ? 'w-eDL' : 'w-eLight', byItem[k], '図面の照明'); });
     const W = lightWires(p);
-    if (W.sw) { add('l|sw', 'e-sw1', W.sw, W.booths ? `入口のそばに1つ（トイレのブース ${W.booths} か所は外の部屋のスイッチで点ける）` : '照明のある区画ごとに入口のそばに1つ'); add('l|swOn', 'w-eDev', W.sw, 'スイッチの取付'); }
-    add('l|vvf16', 'e-v16-2', W.mL, `スイッチ→照明（縦横にたどった長さ＋立ち下がり＋1台0.2m、余り${W.extra}%）`);
-    add('l|vvf20', 'e-v20-2', W.mH, `${O.length ? 'コンセントの線（近い順に縦横の長さ＋立ち下がり）' : ''}${O.length && panelsOf(d).length ? '・' : ''}${panelsOf(d).length ? '分電盤→各部屋（縦横の長さ＋立ち下がり。いちばん近い分電盤から）' : ''}、余り${W.extra}%`);
+    if (W.sw) { add('l|sw', W.ws.sw, W.sw, W.booths ? `入口のそばに1つ（トイレのブース ${W.booths} か所は外の部屋のスイッチで点ける）` : '照明のある区画ごとに入口のそばに1つ'); add('l|swOn', 'w-eDev', W.sw, 'スイッチの取付'); }
+    add('l|vvf16', W.ws.cL, W.mL, `スイッチ→照明（縦横にたどった長さ＋立ち下がり＋1台0.2m、余り${W.extra}%）`);
+    if (W.mH) add('l|vvf20', W.ws.cO, W.mH, `${O.length && W.ws.out ? 'コンセントの線（近い順に縦横の長さ＋立ち下がり）' : ''}${O.length && W.ws.out && panelsOf(d).length ? '・' : ''}${panelsOf(d).length ? '分電盤→各部屋（縦横の長さ＋立ち下がり。いちばん近い分電盤から）' : ''}、余り${W.extra}%`);
     { const np = panelsOf(d).length; if (np) { add('l|panel', 'e-panel', np, '図面で置いた分電盤'); add('l|panelOn', 'w-ePanel', np, ''); } }
     add('l|wire', 'w-eWire', W.mL + W.mH, 'ケーブルの合計');
   }
   syncWaste(p);
 }
 
+/* 配線の設定（前のKAKUの KW_set と同じ項目。移し忘れていた）：照明の線・コンセントと分電盤からの線のケーブル、自動で置くスイッチ、コンセントの線を長さに入れるか */
+export const wireSetOf = d => ({ cL: 'e-v16-2', cO: 'e-v20-2', sw: 'e-sw1', out: true, ...((d && d.wireSet) || {}) });
 /* 分電盤の一覧。前の版は1つだけ（drawing.panel = [x, y]）だったので、書き換える時は drawing.panels に移す */
 export function panelsOf(d, write = false) {
   if (!d) return [];
@@ -538,7 +540,8 @@ export function lightWires(p) {
   const W = wirePlan({ plan: d.plan || { faces: [] }, doors: d.doors || [], fixtures: d.fixtures || [], lights: (d.lights || []).map(x => ({ key: x.id, l: [x.x, x.y] })),
     outlets: (d.outlets || []).map(x => ({ key: x.id, l: [x.x, x.y] })), switches: (d.switches || []).map(x => ({ key: x.id, l: [x.x, x.y] })), link: d.link || {}, panels: panelsOf(d).map(q => [q.x, q.y]), chOf });
   const extra = d.wireExtra ?? 10;
-  return { ...W, sw: W.sws.length, mL: cableQty(W.lenL, extra), mH: cableQty(W.lenO + W.lenH, extra), extra };
+  const ws = wireSetOf(d);
+  return { ...W, sw: W.sws.length, mL: cableQty(W.lenL, extra), mH: cableQty((ws.out ? W.lenO : 0) + W.lenH, extra), extra, ws };
 }
 
 /* 測る時のくっつき：線の端（近い順）→ 線の上 → そのまま（1mm単位） */
@@ -792,6 +795,13 @@ function stepRooms(ctx) {
           ${n ? `<button class="btn sm ghost danger" data-act="lClear">照明を全部消す</button>` : ''}${(p.drawing.outlets || []).length ? `<button class="btn sm ghost danger" data-act="oClear">コンセントを全部消す</button>` : ''}
           <div class="seg" style="width:100%" id="lTool">${[['light', '照明'], ['sw', 'スイッチ'], ['out', 'コンセント'], ['panel', '分電盤'], ['link', 'つなぎ替え']].map(t => `<button data-ltool="${t[0]}" class="${ltool === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>
           <div class="small" style="width:100%">${{ light: '何も無い所をタップで照明を足す・照明をタップで消す。照明を縦になぞると横一列、横になぞると縦一列がまとめて動きます（長押ししてからなぞると1個だけ）', sw: 'タップでスイッチを置く（その区画は置いたスイッチにつなぐ）・スイッチ（黄・青どちらも）をタップで消す（つながっていた照明は、近くの照明から線を引きます）・なぞって動かす', out: 'タップでコンセントを置く・コンセントをタップで消す・なぞって動かす', panel: '何も無い所をタップで分電盤を置く（何個でも）・分電盤をタップで消す・なぞって動かす', link: linkSel ? 'つなぐスイッチをタップしてください' : '照明をタップしてから、つなぎたいスイッチをタップ' }[ltool]}${ltool === 'out' ? `　<select class="in" id="oItem" style="display:inline-block;width:auto;min-height:34px">${masterItems().filter(i => /^e-con/.test(i.id)).map(i => `<option value="${esc(i.id)}" ${(lset.out || 'e-cone') === i.id ? 'selected' : ''}>${esc(i.name)}</option>`).join('')}</select>` : ''}${ltool === 'link' && Object.keys(p.drawing.link || {}).length ? `　<button class="btn sm ghost" data-act="linkClear">つなぎ替え ${Object.keys(p.drawing.link).length} 件を元に戻す</button>` : ''}</div>
+          ${(() => { const ws = wireSetOf(p.drawing), M = masterItems(), cab = M.filter(i => i.cat === 'wire' && i.unit === 'm'), sws = M.filter(i => i.cat === 'elec' && /スイッチ/.test(i.name));
+            const sel = (k, list) => `<select class="in" data-wset="${k}" style="min-height:36px">${list.map(i => `<option value="${esc(i.id)}" ${ws[k] === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</option>`).join('')}</select>`;
+            return `<details style="width:100%"><summary class="small">配線の設定（ケーブル・スイッチの種類・余り）</summary><div class="row" style="flex-wrap:wrap;gap:8px;margin-top:6px">
+              <label class="f" style="flex:1;min-width:180px">照明の線${sel('cL', cab)}</label><label class="f" style="flex:1;min-width:180px">コンセント・分電盤からの線${sel('cO', cab)}</label>
+              <label class="f" style="flex:1;min-width:180px">自動で置くスイッチ${sel('sw', sws)}</label>
+              <label class="f" style="width:110px">余りを足す<div class="unitwrap"><input class="in num" data-wset="extra" type="number" inputmode="numeric" min="0" max="100" step="5" value="${p.drawing.wireExtra ?? 10}"><span>%</span></div></label>
+              <label class="row small" style="gap:6px;width:100%"><input type="checkbox" data-wset="out" ${ws.out ? 'checked' : ''} style="width:20px;height:20px">コンセントの線も長さに入れる（図には描きません）</label></div></details>`; })()}
           <div class="small muted" style="width:100%">照明 ${n} 台・スイッチ ${W.sw} 個（黄＝自動・青＝置いた物）・コンセント ${(p.drawing.outlets || []).length} 個・ケーブル ${W.mL + W.mH} m（余り${W.extra}%込み）。スイッチは入口のそばに自動で置きます${W.booths ? `。トイレのブース ${W.booths} か所は、外の部屋のスイッチで点けます` : ''}。${W.far ? `<b>分電盤から離れた所（別の階の図など）の ${W.far} 区画は、分電盤からの線を入れていません。</b>` : ''}</div>
           ${res ? (n && (p.drawing.lights || []).length && res.split('<span').length > 7 ? `<details style="width:100%"><summary class="small">部屋ごとの台数と明るさを見る${res.includes('pill warn') ? '（目標に届かない部屋あり）' : ''}</summary><div class="row" style="margin-top:6px">${res}</div></details>` : `<div class="row" style="width:100%">${res}</div>`) : ''}`;
         return;
@@ -1222,6 +1232,10 @@ function stepRooms(ctx) {
       else delete p.drawing.reader;
       touch(p); draw(); return;
     }
+    if (e.target.matches('[data-wset]')) { const k = e.target.dataset.wset, d = p.drawing;
+      if (k === 'extra') d.wireExtra = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      else { d.wireSet = { ...wireSetOf(d), [k]: k === 'out' ? e.target.checked : e.target.value }; }
+      syncDemoLines(p); touch(p); paintSel(); toast('配線の設定を変えました（明細も直しました）'); return; }
     if (e.target.matches('[data-meas-cont]')) { meas.cont = e.target.checked; meas.pts = []; meas.redo = []; paintSel(); return; }
     if (e.target.id === 'oItem') { lset.out = e.target.value; return; }
     if (e.target.id === 'pItem') { pset.item = e.target.value; paintSel(); return; }
