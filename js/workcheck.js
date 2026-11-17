@@ -78,7 +78,7 @@ export function workChecks(project, opt = DEFAULTS) {
 
   /* 照明・コンセント */
   const L = d.lights || [], O = d.outlets || [];
-  if ((L.length || O.length) && !d.panel && !has(lines, /分電盤|ブレーカー/)) add('panel', 'tip', `図面に照明 ${L.length} 台・コンセント ${O.length} 個を置いていますが、分電盤・ブレーカーの行がありません。回路を足す工事なら入れてください。`, { step: 2 });
+  if ((L.length || O.length) && !(d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).length && !has(lines, /分電盤|ブレーカー/)) add('panel', 'tip', `図面に照明 ${L.length} 台・コンセント ${O.length} 個を置いていますが、分電盤・ブレーカーの行がありません。回路を足す工事なら入れてください。`, { step: 2 });
   const noUse = rooms.filter(r => L.some(x => x.room === r.id) && !r.lightUse);
   if (noUse.length) add('lightUse', 'tip', `${names(noUse)}は照明を置いていますが、部屋の用途を選んでいません。用途を選ぶと明るさ（lx）の目安が出ます。`, { step: 2, roomId: noUse[0].id });
 

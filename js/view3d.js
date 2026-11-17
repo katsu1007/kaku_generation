@@ -33,7 +33,7 @@ export function toOld(p) {
     color: Number.isFinite(r.color) ? r.color : k, area: Number(r.area) || 0, openW: 0, ...finishes(p, r)
   }));
   const places = (d.lights || []).map(x => ({ id: x.id, item: x.item, where: 'pt', p: [x.x, x.y], count: 1 }));
-  if (d.panel) places.push({ id: 'panel', item: 'e-panel', where: 'pt', p: d.panel, count: 1 });
+  (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).forEach((q, k) => places.push({ id: 'panel' + k, item: 'e-panel', where: 'pt', p: [q.x, q.y], count: 1 }));
   (d.outlets || []).forEach(x => places.push({ id: x.id, item: x.item || 'e-cone', where: 'pt', p: [x.x, x.y], count: 1 }));
   (d.places || []).forEach(x => (x.where === 'pt' ? [x.p] : (x.pts || [])).forEach((q, k) => q && places.push({ id: x.id + '_' + k, item: x.item, where: 'pt', p: q, rot: x.rot || 0, count: 1 })));
   /* スイッチ：新しい画面で決めた位置（自動の物も）を置いた物として渡し、照明をそのスイッチにつなぐ（ブースの照明も外の部屋のスイッチへ） */
@@ -44,7 +44,7 @@ export function toOld(p) {
   const cur = { id: '__k3d', name: p.name || '', rooms, places, win: {}, win3d: clone(d.win3d || []), openAuto: true,
     wire: { on: (d.lights || []).length > 0 || (d.outlets || []).length > 0, sw: 'e-sw1', cL: 'e-v16-2', cO: 'e-v20-2', extra: d.wireExtra ?? 10, out: (d.outlets || []).length > 0, link } };
   /* 配線の線と長さは新しい画面の計算（ブースは外の部屋のスイッチ、置いたスイッチ・つなぎ替え込み）をそのまま見せる */
-  const wire = { paths: W.paths, home: W.home, sws: [], lights: [], lenL: W.lenL, lenO: W.lenO, lenH: W.lenH, circ: W.circ, autoSw: 0, nL: W.nL, nO: W.nO, panel: !!d.panel, far: W.far, noSw: 0 };
+  const wire = { paths: W.paths, home: W.home, sws: [], lights: [], lenL: W.lenL, lenO: W.lenO, lenH: W.lenH, circ: W.circ, autoSw: 0, nL: W.nL, nO: W.nO, panel: (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).length > 0, far: W.far, noSw: 0 };
   return { plan: P, fix, cur, wire };
 }
 
