@@ -1501,7 +1501,39 @@ const ACI={1:"赤",2:"黄",3:"緑",4:"水色",5:"青",6:"紫",7:"黒・白",8:"�
 const SCALES=[1,10,20,25,30,50,60,100,150,200,250,300,500];
 const gkey=s=>s[0]+"|"+(s[5]??"")+"|"+(s[6]??"");
 function rgUnitF(){return RG.unit==="m"?1:RG.unit==="cm"?0.01:0.001}
-function rgM(){return rgUnitF()*(+RG.scale||1)}       // 図面の数字 → 実際のm
+function rgM(){return rgUnitF()*(+RG.scale||1)}
+/* 新しい読み取り（試し）用：壁らしくない1本線（机・椅子・テーブル・器具・吹き抜けの×など）を探す（kaku_generation で追加）
+   壁はふつう平行な2本線（間 1.5〜40cm）で描く。相方のいない線は、両端が壁につながっている物（柱の面・壁の端の小口）だけ残す。
+   2本線の壁が少ない図面（1本線で壁を描く図面）では何もしない。返すのは RG.segs の番号の集まり。今の読み取りは変えない */
+function rgSingleLines(){
+  const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key)),ids=[];
+  RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;ids.push(i)});
+  const N=ids.length;if(N<20)return new Set();
+  const X1=new Float64Array(N),Y1=new Float64Array(N),X2=new Float64Array(N),Y2=new Float64Array(N),L=new Float64Array(N),UX=new Float64Array(N),UY=new Float64Array(N);
+  for(let k=0;k<N;k++){const s=RG.segs[ids[k]];X1[k]=s[1]*M;Y1[k]=s[2]*M;X2[k]=s[3]*M;Y2[k]=s[4]*M;const l=Math.hypot(X2[k]-X1[k],Y2[k]-Y1[k]);L[k]=l;UX[k]=l?(X2[k]-X1[k])/l:0;UY[k]=l?(Y2[k]-Y1[k])/l:0}
+  /* 線の外枠で引ける表（1m のマス） */
+  const CS=1,cell=new Map(),put=(k,gx,gy)=>{const key=gx+","+gy;let v=cell.get(key);if(!v){v=[];cell.set(key,v)}v.push(k)};
+  for(let k=0;k<N;k++){if(!(L[k]>0.02))continue;const a=Math.floor((Math.min(X1[k],X2[k])-0.4)/CS),b=Math.floor((Math.max(X1[k],X2[k])+0.4)/CS),c=Math.floor((Math.min(Y1[k],Y2[k])-0.4)/CS),d=Math.floor((Math.max(Y1[k],Y2[k])+0.4)/CS);
+    if((b-a+1)*(d-c+1)>400)continue;for(let gx=a;gx<=b;gx++)for(let gy=c;gy<=d;gy++)put(k,gx,gy)}
+  const near=k=>{const out=new Set(),a=Math.floor(Math.min(X1[k],X2[k])/CS),b=Math.floor(Math.max(X1[k],X2[k])/CS),c=Math.floor(Math.min(Y1[k],Y2[k])/CS),d=Math.floor(Math.max(Y1[k],Y2[k])/CS);
+    if((b-a+1)*(d-c+1)>400)return out;for(let gx=a;gx<=b;gx++)for(let gy=c;gy<=d;gy++){const v=cell.get(gx+","+gy);if(v)v.forEach(j=>out.add(j))}return out};
+  /* 相方（平行・間 1.5〜40cm・重なりが短い方の半分以上か 30cm 以上） */
+  const paired=new Uint8Array(N);let pl=0,tl=0;
+  for(let k=0;k<N;k++){if(!(L[k]>0.02))continue;tl+=L[k];if(paired[k]){pl+=L[k];continue}
+    for(const j of near(k)){if(j===k||!(L[j]>0.02))continue;if(Math.abs(UX[k]*UY[j]-UY[k]*UX[j])>0.05)continue;
+      const d=Math.abs((X1[j]-X1[k])*UY[k]-(Y1[j]-Y1[k])*UX[k]);if(d<0.015||d>0.40)continue;
+      const t1=(X1[j]-X1[k])*UX[k]+(Y1[j]-Y1[k])*UY[k],t2=(X2[j]-X1[k])*UX[k]+(Y2[j]-Y1[k])*UY[k];const ov=Math.min(L[k],Math.max(t1,t2))-Math.max(0,Math.min(t1,t2));
+      if(ov>=Math.min(0.3,0.5*Math.min(L[k],L[j]))){paired[k]=1;paired[j]=1;break}}
+    if(paired[k])pl+=L[k]}
+  if(!(tl>0)||pl/tl<0.3)return new Set();   // 2本線の壁の図面ではない
+  /* 両端が壁（残す線）に付いている1本線は残す（柱の面・壁の端の小口）。くり返して広げる */
+  const keep=paired.slice(),TOL=0.03;
+  const touches=(x,y,k)=>{for(const j of near(k)){if(j===k||!keep[j])continue;const dx=X2[j]-X1[j],dy=Y2[j]-Y1[j],l2=dx*dx+dy*dy;let t=l2?((x-X1[j])*dx+(y-Y1[j])*dy)/l2:0;t=Math.max(0,Math.min(1,t));
+    if(Math.hypot(x-X1[j]-t*dx,y-Y1[j]-t*dy)<=TOL)return true}return false};
+  for(let it=0;it<3;it++){let ch=false;for(let k=0;k<N;k++){if(keep[k]||!(L[k]>0.02)||L[k]>1.2)continue;if(touches(X1[k],Y1[k],k)&&touches(X2[k],Y2[k],k)){keep[k]=1;ch=true}}if(!ch)break}
+  const off=new Set();for(let k=0;k<N;k++)if(!keep[k])off.add(ids[k]);return off;
+}
+       // 図面の数字 → 実際のm
 function guessScale(segs,texts,arcs,uf){uf=uf||0.001;const k=uf*1000;  /* 寸法の数字はmm。図面の1単位＝uf m */
   // 寸法の数字と線の長さを比べて、縮尺を当てる（例：線の長さ300で「15000」と書いてあれば1/50）
   {const dr=(arcs||[]).filter(a=>a.sweep>80&&a.sweep<100&&a.r*k>=450&&a.r*k<=1300);if(dr.length>=2)return 1}
@@ -1664,7 +1696,7 @@ function rgCompute(){rgCompute0(null);
 function rgCompute0(X){
   const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key));
   const doors=RG.autoDoor?findDoors(RG.segs,RG.arcs,M):new Set();
-  const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
+  const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;if(RG.segOff&&RG.segOff.has(i))return;segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
   RG.used=segs.length;RG.nHatch=RG.autoHatch?RG.hatch.size:0;RG.nDoor=doors.size;
   /* 出入口をふさぐ：壁の端（線が途切れた所、または壁の厚み分の短い線＝小口のある角）どうしを、
      決めた幅以内でまっすぐ向かい合っていれば、見えない線でつなぐ */

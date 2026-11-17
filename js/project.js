@@ -282,7 +282,8 @@ function r2more(A, on) {
 /* 段階3：壁ではなさそうな線を外して区画を探し直した結果の一行 */
 function r2lines(d, on) {
   const v = d.v2; if (!v || !v.faces) return '';
-  const rs = Object.keys(v.roles || {}).map(k => `${ROLE[k] || k} ${v.roles[k].toLocaleString()}本`).join('・');
+  const rs = Object.keys(v.roles || {}).map(k => `${ROLE[k] || k} ${v.roles[k].toLocaleString()}本`)
+    .concat(v.single ? [`机・椅子・テーブルなどの1本線 ${v.single.toLocaleString()}本`] : []).join('・');
   const n1 = (d.v1 ? d.v1.faces : d.plan.faces).length, n2 = (d.v1 ? d.plan.faces : v.faces).length;
   return `<br>壁ではなさそうな線（${rs}）を外して、区画を探し直しました：区画 ${n1} → ${n2} 個${on ? '（探し直した区画を出しています。印を外すと今までの区画に戻ります）' : '（印を付けると、探し直した区画に入れ替わります）'}${v.openDrop ? `。形が壁の線に合っていない区画 ${v.openDrop} 個は、扉の無い開口を壁から引いていません` : ''}`;
 }
@@ -932,7 +933,7 @@ function stepRooms(ctx) {
           const op2 = {}; let drop = 0;
           Object.keys(res.v2.open || {}).forEach(k => { const f = P2.faces.find(x => String(x.i) === k), runs = res.v2.open[k], g = runs.filter(r => r.ty !== 'd').reduce((t, r) => t + r.len, 0);
             const keep = f && g >= (Number(f.peri) || 0) * 0.3 ? (drop++, runs.filter(r => r.ty === 'd')) : runs; if (keep.length) op2[k] = keep; });
-          p.drawing.v2 = { faces: P2.faces, open: op2, openDrop: drop, roles: res.roles || {}, analysis: analyzeFrame({ segs: res.longSegs && res.longSegs.length ? res.longSegs : res.plan.segs, faces: P2.faces, texts: res.texts || [], fixtures: res.fixtures || [], doors: res.doorList || [], shapes: true }) }; } catch (e2) { console.warn('探し直した区画の解析に失敗', e2); } }
+          p.drawing.v2 = { faces: P2.faces, open: op2, openDrop: drop, roles: res.roles || {}, single: res.single || 0, analysis: analyzeFrame({ segs: res.longSegs && res.longSegs.length ? res.longSegs : res.plan.segs, faces: P2.faces, texts: res.texts || [], fixtures: res.fixtures || [], doors: res.doorList || [], shapes: true }) }; } catch (e2) { console.warn('探し直した区画の解析に失敗', e2); } }
         sel.clear(); touch(p); draw();
         toast(`区画を ${res.plan.faces.length} 個${cad ? `、器具を ${res.fixtures.filter(x => x.t !== 'other').length} 個` : ''}見つけました`);
       } catch (err) {
