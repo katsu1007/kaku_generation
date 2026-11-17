@@ -60,6 +60,15 @@ export async function readWithFixtures(file, opt = {}) {
         Object.keys(O).forEach(k=>{open[k]=O[k].map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))})}
       return JSON.stringify({plan,fixtures,open,doors:F&&F.doors?F.doors.length:0,doorList:(F&&F.doors||[]).filter(d=>d&&d.c).map(d=>({c:d.c.map(q),m:(d.m||d.c).map(q),r:+d.r||0.8})),fixG:F&&F.g||'',fixGd:F&&F.gd||''})})()`);
     const out = JSON.parse(R);
+    /* 画面に出す線：読み取りの部品は線が9,000本を超えると「何本かおきに1本」に間引いて渡してくる（壁が途切れて見える・タップできない）。
+     * 読み取りに使った線を全部もらって入れ替える。開口（扉の無い開口）の計算は前のKAKUの中で今まで通り間引いた線のまま行うので、数字は変わらない */
+    try {
+      const E = W.document.getElementById('engineFrame').contentWindow;
+      const all = JSON.parse(E.eval(`(()=>{if(!RG||!RG.faces||!RG.faces.length)return'null';const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key)),q=v=>Math.round(v*1000)/1000,o=[];
+        RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);o.push([q(a[0]),q(a[1]),q(b[0]),q(b[1])])});
+        return JSON.stringify(o)})()`));
+      if (Array.isArray(all) && all.length > out.plan.segs.length) { out.plan.segsThin = out.plan.segs.length; out.plan.segs = all; }
+    } catch (e) { console.warn('図面の線を全部もらえませんでした（間引いた線で続けます）', e); }
     /* 図面の文字（新しい読み取り js/reader2 が使う）。読み取りの部品の中身を「読むだけ」で、今の読み取りの結果は変えない。取れなくても読み込みは続ける */
     try {
       const E = W.document.getElementById('engineFrame').contentWindow;

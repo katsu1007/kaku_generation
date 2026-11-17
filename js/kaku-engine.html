@@ -1569,8 +1569,8 @@ function findDoors(segs,arcs,M){
 function rgFacePoly(f){
   const G=RG&&RG.grid;if(!G||!f)return null;const {W,H,c,ox,oy,lab,root}=G,parts=new Set(f.parts);
   const inn=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&lab[y*W+x]>0&&parts.has(root[lab[y*W+x]]);
-  /* 内側のマスのふちを、内側を左に見る向きの辺として集める */
-  const next=new Map();const key=(x,y)=>x+","+y;let n=0;
+  /* 区画のふち（内側を左に見る向きの辺）。同じ点から2本出る所（区画が斜めに接する所）があるので、点ごとに全部覚える（kaku_generation で直した） */
+  const next=new Map();const key=(x,y)=>x+","+y;let n=0;const addE=(x1,y1,x2,y2)=>{const k=key(x1,y1);let v=next.get(k);if(!v){v=[];next.set(k,v)}v.push([x2,y2]);n++};
   /* 速さのため：区画のまとまり（root）ごとのマス目の範囲を、図面ごとに1回だけ数えて覚えておく。
      範囲の外には内側のマスが無いので、同じ順番で範囲の中だけを見れば結果は変わらない */
   if(!G._rbb){const nr=root.length,b=new Int32Array(4*nr);for(let k=0;k<nr;k++){b[4*k]=W;b[4*k+1]=H;b[4*k+2]=-1;b[4*k+3]=-1}
@@ -1578,27 +1578,39 @@ function rgFacePoly(f){
     G._rbb=b}
   let fx0=W,fy0=H,fx1=-1,fy1=-1;parts.forEach(k=>{if(!(k>=0&&k<root.length))return;const o=4*k,b=G._rbb;if(b[o+2]<0)return;if(b[o]<fx0)fx0=b[o];if(b[o+1]<fy0)fy0=b[o+1];if(b[o+2]>fx1)fx1=b[o+2];if(b[o+3]>fy1)fy1=b[o+3]});
   for(let y=fy0;y<=fy1;y++)for(let x=fx0;x<=fx1;x++){if(!inn(x,y))continue;
-    if(!inn(x,y-1)){next.set(key(x+1,y),[x,y]);n++}
-    if(!inn(x+1,y)){next.set(key(x+1,y+1),[x+1,y]);n++}
-    if(!inn(x,y+1)){next.set(key(x,y+1),[x+1,y+1]);n++}
-    if(!inn(x-1,y)){next.set(key(x,y),[x,y+1]);n++}}
+    if(!inn(x,y-1)){addE(x+1,y,x,y)}
+    if(!inn(x+1,y)){addE(x+1,y+1,x+1,y)}
+    if(!inn(x,y+1)){addE(x,y+1,x+1,y+1)}
+    if(!inn(x-1,y)){addE(x,y,x,y+1)}}
   if(!n)return null;
-  /* いちばん長い輪を取る */
-  const seen=new Set();let best=null;
-  for(const k of next.keys()){if(seen.has(k))continue;const loop=[];let cur=k;let guard=0;
-    while(!seen.has(cur)&&guard++<n+5){seen.add(cur);const [x,y]=cur.split(",").map(Number);loop.push([x,y]);const nx=next.get(cur);if(!nx)break;cur=key(nx[0],nx[1])}
-    if(!best||loop.length>best.length)best=loop}
+  /* 輪をたどる。2本出る所では左に曲がる方を選ぶ（同じマスのまわりを回り続ける＝輪が交差しない）。いちばん広い輪（外まわり）を取る */
+  const used=new Set();let best=null,bestA=-1;
+  for(const [k0,outs] of next){for(let oi=0;oi<outs.length;oi++){const e0=k0+">"+oi;if(used.has(e0))continue;
+    const loop=[];let cur=k0,ci=oi,guard=0;
+    while(guard++<n+5){const eid=cur+">"+ci;if(used.has(eid))break;used.add(eid);const [x,y]=cur.split(",").map(Number);loop.push([x,y]);
+      const to=next.get(cur)[ci];const dx=to[0]-x,dy=to[1]-y;cur=key(to[0],to[1]);const cand=next.get(cur);if(!cand)break;
+      let pick=-1,pr=9;for(let j=0;j<cand.length;j++){if(used.has(cur+">"+j))continue;const ex=cand[j][0]-to[0],ey=cand[j][1]-to[1];
+        const cr=dx*ey-dy*ex,dt=dx*ex+dy*ey;const rank=cr>0?0:(dt>0?1:(cr<0?2:3));if(rank<pr){pr=rank;pick=j}}
+      if(pick<0)break;ci=pick}
+    if(loop.length<4)continue;let A=0;for(let i=0;i<loop.length;i++){const p=loop[i],q=loop[(i+1)%loop.length];A+=p[0]*q[1]-q[0]*p[1]}A=Math.abs(A);
+    if(A>bestA){bestA=A;best=loop}}}
   if(!best||best.length<4)return null;
-  /* 一直線の点を消す → 小さな段（1〜2マス）をならす */
-  const simp=pts=>{let a=pts.slice();let ch=true;while(ch&&a.length>4){ch=false;for(let i=0;i<a.length;i++){const p0=a[(i-1+a.length)%a.length],p1=a[i],p2=a[(i+1)%a.length];
-    if((p1[0]-p0[0])*(p2[1]-p1[1])-(p1[1]-p0[1])*(p2[0]-p1[0])===0){a.splice(i,1);ch=true;break}}}return a};
+  /* 一直線の点を消す */
+  const simp=pts=>{const o=[];const m=pts.length;for(let i=0;i<m;i++){const p0=pts[(i-1+m)%m],p1=pts[i],p2=pts[(i+1)%m];
+    if((p1[0]-p0[0])*(p2[1]-p1[1])-(p1[1]-p0[1])*(p2[0]-p1[0])!==0)o.push(p1)}return o.length>=3?o:pts};
   let pts=simp(best);
-  for(let pass=0;pass<3&&pts.length>4;pass++){let ch=false;
-    for(let i=0;i<pts.length&&pts.length>4;i++){const a=pts[i],b=pts[(i+1)%pts.length];if(Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])<=2){
-      const pr=pts[(i-1+pts.length)%pts.length],nx=pts[(i+2)%pts.length];
-      if(a[0]===b[0]){pts[(i+1)%pts.length]=[pr[0]===a[0]?a[0]:nx[0],b[1]]}else{pts[(i+1)%pts.length]=[b[0],pr[1]===a[1]?a[1]:nx[1]]}
-      pts.splice(i,1);ch=true;i--}}
-    pts=simp(pts);if(!ch)break}
+  /* 小さなギザギザ（マス目の段）をならす：元のふちから 1.5マス以上は離れないように点を間引く（ダグラス・ポーカー法）。
+     本物の角は残り、斜めの壁は斜めの線になる。元のふちに無い大きな斜め線は作らない */
+  if(pts.length>4){const TOL=1.5,m=pts.length;
+    const dist=(p,a,b)=>{const vx=b[0]-a[0],vy=b[1]-a[1],L=Math.hypot(vx,vy);if(!L)return Math.hypot(p[0]-a[0],p[1]-a[1]);
+      const t=Math.max(0,Math.min(1,((p[0]-a[0])*vx+(p[1]-a[1])*vy)/(L*L)));return Math.hypot(p[0]-a[0]-t*vx,p[1]-a[1]-t*vy)};
+    const dp=(arr)=>{const keep=new Uint8Array(arr.length);keep[0]=keep[arr.length-1]=1;const st2=[[0,arr.length-1]];
+      while(st2.length){const [i0,i1]=st2.pop();let md=-1,mi=-1;for(let i=i0+1;i<i1;i++){const d=dist(arr[i],arr[i0],arr[i1]);if(d>md){md=d;mi=i}}
+        if(md>TOL){keep[mi]=1;st2.push([i0,mi],[mi,i1])}}return arr.filter((_,i)=>keep[i])};
+    let i0=0;for(let i=1;i<m;i++){if(pts[i][0]+pts[i][1]<pts[i0][0]+pts[i0][1])i0=i}
+    let i1=i0,fd=-1;for(let i=0;i<m;i++){const d=Math.hypot(pts[i][0]-pts[i0][0],pts[i][1]-pts[i0][1]);if(d>fd){fd=d;i1=i}}
+    const chainA=[],chainB=[];for(let i=i0;;i=(i+1)%m){chainA.push(pts[i]);if(i===i1)break}for(let i=i1;;i=(i+1)%m){chainB.push(pts[i]);if(i===i0)break}
+    const ra=dp(chainA),rb=dp(chainB);const out=ra.concat(rb.slice(1,-1));if(out.length>=3)pts=out}
   return pts.map(([x,y])=>[x*c+ox,y*c+oy]);
 }
 /* 見つけた区画から全体3Dを作る（選んだ区画があればそれだけ、なければ全部） */
@@ -3370,7 +3382,7 @@ window.KakuEngine={
   },
   plan(){if(!RG||!RG.faces||!RG.faces.length)return null;const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key));
     let segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);segs.push([a[0],a[1],b[0],b[1]])});
-    if(segs.length>9000){const st=Math.ceil(segs.length/9000);segs=segs.filter((_,i)=>i%st===0)}
+    /* 線は間引かない（間引くと壁が途切れて見え、扉の無い開口を多く見つけてしまう。kaku_generation で変更） */
     /* 点線の線（部屋の区画には使わない）は、表示用に点線のまま渡す。通り芯（基準線）は描かない */
     let dsegs=[];RG.segs.forEach(s=>{if(on.has(gkey(s))||!/\(点線\)/.test(s[0])||/基準線|通り?[芯心]|GRID/i.test(s[0]))return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);dsegs.push([a[0],a[1],b[0],b[1]])});
     if(dsegs.length>4000){const st=Math.ceil(dsegs.length/4000);dsegs=dsegs.filter((_,i)=>i%st===0)}
