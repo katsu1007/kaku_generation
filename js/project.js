@@ -1055,7 +1055,21 @@ function stepRooms(ctx) {
           const op2 = {}; let drop = 0;
           Object.keys(res.v2.open || {}).forEach(k => { const f = P2.faces.find(x => String(x.i) === k), runs = res.v2.open[k], g = runs.filter(r => r.ty !== 'd').reduce((t, r) => t + r.len, 0);
             const keep = f && g >= (Number(f.peri) || 0) * 0.3 ? (drop++, runs.filter(r => r.ty === 'd')) : runs; if (keep.length) op2[k] = keep; });
-          p.drawing.v2 = { faces: P2.faces, open: op2, openDrop: drop, roles: res.roles || {}, single: res.single || 0, analysis: analyzeFrame({ segs: res.longSegs && res.longSegs.length ? res.longSegs : res.plan.segs, faces: P2.faces, texts: res.texts || [], fixtures: res.fixtures || [], doors: res.doorList || [], shapes: true }) }; } catch (e2) { console.warn('探し直した区画の解析に失敗', e2); } }
+          /* 今の読み取りと同じ所を指している区画は、今の読み取りの数字（形・広さ・周り・開口）をそのまま使う（かつ「ほぼ同じじゃあかん」）。
+             同じ所＝お互いの形の中の点がお互いの形の中にあり、広さの差が 5% 以内。探し直しで変わった所（机でまとまった所など）だけ新しい数字になる */
+          /* 形の中に必ず入る点（L字の区画は真ん中が形の外に出るので、横の線で切った一番広い所のまん中を使う） */
+          const inPt = (P) => { let ya = Infinity, yb = -Infinity; P.forEach(q => { ya = Math.min(ya, q[1]); yb = Math.max(yb, q[1]); }); let best = null, bw = -1;
+            for (let t = 1; t < 8; t++) { const y = ya + (yb - ya) * t / 8, xs = []; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y)) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1])); }
+              xs.sort((u, v) => u - v); for (let k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > bw) { bw = xs[k + 1] - xs[k]; best = [(xs[k] + xs[k + 1]) / 2, y]; } }
+            return best || [P[0][0], P[0][1]]; };
+          let same = 0; const V1 = res.plan.faces || [], O1 = res.open || {}, used = new Set();
+          P2.faces.forEach(f2 => { if (!f2.poly || f2.poly.length < 3) return;
+            const q2 = inPt(f2.poly), f1 = V1.find(o => { if (used.has(o.i) || !o.poly || o.poly.length < 3 || Math.abs(o.area - f2.area) > Math.max(o.area, f2.area) * 0.05) return false; const q1 = inPt(o.poly); return pip(q1[0], q1[1], f2.poly) && pip(q2[0], q2[1], o.poly); });
+            if (!f1) return; used.add(f1.i); same++;
+            ['area', 'peri', 'poly', 'cx', 'cy', 'ch', 'name'].forEach(k => { if (f1[k] !== undefined) f2[k] = f1[k]; });
+            if (f2.xc !== undefined) delete f2.xc;
+            const k2 = String(f2.i), r1 = O1[String(f1.i)]; if (r1 && r1.length) op2[k2] = r1; else delete op2[k2]; });
+          p.drawing.v2 = { faces: P2.faces, open: op2, openDrop: drop, same, roles: res.roles || {}, single: res.single || 0, analysis: analyzeFrame({ segs: res.longSegs && res.longSegs.length ? res.longSegs : res.plan.segs, faces: P2.faces, texts: res.texts || [], fixtures: res.fixtures || [], doors: res.doorList || [], shapes: true }) }; } catch (e2) { console.warn('探し直した区画の解析に失敗', e2); } }
         sel.clear(); touch(p); draw();
         toast(`区画を ${res.plan.faces.length} 個${cad ? `、器具を ${res.fixtures.filter(x => x.t !== 'other').length} 個` : ''}見つけました`);
       } catch (err) {
