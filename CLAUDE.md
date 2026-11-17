@@ -8,7 +8,14 @@
 - **KAKU 本体（kaku-estimate）は変更しない**。手元の写しでは remote `kaku-estimate` の push 先を止めてある。push は `origin`（katsu1007/kaku_generation）だけ。下の「コミットと公開」の `origin` もこちらを指す
 - 公開は https://katsu1007.github.io/kaku_generation/ （GitHub Pages を有効にした場合）。**KAKU と同じ katsu1007.github.io なので、保存場所の名前を分けてある**：IndexedDB `kaku_generation`、前のKAKUの保存キー `kaku-generation-v1`、キャッシュ `kaku-generation-`。戻さないこと
 - IPA は bundle ID が KAKU と同じ（com.katsu.kaku）。**作る前に bundle ID と名前を変える**（同じだと iPhone で KAKU とぶつかる）
-- 入れた物：読み取りの高速化（区画ごとに図面全体を見直していた所を、区画の範囲だけ見るように。結果は完全に同じ、約3.8倍）。次の候補は `rgCompute0`（線をマス目に描いて塗り分ける所。今の時間の半分以上）を C++/WebAssembly ＋裏で動かす
+- 入れた物：読み取りの高速化（結果は完全に同じ）。遅さの原因は言語ではなく「1つごとに図面全体を見直す」作りだった
+  - 区画の形・広さ・機器の外周・形をなぞる・小さい囲みの投票（`rgCompute0`・`rgFacePoly`）：区画のマス目の範囲だけ見る
+  - ドアの円弧（`findDoors`）：線の端の位置の表で、円弧の中心の近くの線だけ調べる
+  - 床の目地（`findHatch` の角探し）：線の端を x で並べた表で、近い線だけ調べる
+  - 時間（正解付き図面を並べた時間測定用の図面）：4×4 36.8秒→3.4秒、6×6 は 6.4秒。正解付き25枚＋2×2・4×4・6×6 で、直す前と区画・開口・器具を全部書き出して1バイトも違わない
+  - **C++/WebAssembly は今は使っていない**（`rgCompute0` は 0.4秒まで減ったので、言語を変える効果が小さい）
+  - 残りで大きいのは前のKAKUの開口探し（old/index.html の `KX_openScan` の中の `closedDir`・`scan`、辺ごとに全部の線を調べる）。**前のKAKUの中身なので触っていない**。速くするなら、かつに聞いてから
+  - 読み込み中に画面が固まる件は、まだ同じ（読み取りは画面と同じ流れで動く）。裏で動かすのは、読み取りの部品が画面の部品と分かれていないので大きい作業
 - 読み取りの部品は **js/kaku-engine.html と old/index.html の `INLINE_ENGINE_B64`（base64）の2か所**。実際に読み取りで動くのは old/index.html の埋め込みの方。直したら両方を同じにする
 - 時間の測り方：正解付き図面を並べた大きい図面（時間を測るだけ。点数づけには使わない）で CPU プロファイル。直す前と後で区画（広さ・周り・形の座標）・開口・器具を全部書き出して厳密に比べる
 

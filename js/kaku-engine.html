@@ -1520,6 +1520,8 @@ function guessScale(segs,texts,arcs,uf){uf=uf||0.001;const k=uf*1000;  /* 寸法
 /* 床の目地・ハッチ：同じ長さ・同じ間隔で6本以上並んだ線 */
 function findHatch(segs){
   const out=new Set();const fam=new Map();
+  /* 線の端を x の小さい順に並べた表（角を探す時に使う） */
+  const EO=[];segs.forEach((s,j)=>{if(Number.isFinite(s[1]))EO.push([s[1],j]);if(Number.isFinite(s[3]))EO.push([s[3],j])});EO.sort((p,q)=>p[0]-q[0]);const EX=EO.map(e=>e[0]),EJ=EO.map(e=>e[1]);
   segs.forEach((s,i)=>{const dx=s[3]-s[1],dy=s[4]-s[2];const L=Math.hypot(dx,dy);if(L<=0)return;
     let o;if(Math.abs(dy)<L*0.01)o="h";else if(Math.abs(dx)<L*0.01)o="v";else return;
     const a=o==="h"?Math.min(s[1],s[3]):Math.min(s[2],s[4]),b=o==="h"?Math.max(s[1],s[3]):Math.max(s[2],s[4]),pos=o==="h"?s[2]:s[1];
@@ -1531,8 +1533,11 @@ function findHatch(segs){
     /* 並びの両端の線が、角（別の向きの線の端）につながっていたら、それは目地ではなく壁の線（壁から壁まで目地が描いてある時）。
        目地の線の端は、壁の線の途中にT字で当たるだけ */
     const wallLike=(x,inRun)=>{const s0=segs[x[1]],tol=med*0.2,h=Math.abs(s0[4]-s0[2])<Math.abs(s0[3]-s0[1]);
-      const corner=(px,py)=>segs.some((t,j)=>{if(j===x[1]||inRun.has(j))return false;const th=Math.abs(t[4]-t[2])<Math.abs(t[3]-t[1]);if(th===h)return false;
-        return Math.hypot(t[1]-px,t[2]-py)<=tol||Math.hypot(t[3]-px,t[4]-py)<=tol});
+      const test=(t,j)=>{if(j===x[1]||inRun.has(j))return false;const th=Math.abs(t[4]-t[2])<Math.abs(t[3]-t[1]);if(th===h)return false;
+        return Math.hypot(t[1]-px0,t[2]-py0)<=tol||Math.hypot(t[3]-px0,t[4]-py0)<=tol};let px0=0,py0=0;
+      /* 速さのため：端の x で並べた表から、x が近い線だけ調べる（調べ方は同じなので結果は変わらない） */
+      const corner=(px,py)=>{px0=px;py0=py;const m=tol*1e-9+1e-12,lo=px-tol-m,hi=px+tol+m;let a2=0,b2=EX.length;while(a2<b2){const md=(a2+b2)>>1;if(EX[md]<lo)a2=md+1;else b2=md}
+        for(let k=a2;k<EX.length&&EX[k]<=hi;k++){const j=EJ[k];if(test(segs[j],j))return true}return false};
       return corner(s0[1],s0[2])||corner(s0[3],s0[4])};
     let run=[arr[0]];const flush=()=>{if(run.length>=6){const ids=new Set(run.map(x=>x[1]));let a=0,b=run.length;
       while(a<b&&wallLike(run[a],ids))a++;while(b>a&&wallLike(run[b-1],ids))b--;if(b-a>=6)run.slice(a,b).forEach(x=>out.add(x[1]))}};
@@ -1546,8 +1551,13 @@ function findDoors(segs,arcs,M){
   segs.forEach((s,i)=>{if(s[7]!=null&&doorArc.has(s[7]))out.add(i)});
   /* 円弧の両端（円弧を細かく分けた線の、最初の始点と最後の終点） */
   const aEnd=new Map();segs.forEach(s=>{if(s[7]==null||!doorArc.has(s[7]))return;const v=aEnd.get(s[7]);if(!v)aEnd.set(s[7],[[s[1],s[2]],[s[3],s[4]]]);else v[1]=[s[3],s[4]]});
+  /* 速さのため：線の端の位置で引ける表を1回だけ作り、円弧の中心の近くの線だけ調べる（調べ方は同じなので結果は変わらない） */
+  let G0=0;doorArc.forEach(i=>{const t=Math.max(arcs[i].r*0.03,1e-6);if(t>G0)G0=t});
+  const eIdx=new Map();if(doorArc.size){const put=(x,y,j)=>{const k=Math.floor(x/G0)+","+Math.floor(y/G0);let v=eIdx.get(k);if(!v)eIdx.set(k,v=[]);if(v[v.length-1]!==j)v.push(j)};
+    segs.forEach((s,j)=>{if(s[7]!=null)return;put(s[1],s[2],j);put(s[3],s[4],j)})}
+  const near=(cx,cy)=>{const gx=Math.floor(cx/G0),gy=Math.floor(cy/G0),c2=new Set();for(let dx=-2;dx<=2;dx++)for(let dy=-2;dy<=2;dy++){const v=eIdx.get((gx+dx)+","+(gy+dy));if(v)v.forEach(j=>c2.add(j))}return [...c2].sort((p,q)=>p-q)};
   doorArc.forEach(i=>{const a=arcs[i];const tol=Math.max(a.r*0.03,1e-6),E=aEnd.get(i);
-    segs.forEach((s,j)=>{if(s[7]!=null)return;const L=Math.hypot(s[3]-s[1],s[4]-s[2]);if(Math.abs(L-a.r)>a.r*0.06)return;
+    near(a.cx,a.cy).forEach(j=>{const s=segs[j];if(s[7]!=null)return;const L=Math.hypot(s[3]-s[1],s[4]-s[2]);if(Math.abs(L-a.r)>a.r*0.06)return;
       const atA=Math.hypot(s[1]-a.cx,s[2]-a.cy)<=tol,atB=Math.hypot(s[3]-a.cx,s[4]-a.cy)<=tol;if(!atA&&!atB)return;
       /* 扉の板は、もう一方の端が円弧の端に来る。来ない線（吊元から伸びる壁の線など）は扉にしない */
       const far=atA?[s[3],s[4]]:[s[1],s[2]];if(E&&!E.some(p=>Math.hypot(p[0]-far[0],p[1]-far[1])<=a.r*0.15))return;
@@ -1735,11 +1745,16 @@ function rgCompute0(X){
   (RG.arcs||[]).forEach(a=>{const r=a.r*M;if(!(a.sweep>60&&a.sweep<120&&r>=0.45&&r<=1.3))return;
     const gx=Math.floor((a.cx*M-ox)/c),gy=Math.floor((a.cy*M-oy)/c),R=Math.max(2,Math.ceil(0.25/c));
     for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const xx=gx+dx,yy=gy+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;const m=lab[yy*W+xx];if(m>0)hasDoor[m]=1}});
+  /* 速さのため：区画の番号ごとのマス目の範囲（箱）を1回だけ数えておく。結果は変わらない */
+  const lbb=new Int32Array(4*(nl+1));for(let l=0;l<=nl;l++){lbb[4*l]=W;lbb[4*l+1]=H;lbb[4*l+2]=-1;lbb[4*l+3]=-1}
+  for(let i=0;i<N;i++){const l=lab[i];if(l<=0||l>nl)continue;const x=i%W,y=(i/W)|0,o=4*l;if(x<lbb[o])lbb[o]=x;if(y<lbb[o+1])lbb[o+1]=y;if(x>lbb[o+2])lbb[o+2]=x;if(y>lbb[o+3])lbb[o+3]=y}
+  /* 区画 l のマスを、左上から右下の順（図面全体を見た時と同じ順）で集める */
+  const cellsOf=l=>{const o=4*l,out=[];if(lbb[o+2]<0)return out;for(let y=lbb[o+1];y<=lbb[o+3];y++)for(let x=lbb[o];x<=lbb[o+2];x++){const i=y*W+x;if(lab[i]===l)out.push(i)}return out};
   const named=new Uint8Array(nl+1);
   (RG.texts||[]).forEach(t=>{const n=norm(t.t).replace(/\s+/g,"");if(n.length>14||!ROOM_RE.test(n))return;const gx=Math.floor((t.x*M-ox)/c),gy=Math.floor((t.y*M-oy)/c);if(gx<0||gy<0||gx>=W||gy>=H)return;const m=lab[gy*W+gx];if(m>0)named[m]=1});
   for(let l=1;l<=nl;l++){if(isOut(l)||root(l)!==l)continue;const a=cnt[l]*c*c;if(a>8||touches(l)||!pocketOK(l)||hasDoor[l]||named[l])continue;
     // まわりの線の向こう側にある区画を数える
-    const votes=new Map();const cells=[];for(let i=0;i<N;i++)if(lab[i]===l)cells.push(i);
+    const votes=new Map();const cells=cellsOf(l);
     cells.forEach(i=>{const x=i%W,y=(i/W)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{let xx=x,yy=y;for(let k=0;k<14;k++){xx+=dx;yy+=dy;if(xx<0||yy<0||xx>=W||yy>=H)break;const m=lab[yy*W+xx];if(m===-2)continue;
         /* 浴槽のふちのような細い輪（幅25cm未満・2㎡以下）は通り抜けて、その向こうの区画を見る */
         if(m>0&&m!==l&&root(m)===m&&!isOut(m)&&thick(m)*c<0.25&&cnt[m]*c*c<=2&&k<13)continue;
@@ -1747,13 +1762,10 @@ function rgCompute0(X){
     let tot=0,bm=0,bk=0;votes.forEach((v,k)=>{tot+=v;if(v>bm){bm=v;bk=k}});if(bk&&bm>=tot*0.5)parent[l]=bk}
   /* 機器の中の細い輪（浴槽のふちなど）：中身が部屋に入った後、輪のまわりが全部同じ部屋で、外（建物の外）に面していなければ、その部屋に入れる */
   for(let l=1;l<=nl;l++){if(isOut(l)||root(l)!==l)continue;const a=cnt[l]*c*c;if(a>2||thick(l)*c>=0.25||named[l]||hasDoor[l])continue;
-    const votes=new Map();let hitOut=false;for(let i=0;i<N;i++){if(lab[i]!==l)continue;const x=i%W,y=(i/W)|0;
+    const votes=new Map();let hitOut=false;for(const i of cellsOf(l)){const x=i%W,y=(i/W)|0;
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){let xx=x,yy=y;for(let k=0;k<6;k++){xx+=dx;yy+=dy;if(xx<0||yy<0||xx>=W||yy>=H){hitOut=true;break}const m=lab[yy*W+xx];if(m===-2)continue;if(m===l)break;if(m>0&&isOut(m)){hitOut=true;break}if(m>0){const rm=root(m);votes.set(rm,(votes.get(rm)||0)+1)}break}}}
     if(hitOut||votes.size!==1)continue;const [bk,bm]=[...votes.entries()][0];if(bk!==l&&bm>=8&&thick(bk)*c>=0.25)parent[l]=bk}
   /* 区画の形：中に囲まれた機器などの穴も床に含めて、外まわりだけで面積と周りの長さを出す */
-  /* 速さのため：区画の番号ごとのマス目の範囲（箱）を1回だけ数えておく。結果は変わらない */
-  const lbb=new Int32Array(4*(nl+1));for(let l=0;l<=nl;l++){lbb[4*l]=W;lbb[4*l+1]=H;lbb[4*l+2]=-1;lbb[4*l+3]=-1}
-  for(let i=0;i<N;i++){const l=lab[i];if(l<=0||l>nl)continue;const x=i%W,y=(i/W)|0,o=4*l;if(x<lbb[o])lbb[o]=x;if(y<lbb[o+1])lbb[o+1]=y;if(x>lbb[o+2])lbb[o+2]=x;if(y>lbb[o+3])lbb[o+3]=y}
   const shape=(S2,X2)=>{X2=X2||new Set();let bx0=W,by0=H,bx1=-1,by1=-1;
     S2.forEach(l=>{if(!(l>0&&l<=nl))return;const o=4*l;if(lbb[o+2]<0)return;if(lbb[o]<bx0)bx0=lbb[o];if(lbb[o+1]<by0)by0=lbb[o+1];if(lbb[o+2]>bx1)bx1=lbb[o+2];if(lbb[o+3]>by1)by1=lbb[o+3]});
     X2.forEach(i=>{const x=i%W,y=(i/W)|0;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y});
