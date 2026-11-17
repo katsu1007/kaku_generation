@@ -1561,7 +1561,13 @@ function rgFacePoly(f){
   const inn=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&lab[y*W+x]>0&&parts.has(root[lab[y*W+x]]);
   /* 内側のマスのふちを、内側を左に見る向きの辺として集める */
   const next=new Map();const key=(x,y)=>x+","+y;let n=0;
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++){if(!inn(x,y))continue;
+  /* 速さのため：区画のまとまり（root）ごとのマス目の範囲を、図面ごとに1回だけ数えて覚えておく。
+     範囲の外には内側のマスが無いので、同じ順番で範囲の中だけを見れば結果は変わらない */
+  if(!G._rbb){const nr=root.length,b=new Int32Array(4*nr);for(let k=0;k<nr;k++){b[4*k]=W;b[4*k+1]=H;b[4*k+2]=-1;b[4*k+3]=-1}
+    for(let i=0;i<W*H;i++){const l=lab[i];if(l<=0||l>=nr)continue;const k=root[l],o=4*k,x=i%W,y=(i/W)|0;if(x<b[o])b[o]=x;if(y<b[o+1])b[o+1]=y;if(x>b[o+2])b[o+2]=x;if(y>b[o+3])b[o+3]=y}
+    G._rbb=b}
+  let fx0=W,fy0=H,fx1=-1,fy1=-1;parts.forEach(k=>{if(!(k>=0&&k<root.length))return;const o=4*k,b=G._rbb;if(b[o+2]<0)return;if(b[o]<fx0)fx0=b[o];if(b[o+1]<fy0)fy0=b[o+1];if(b[o+2]>fx1)fx1=b[o+2];if(b[o+3]>fy1)fy1=b[o+3]});
+  for(let y=fy0;y<=fy1;y++)for(let x=fx0;x<=fx1;x++){if(!inn(x,y))continue;
     if(!inn(x,y-1)){next.set(key(x+1,y),[x,y]);n++}
     if(!inn(x+1,y)){next.set(key(x+1,y+1),[x+1,y]);n++}
     if(!inn(x,y+1)){next.set(key(x,y+1),[x+1,y+1]);n++}
@@ -1745,7 +1751,12 @@ function rgCompute0(X){
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){let xx=x,yy=y;for(let k=0;k<6;k++){xx+=dx;yy+=dy;if(xx<0||yy<0||xx>=W||yy>=H){hitOut=true;break}const m=lab[yy*W+xx];if(m===-2)continue;if(m===l)break;if(m>0&&isOut(m)){hitOut=true;break}if(m>0){const rm=root(m);votes.set(rm,(votes.get(rm)||0)+1)}break}}}
     if(hitOut||votes.size!==1)continue;const [bk,bm]=[...votes.entries()][0];if(bk!==l&&bm>=8&&thick(bk)*c>=0.25)parent[l]=bk}
   /* 区画の形：中に囲まれた機器などの穴も床に含めて、外まわりだけで面積と周りの長さを出す */
-  const shape=(S2,X2)=>{X2=X2||new Set();let bx0=W,by0=H,bx1=-1,by1=-1;for(let i=0;i<N;i++){if(S2.has(lab[i])||X2.has(i)){const x=i%W,y=(i/W)|0;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y}}
+  /* 速さのため：区画の番号ごとのマス目の範囲（箱）を1回だけ数えておく。結果は変わらない */
+  const lbb=new Int32Array(4*(nl+1));for(let l=0;l<=nl;l++){lbb[4*l]=W;lbb[4*l+1]=H;lbb[4*l+2]=-1;lbb[4*l+3]=-1}
+  for(let i=0;i<N;i++){const l=lab[i];if(l<=0||l>nl)continue;const x=i%W,y=(i/W)|0,o=4*l;if(x<lbb[o])lbb[o]=x;if(y<lbb[o+1])lbb[o+1]=y;if(x>lbb[o+2])lbb[o+2]=x;if(y>lbb[o+3])lbb[o+3]=y}
+  const shape=(S2,X2)=>{X2=X2||new Set();let bx0=W,by0=H,bx1=-1,by1=-1;
+    S2.forEach(l=>{if(!(l>0&&l<=nl))return;const o=4*l;if(lbb[o+2]<0)return;if(lbb[o]<bx0)bx0=lbb[o];if(lbb[o+1]<by0)by0=lbb[o+1];if(lbb[o+2]>bx1)bx1=lbb[o+2];if(lbb[o+3]>by1)by1=lbb[o+3]});
+    X2.forEach(i=>{const x=i%W,y=(i/W)|0;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y});
     bx0=Math.max(0,bx0-1);by0=Math.max(0,by0-1);bx1=Math.min(W-1,bx1+1);by1=Math.min(H-1,by1+1);const bw=bx1-bx0+1,bh=by1-by0+1;
     const ext=new Uint8Array(bw*bh);const qq=[];const inR=(x,y)=>{const i=y*W+x;return S2.has(lab[i])||X2.has(i)};
     for(let x=0;x<bw;x++)for(const y of [0,bh-1]){const k=y*bw+x;if(!ext[k]&&!inR(bx0+x,by0+y)){ext[k]=1;qq.push(k)}}
@@ -1767,7 +1778,8 @@ function rgCompute0(X){
     if(g2.cells*c*c<0.4)return;
     // 機器（中に含めた所）の外周の線も床とみなす
     const X2=new Set();const sub=new Set(g2.parts.filter(l=>l!==big));
-    if(sub.size){for(let i=0;i<N;i++){if(!sub.has(lab[i]))continue;const x=i%W,y=(i/W)|0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx;if(lab[j]===-2)X2.add(j)}}}
+    if(sub.size){let sx0=W,sy0=H,sx1=-1,sy1=-1;sub.forEach(l=>{const o=4*l;if(lbb[o+2]<0)return;if(lbb[o]<sx0)sx0=lbb[o];if(lbb[o+1]<sy0)sy0=lbb[o+1];if(lbb[o+2]>sx1)sx1=lbb[o+2];if(lbb[o+3]>sy1)sy1=lbb[o+3]});
+      for(let y0=sy0;y0<=sy1;y0++)for(let x0=sx0;x0<=sx1;x0++){const i=y0*W+x0;if(!sub.has(lab[i]))continue;const x=x0,y=y0;for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx;if(lab[j]===-2)X2.add(j)}}}
     const sh=shape(new Set(g2.parts),X2);const a=sh.area;if(a<0.5)return;
     const per=sh.peri;const bi=best[big];
     faces.push({lab:r,parts:g2.parts,area:a,peri:per,c:[(bi%W)*c+ox+c/2,((bi/W)|0)*c+oy+c/2],name:"",h:"",win:0,door:0,sel:false})});
