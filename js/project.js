@@ -244,6 +244,9 @@ function elecRow(p) {
 }
 /* 図面を全画面で編集する（プレビューの右上のボタン）。描き直しても全画面のまま */
 let dwgFs = false;
+/* 図面の作業の状態（モード・照明の道具・拡大）。上の矢印（案件全体の元に戻す・やり直す）は画面を作り直すので、
+ * 作り直した後も同じモード・同じ拡大のまま続けられるように、作り直す前の状態をここから読む（かつ「照明で戻す・進むを押すと全体に戻る」） */
+let workNow = null;
 function drawingCard(p) {
   const d = p.drawing;
   if (!d || !d.plan) return `<div class="card" style="margin-bottom:14px"><div class="row"><div style="flex:1;min-width:220px"><h2>図面から部屋を作る</h2>
@@ -602,6 +605,9 @@ function stepRooms(ctx) {
     if (mode === 'place') pPreview().forEach(q => { h += sym(pset.item, q, '#e65c32', 0, 'new'); });
     return h;
   };
+  const prevWork = workNow && workNow(); let keep0 = null;
+  if (prevWork && prevWork.pid === p.id) { mode = prevWork.mode; ltool = prevWork.ltool; wway = prevWork.wway; sheetZoom = prevWork.sheetZoom; keep0 = prevWork.v; }
+  workNow = () => ({ pid: p.id, mode, ltool, wway, sheetZoom, v: view && view.keep ? view.keep() : keep0 });
   const meas = { pts: [], cont: false, redo: [] };   // redo：「1つ戻す」で消した点（「1つ進む」で戻す。新しく点を打つと消える）
   /* 新しい読み取りの印（「新しい読み取り」を選んだ図面だけ。選んでいなければ今まで通り何も出さない） */
   const r2marks = () => (p.drawing && p.drawing.reader === 'v2' && p.drawing.analysis && p.drawing.analysis.marks) || null;
@@ -1005,7 +1011,7 @@ function stepRooms(ctx) {
     body.innerHTML = drawingCard(p) + `<div class="rooms">${p.rooms.map((r, i) => roomCard(r, i, p)).join('') || `<div class="card empty"><b>まだ部屋がありません</b>下のボタンで部屋を足してください。</div>`}</div>
       <div class="addbar" style="margin-top:12px"><button class="btn primary" id="addRoom">${icon('plus')}部屋を足す</button>
       </div>`;
-    const keepV = view && view.keep ? view.keep() : null;   // 描き直しても拡大・位置をそのままに（かつ「戻す・進むを押すと全体に戻る」）
+    const keepV = view && view.keep ? view.keep() : keep0; keep0 = null;   // 描き直しても拡大・位置をそのままに（かつ「戻す・進むを押すと全体に戻る」）
     view = null;
     /* 前の版で読み込んだ図面は、区画の番号を前のKAKUと同じ付け方に直す（部屋とのつながりは区画の i なので変わらない） */
     if (p.drawing && p.drawing.plan && p.drawing.plan.order !== 2) { orderFacesOf(p.drawing.plan); p.drawing.plan.order = 2; touch(p); }
@@ -1131,7 +1137,7 @@ function stepRooms(ctx) {
         }
       });
       /* 図を大きく出していた時は、描き直しても同じ図のまま */
-      if (sheetZoom) { const x = sheetsOf(p.drawing).find(q => q.key === sheetZoom); if (x && view.zoomTo) view.zoomTo(x.box); else sheetZoom = ''; }
+      if (sheetZoom) { const x = sheetsOf(p.drawing).find(q => q.key === sheetZoom); if (!x) sheetZoom = ''; else if (!keepV && view.zoomTo) view.zoomTo(x.box); }   // 前の拡大を引き継いだ時はそちらが先
       paintSel();
     }
     const fi = body.querySelector('#dwgFile');
