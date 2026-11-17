@@ -11,6 +11,10 @@ import { importDrawing, groupGeom, planCH, orderFaces as orderFacesOf } from './
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
 import { planView, roomColor } from './planview.js';
 import { USES, DEF_LM, needCount, pitchFor, luxOf, wirePlan, cableQty, pip } from './lighting.js';
+/* iPhone・iPad では、選べるファイルの種類を絞ると .jww・.jwc・.dxf が灰色になって選べない（iPhone がこの拡張子を知らないため）。
+   なので iPhone・iPad では絞らない。何を選んでも、読み込む時に拡張子で見分けるので困らない */
+const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+const DWG_ACCEPT = IOS ? '' : '.jww,.jwc,.dxf,.pdf,application/pdf,image/*';
 import { uid } from './store.js';
 import { openElec, elecLines } from './elec.js';
 import { groupsOf, LABOR, COLORS, areaPts, linePts, placePts, placeCounts, symText } from './place.js';
@@ -241,7 +245,7 @@ function drawingCard(p) {
   const d = p.drawing;
   if (!d || !d.plan) return `<div class="card" style="margin-bottom:14px"><div class="row"><div style="flex:1;min-width:220px"><h2>図面から部屋を作る</h2>
       <div class="sub" style="margin:0">JWW・DXF・PDF の図面を読み込むと、部屋の区画が自動で見つかります。区画をタップして部屋にしてください。写真やスキャンしたPDFは、下に敷いて角をなぞって拾えます。</div></div>
-      <label class="btn primary" style="cursor:pointer">${icon('up')}図面を選ぶ<input type="file" id="dwgFile" accept=".jww,.jwc,.dxf,.pdf,application/pdf,image/*" hidden></label>
+      <label class="btn primary" style="cursor:pointer">${icon('up')}図面を選ぶ<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn" data-act="sketch">${icon('grid')}寸法・なぞって間取りを作る</button></div>
       <div class="small muted" style="margin-top:6px">図面ファイルが無い時は「寸法・なぞって間取りを作る」：四角の寸法・向きと長さ・PDFや写真の角をなぞって、間取りを作れます。</div>
       <div class="small muted" id="dwgStatus" style="margin-top:8px"></div>${elecRow(p)}</div>`;
@@ -251,7 +255,7 @@ function drawingCard(p) {
       ${d.fixtures ? `<button class="btn sm primary" data-act="open3d">${icon('cube')}3Dで見る</button>` : ''}
       ${d.sketch ? `<button class="btn sm" data-act="sketch">${icon('grid')}間取りを直す</button>` : ''}
       <button class="btn sm" data-act="cadOut">${icon('down')}JWW・DXF</button>
-      <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept=".jww,.jwc,.dxf,.pdf,application/pdf,image/*" hidden></label>
+      <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
     <div id="dwgView"></div>
