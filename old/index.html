@@ -4382,12 +4382,27 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
    ・案件ごとに「引かない」に戻せる。数字が変わった時はポップアップで知らせる ==== */
 (function(){
   var DOOR_A=1.6,cache=null;
+  /* 速さのため：線の外枠（箱）で引ける表。四角の範囲に掛かるかもしれない線だけを、元の順番のまま返す。
+     調べ方（条件）はそれぞれの場所で今まで通りなので、結果は変わらない（kaku_generation で追加） */
+  var IXW=typeof WeakMap!=='undefined'?new WeakMap():null;
+  function segIx(segs){var ix=IXW&&IXW.get(segs);if(ix&&ix.n===segs.length)return ix;var CS=1,cells=new Map(),big=[];
+    for(var i=0;i<segs.length;i++){var s=segs[i],x0=Math.min(s[0],s[2]),x1=Math.max(s[0],s[2]),y0=Math.min(s[1],s[3]),y1=Math.max(s[1],s[3]);
+      if(!(isFinite(x0)&&isFinite(x1)&&isFinite(y0)&&isFinite(y1))){big.push(i);continue}
+      var gx0=Math.floor(x0/CS),gx1=Math.floor(x1/CS),gy0=Math.floor(y0/CS),gy1=Math.floor(y1/CS);
+      if((gx1-gx0+1)*(gy1-gy0+1)>64){big.push(i);continue}
+      for(var gx=gx0;gx<=gx1;gx++)for(var gy=gy0;gy<=gy1;gy++){var k=gx+','+gy,v=cells.get(k);if(!v){v=[];cells.set(k,v)}v.push(i)}}
+    ix={n:segs.length,CS:CS,cells:cells,big:big};if(IXW)IXW.set(segs,ix);return ix}
+  function segsIn(segs,x0,y0,x1,y1){if(!(isFinite(x0)&&isFinite(x1)&&isFinite(y0)&&isFinite(y1)))return segs.slice();var ix=segIx(segs),CS=ix.CS,seen={},ids=ix.big.slice();ix.big.forEach(function(i){seen[i]=1});
+    var gx0=Math.floor(x0/CS)-1,gx1=Math.floor(x1/CS)+1,gy0=Math.floor(y0/CS)-1,gy1=Math.floor(y1/CS)+1;
+    if((gx1-gx0+1)*(gy1-gy0+1)>ix.cells.size*4+64)return segs.slice();
+    for(var gx=gx0;gx<=gx1;gx++)for(var gy=gy0;gy<=gy1;gy++){var v=ix.cells.get(gx+','+gy);if(!v)continue;for(var j=0;j<v.length;j++){if(!seen[v[j]]){seen[v[j]]=1;ids.push(v[j])}}}
+    ids.sort(function(p,q){return p-q});return ids.map(function(i){return segs[i]})}
   function closedDir(P,c,v,r){var rt=function(a){return[v[0]*Math.cos(a)-v[1]*Math.sin(a),v[0]*Math.sin(a)+v[1]*Math.cos(a)]},cand=[rt(Math.PI/4),rt(-Math.PI/4)],E=cand.map(function(u){return[c[0]+u[0]*r,c[1]+u[1]*r]}),h=function(p,q){return Math.hypot(p[0]-q[0],p[1]-q[1])};
-    var leaf=E.map(function(e){return P.segs.some(function(s){var a=[s[0],s[1]],b=[s[2],s[3]];return(h(a,c)<.06&&h(b,e)<.08)||(h(b,c)<.06&&h(a,e)<.08)})});
+    var Sc06=segsIn(P.segs,c[0]-.07,c[1]-.07,c[0]+.07,c[1]+.07);var leaf=E.map(function(e){return Sc06.some(function(s){var a=[s[0],s[1]],b=[s[2],s[3]];return(h(a,c)<.06&&h(b,e)<.08)||(h(b,c)<.06&&h(a,e)<.08)})});
     if(leaf[0]!==leaf[1])return leaf[0]?cand[1]:cand[0];
-    var jamb=E.map(function(e){var n=0;P.segs.forEach(function(s){var L=Math.hypot(s[2]-s[0],s[3]-s[1]);if(L>.2||L<.003)return;if(Math.abs(s[0]-s[2])>.003&&Math.abs(s[1]-s[3])>.003)return;if(h([s[0],s[1]],e)<.06||h([s[2],s[3]],e)<.06)n++});return n});
+    var jamb=E.map(function(e){var n=0;segsIn(P.segs,e[0]-.07,e[1]-.07,e[0]+.07,e[1]+.07).forEach(function(s){var L=Math.hypot(s[2]-s[0],s[3]-s[1]);if(L>.2||L<.003)return;if(Math.abs(s[0]-s[2])>.003&&Math.abs(s[1]-s[3])>.003)return;if(h([s[0],s[1]],e)<.06||h([s[2],s[3]],e)<.06)n++});return n});
     if(jamb[0]!==jamb[1])return jamb[0]>jamb[1]?cand[0]:cand[1];
-    var sc=cand.map(function(u){var best=0;P.segs.forEach(function(s){var sx=s[2]-s[0],sy=s[3]-s[1],sl=Math.hypot(sx,sy);if(sl<.2)return;var mx=Math.min(h([s[0],s[1]],c),h([s[2],s[3]],c));if(mx>.25)return;best=Math.max(best,Math.abs((sx*u[0]+sy*u[1])/sl))});return best});
+    var Sc25=segsIn(P.segs,c[0]-.26,c[1]-.26,c[0]+.26,c[1]+.26);var sc=cand.map(function(u){var best=0;Sc25.forEach(function(s){var sx=s[2]-s[0],sy=s[3]-s[1],sl=Math.hypot(sx,sy);if(sl<.2)return;var mx=Math.min(h([s[0],s[1]],c),h([s[2],s[3]],c));if(mx>.25)return;best=Math.max(best,Math.abs((sx*u[0]+sy*u[1])/sl))});return best});
     return sc[0]>=sc[1]?cand[0]:cand[1]}
   /* 区画ごとの開口（辺の上の、ドアの区間と、壁の線が無い区間） */
   function scan(){var P,F;try{P=KAKU_plan;F=KAKU_fix}catch(e){return null}if(!P||!F||F.g==='sketch'||!P.segs||!P.segs.length||!P.faces)return null;
@@ -4396,7 +4411,7 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
     var out={};P.faces.forEach(function(f){var poly=f.poly;if(!poly||poly.length<3)return;var ar=0;for(var k=0;k<poly.length;k++){var a=poly[k],b=poly[(k+1)%poly.length];ar+=a[0]*b[1]-b[0]*a[1]}var runs=[];
       for(var k2=0;k2<poly.length;k2++){var a2=poly[k2],b2=poly[(k2+1)%poly.length],L=Math.hypot(b2[0]-a2[0],b2[1]-a2[1]);if(L<.05)continue;var u=[(b2[0]-a2[0])/L,(b2[1]-a2[1])/L],n=ar>0?[u[1],-u[0]]:[-u[1],u[0]];
         var x0=Math.min(a2[0],b2[0])-.1,x1=Math.max(a2[0],b2[0])+.1,y0=Math.min(a2[1],b2[1])-.1,y1=Math.max(a2[1],b2[1])+.1;
-        var SG=P.segs.filter(function(s){return Math.max(s[0],s[2])>=x0&&Math.min(s[0],s[2])<=x1&&Math.max(s[1],s[3])>=y0&&Math.min(s[1],s[3])<=y1&&Math.hypot(s[2]-s[0],s[3]-s[1])>=.04&&Math.abs(((s[2]-s[0])*u[0]+(s[3]-s[1])*u[1])/Math.hypot(s[2]-s[0],s[3]-s[1]))>.9});
+        var SG=segsIn(P.segs,x0,y0,x1,y1).filter(function(s){return Math.max(s[0],s[2])>=x0&&Math.min(s[0],s[2])<=x1&&Math.max(s[1],s[3])>=y0&&Math.min(s[1],s[3])<=y1&&Math.hypot(s[2]-s[0],s[3]-s[1])>=.04&&Math.abs(((s[2]-s[0])*u[0]+(s[3]-s[1])*u[1])/Math.hypot(s[2]-s[0],s[3]-s[1]))>.9});
         var DD=D.filter(function(d){return Math.abs(u[0]*d.cl[0]+u[1]*d.cl[1])>.97&&Math.abs((a2[0]-d.c[0])*d.cl[1]-(a2[1]-d.c[1])*d.cl[0])<=.3});
         var st=.01,cur=null;for(var t=st/2;t<L;t+=st){var p=[a2[0]+u[0]*t,a2[1]+u[1]*t],ty='c';
           if(DD.some(function(d){var w=(p[0]-d.c[0])*d.cl[0]+(p[1]-d.c[1])*d.cl[1];return w>=-.005&&w<=d.r+.005}))ty='d';
