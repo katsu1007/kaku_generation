@@ -575,11 +575,37 @@ function stepRooms(ctx) {
   /* 区画の印：新しい読み取りの印（選んだ図面だけ）＋使わない図の中の区画（どちらの読み取りでも） */
   /* 今の読み取りでも、表題欄・表と言い切れる区画（解析の「除外」）は灰色にする（決めきれない「保留」は新しい読み取りの時だけ） */
   const outMarks = () => { const M = (p.drawing && p.drawing.analysis && p.drawing.analysis.marks) || {}, o = {}; Object.keys(M).forEach(k => { if (M[k] && M[k].s === 'out' && (M[k].type === 'title' || M[k].type === 'table')) o[k] = M[k]; }); return o; };
-  const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}; return Object.keys(a).length || Object.keys(b).length ? { ...a, ...b } : null; };
+  /* 人が決めた印：「区画ではない」（drawing.faceOff）と「隣にまとめた」（drawing.faceJoin：区画 → まとめ先の区画）。いちばん強い */
+  const handMarks = () => { const d = p.drawing || {}, o = {}, F = (d.plan && d.plan.faces) || [];
+    Object.keys(d.faceOff || {}).forEach(k => { o[k] = { s: 'out', type: 'off', why: '「区画ではない」にした所です。もう一度選んで「元に戻す」で戻せます' }; });
+    Object.entries(d.faceJoin || {}).forEach(([k, b]) => { const t = F.find(f => f.i === b); o[k] = { s: 'join', type: 'join', why: `区画${t ? t.no : ''} にまとめた所です。もう一度選んで「元に戻す」で戻せます` }; });
+    return o; };
+  const faceMarks = () => { const a = r2marks() || outMarks(), b = p.drawing ? sheetMarks(p.drawing) : {}, h = handMarks(); return Object.keys(a).length || Object.keys(b).length || Object.keys(h).length ? { ...a, ...b, ...h } : null; };
+  /* 区画のまとまりを決め直した部屋の広さ・周り・開口 */
+  const regeo = (r) => { const plan = p.drawing.plan; const g = groupGeom(r.faces.map(i => plan.faces.find(f => f.i === i)).filter(Boolean)); r.area = g.area; r.perim = g.perim; if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); };
+  /* ある区画の隣の区画（接している長さがいちばん長い物）。辺の両側 20cm の点を調べる */
+  /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）。まとめ先にしない */
+  const wrapsF = (f, F) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of F) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
+  const nbOf = (f) => { const F = p.drawing.plan.faces, off = p.drawing.faceOff || {}, cnt = new Map(), P = f.poly, mk = faceMarks() || {}, W = new Map(), isW = o => { if (!W.has(o.i)) W.set(o.i, wrapsF(o, F)); return W.get(o.i); };
+    for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-6) continue;
+      const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, n = Math.max(1, Math.round(L / 0.15));
+      for (let j = 0; j < n; j++) { const t = (j + 0.5) / n, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+        for (const sg of [1, -1]) { const qx = x + nx * 0.2 * sg, qy = y + ny * 0.2 * sg; if (pip(qx, qy, P)) continue;
+          /* その点を含む区画のうち一番小さい物（図枠の内側のような、全部を囲む大きい区画を選ばない） */
+          let g = null; for (const o of F) if (o !== f && !off[o.i] && !(mk[o.i] && mk[o.i].s === 'out') && o.poly && (!g || o.area < g.area) && pip(qx, qy, o.poly) && !isW(o)) g = o;
+          if (g) cnt.set(g.i, (cnt.get(g.i) || 0) + L / n); } } }
+    let best = null, bl = 0; cnt.forEach((v, i) => { if (v > bl) { bl = v; best = i; } }); return best; };
+  /* まとめ先をたどった先（まとめ先がさらにまとめられている時） */
+  const joinRoot = (i) => { const J = p.drawing.faceJoin || {}; let k = 0; while (J[i] != null && k++ < 20) i = J[i]; return i; };
+  /* 部屋の区画に、そこへまとめた区画を足す */
+  const withJoined = (ids) => { const J = p.drawing.faceJoin || {}, S = new Set(ids); let more = true; while (more) { more = false; Object.entries(J).forEach(([a, b]) => { if (S.has(b) && !S.has(+a)) { S.add(+a); more = true; } }); } return [...S]; };
   const FIX_SIZE = { toilet: [0.46, 0.8], urinal: [0.4, 0.36], counter: [1.2, 0.5], sink: [0.45, 0.36], slop: [0.8, 0.52], trough: [3.6, 0.6], bath: [1.6, 1.6], kitchen: [2.55, 0.65] };
   const BACKS = [['N', '上'], ['E', '右'], ['S', '下'], ['W', '左']];
   const fxList = () => (p.drawing && p.drawing.fixtures) || [];
-  const owner = () => { const m = new Map(); p.rooms.forEach(r => (r.faces || []).forEach(i => m.set(i, r.color))); return m; };
+  const owner = () => { const m = new Map(); p.rooms.forEach(r => (r.faces || []).forEach(i => m.set(i, r.color)));
+    /* 隣にまとめた区画は、まとめ先の部屋の色で出す */
+    Object.entries((p.drawing && p.drawing.faceJoin) || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); });
+    return m; };
   const demoOverlay = () => {
     const lw = view.lw, plan = p.drawing.plan, d = p.drawing;
     let h = '';
@@ -747,7 +773,7 @@ function stepRooms(ctx) {
     if (fl) fl.innerHTML = [...p.drawing.plan.faces].sort((a, b) => a.no - b.no).map(f => `<button data-face="${f.i}" class="${sel.has(f.i) ? 'on' : ''} ${own.has(f.i) && !sel.has(f.i) ? 'used' : ''}">区画${f.no}${f.name ? ' ' + esc(f.name) : ''} ${Math.round(f.area * 100) / 100}㎡</button>`).join('');
     const bar = body.querySelector('#dwgBar');
     if (bar) bar.innerHTML = sel.size
-      ? `<span class="small"><b>${sel.size} 区画</b>を選んでいます。続けてタップで足す・もう一度で外す。</span><span class="spacer"></span><button class="btn primary" data-act="mkOne">${icon('check')}終了：1部屋にする</button>${sel.size > 1 ? `<button class="btn" data-act="mkEach">1区画ずつ部屋にする</button>` : ''}<button class="btn" data-act="selSame" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button>${[...sel].some(i => own.has(i)) ? `<button class="btn" data-act="unassign">部屋から外す</button>` : ''}<button class="btn ghost" data-act="selClear">選ぶのをやめる</button>`
+      ? `<span class="small"><b>${sel.size} 区画</b>を選んでいます。続けてタップで足す・もう一度で外す。</span><span class="spacer"></span><button class="btn primary" data-act="mkOne">${icon('check')}終了：1部屋にする</button>${sel.size > 1 ? `<button class="btn" data-act="mkEach">1区画ずつ部屋にする</button>` : ''}<button class="btn" data-act="selSame" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button>${[...sel].some(i => own.has(i)) ? `<button class="btn" data-act="unassign">部屋から外す</button>` : ''}<button class="btn" data-act="faceJoin" title="棚や机で割れた小さい区画を、接している長さがいちばん長い隣の区画（部屋）の床に入れます">隣の部屋にまとめる</button><button class="btn" data-act="faceOff" title="部屋ではない所（表・家具・外など）を、灰色にして数えないようにします">区画ではない</button>${[...sel].some(i => (p.drawing.faceOff || {})[i] || (p.drawing.faceJoin || {})[i] != null) ? `<button class="btn" data-act="faceBack">元に戻す</button>` : ''}<button class="btn ghost" data-act="selClear">選ぶのをやめる</button>`
       : `<span class="small muted">部屋にする区画を順番にタップして、選び終わったら「終了」。そのまま床・壁・天井の仕上げを決められます。</span><span class="spacer"></span><button class="btn sm" data-act="selRest">まだ部屋にしていない区画を全部選ぶ</button>`;
   };
   /* コンセントを器具に合わせて置く（自分で置いた物は残す）。「反対側へ」にした器具は器具の真ん中で反対側 */
@@ -855,7 +881,7 @@ function stepRooms(ctx) {
     const used = new Set(p.rooms.map(r => r.color));
     const nextColor = () => { for (let c = 0; c < 99; c++) if (!used.has(c)) { used.add(c); return c; } return 0; };
     const byNo = (a, b) => plan.faces.find(f => f.i === a).no - plan.faces.find(f => f.i === b).no;
-    const groups = each ? ids.sort(byNo).map(i => [i]) : [ids.sort(byNo)];
+    const groups = (each ? ids.sort(byNo).map(i => [i]) : [ids.sort(byNo)]).map(g => withJoined(g));
     const defCH = planCH(plan);
     groups.forEach(g => {
       const F = g.map(i => plan.faces.find(f => f.i === i)).filter(Boolean);
@@ -888,7 +914,7 @@ function stepRooms(ctx) {
       view = planView(body.querySelector('#dwgView'), p.drawing.plan, {
         selected: () => sel, owner, fixtures: fxList, bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
         marks: () => faceMarks(),
-        onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
+        onTap: i => { if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.type === 'off' || m.type === 'join') ? m.why : (m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
         /* 虫めがねの吸い付き：測る・カッター・壁の範囲・照明の置き場所で、線の端や線の上に吸い付く */
         snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 16) : [x, y],
@@ -1140,10 +1166,10 @@ function stepRooms(ctx) {
         /* 部屋にしていない区画のうち、照明を並べない所：
            ほかの区画を2つ以上中に含む区画（図面の枠の内側・建物の外まわり。並べると図面じゅうが照明で埋まる）、
            図面の表・表題欄と見た区画（新しい読み取りの解析で「除外」の物） */
-        const marks = { ...((d.analysis && d.analysis.marks) || {}), ...sheetMarks(d) };
+        const marks = { ...((d.analysis && d.analysis.marks) || {}), ...sheetMarks(d), ...handMarks() };
         const wraps = (f) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of d.plan.faces) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
         let skipped = 0;
-        const freeFaces = lset.room !== 'faces' ? [] : d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6).filter(f => { const m = marks[f.i] || marks[String(f.i)]; if ((m && m.s === 'out') || wraps(f)) { skipped++; return false; } return true; });
+        const freeFaces = lset.room !== 'faces' ? [] : d.plan.faces.filter(f => !own.has(f.i) && f.area >= 0.6).filter(f => { const m = marks[f.i] || marks[String(f.i)]; if ((m && m.s === 'out') || wraps(f)) { skipped++; return false; } return !(p.drawing.faceJoin && p.drawing.faceJoin[f.i] != null); });
         if (lset.room === 'faces') groups = [...pr.map(r => ({ r, faces: r.faces || [] })), ...freeFaces.map(f => ({ r: null, faces: [f.i] }))];
         else groups = pr.filter(r => lset.room === 'all' || r.id === lset.room).map(r => ({ r, faces: r.faces || [] }));
         const facesOf = new Set(groups.flatMap(g => g.faces));
@@ -1190,6 +1216,29 @@ function stepRooms(ctx) {
         return;
       }
       if (a === 'fxDone') { fsel = -1; addAt = null; paintSel(); return; }
+      if (a === 'faceOff' || a === 'faceJoin' || a === 'faceBack') {
+        const d = p.drawing, ids = [...sel]; d.faceOff = { ...(d.faceOff || {}) }; d.faceJoin = { ...(d.faceJoin || {}) };
+        const before = { off: { ...(p.drawing.faceOff || {}) }, join: { ...(p.drawing.faceJoin || {}) } };
+        /* まず選んだ区画を、入っている部屋から外す（まとめ直し・外しのため） */
+        const pull = (set) => { p.rooms.forEach(r => { if (!r.faces || !r.faces.some(i => set.has(i))) return; r.faces = r.faces.filter(i => !set.has(i)); if (r.faces.length) regeo(r); });
+          const empty = p.rooms.filter(r => r.src === 'plan' && r.faces && !r.faces.length).map(r => r.id); p.rooms = p.rooms.filter(r => !empty.includes(r.id)); };
+        let n = 0, miss = 0; const pairs = [];
+        if (a === 'faceOff') { const S = new Set(ids); pull(S); ids.forEach(i => { d.faceOff[i] = true; delete d.faceJoin[i]; Object.keys(d.faceJoin).forEach(k => { if (d.faceJoin[k] === i) delete d.faceJoin[k]; }); n++; }); }
+        if (a === 'faceBack') { const S = new Set(ids.filter(i => d.faceJoin[i] != null)); pull(S); ids.forEach(i => { if (d.faceOff[i] || d.faceJoin[i] != null) n++; delete d.faceOff[i]; delete d.faceJoin[i]; }); }
+        if (a === 'faceJoin') {
+          const F = d.plan.faces, S = new Set(ids); pull(S);
+          ids.forEach(i => { const f = F.find(o => o.i === i); const nb = f && f.poly && f.poly.length >= 3 ? nbOf(f) : null;
+            if (nb == null || joinRoot(nb) === i) { miss++; return; }
+            d.faceJoin[i] = nb; delete d.faceOff[i]; n++; pairs.push(`区画${f.no}→区画${(F.find(o => o.i === nb) || {}).no}`);
+            /* まとめ先が部屋になっていれば、その部屋の床に入れる */
+            const r = p.rooms.find(q => (q.faces || []).includes(joinRoot(nb))); if (r) { r.faces = withJoined(r.faces); regeo(r); } });
+        }
+        if (!Object.keys(d.faceOff).length) delete d.faceOff; if (!Object.keys(d.faceJoin).length) delete d.faceJoin;
+        sel.clear(); syncDemoLines(p); touch(p); draw();
+        const msg = a === 'faceOff' ? `${n} 区画を「区画ではない」にしました（灰色。数えません）` : a === 'faceBack' ? `${n} 区画を元に戻しました` : `${n} 区画を隣の部屋にまとめました（${pairs.slice(0, 4).join('・')}${pairs.length > 4 ? ' ほか' : ''}。床の広さに入ります）${miss ? `。${miss} 区画は隣が見つかりませんでした` : ''}`;
+        toast(msg, { ms: 5000 });
+        return;
+      }
       if (a === 'unassign') {
         const plan = p.drawing.plan, ids = new Set([...sel]);
         p.rooms.forEach(r => { if (!r.faces || !r.faces.some(i => ids.has(i))) return; r.faces = r.faces.filter(i => !ids.has(i));
