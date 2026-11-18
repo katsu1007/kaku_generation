@@ -96,6 +96,19 @@ export function modelFor(type, equip = []) {
 const TITLE_LABELS = { project: /^(工事名称|工事名|工事件名)$/, sheet: /^(図面名称|図面名)$/, scale: /^(SCALE|縮尺)$/i, date: /^(DATE|日付|作成日)$/i };
 const STAMP = /PROTECTED|CONFIDENTIAL|関係者外秘|社外秘|部外秘|取扱注意/i;
 const ANY_LABEL = /工事名|図面名|図面番号|SCALE|縮尺|DATE|日付|承認|審査|照査|検査|設計|製図|検図|作成|担当|No[.．]?$|^備考/i;
+/* 図枠・表題欄の線が無い（または別の縮尺のグループにあって読んでいない）図面：表題欄の見出し（工事名称・図面名称・SCALE・DATE など）が
+   2つ以上かたまっている所を表題欄とみる。見出しのかたまりの外の四角を、大きい方の辺の3割広げた範囲（現場トイレの JWW など） */
+export function labelBoxes(texts = []) {
+  const L = texts.filter(t => { const s = String(t.t).replace(/[\s\u3000]+/g, ''); return Object.values(TITLE_LABELS).some(re => re.test(s)); });
+  if (L.length < 2) return [];
+  const used = new Set(), out = [];
+  L.forEach((a, i) => { if (used.has(i)) return; const G = [a]; used.add(i);
+    for (let k = 0; k < G.length; k++) L.forEach((b, j) => { if (!used.has(j) && Math.hypot(b.x - G[k].x, b.y - G[k].y) < 6) { used.add(j); G.push(b); } });
+    if (G.length < 2) return;
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; G.forEach(t => { x0 = Math.min(x0, t.x); y0 = Math.min(y0, t.y); x1 = Math.max(x1, t.x); y1 = Math.max(y1, t.y); });
+    const pd = Math.max(x1 - x0, y1 - y0, 1) * 0.3; out.push([x0 - pd, y0 - pd, x1 + pd * 2, y1 + pd]); });
+  return out;
+}
 export function titleInfo(texts = [], boxes = []) {
   const out = { project: [], sheet: [], scale: [], date: [] };
   boxes.forEach(b => {

@@ -1365,7 +1365,11 @@ function jwwGeom(buf){
   let otherN=0;
   if(other.length&&segs.length){const xs=[],ys=[];segs.forEach(s=>{xs.push(s[1],s[3]);ys.push(s[2],s[4])});xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);
     const q=(a,t)=>a[Math.min(a.length-1,Math.max(0,Math.round((a.length-1)*t)))],x0=q(xs,.001),x1=q(xs,.999),y0=q(ys,.001),y1=q(ys,.999),mx=(x1-x0)*.2,my=(y1-y0)*.2;
-    other.forEach(o=>{const s=(o.s||"").trim();if(!s||/^\^@/.test(s))return;const x=o.x1*main,y=o.y1*main;if(x<x0-mx||x>x1+mx||y<y0-my||y>y1+my)return;
+    /* 用紙の上の範囲（どのグループの線も、紙の上の座標のまま）：表題欄・図面名・工事名称は本体の外の用紙のふちにあるので、本体の範囲だけでは落ちていた（kaku_generation で追加・2026-11-18） */
+    const px=[],py=[];J.items.forEach(o=>{if(o.t==="sen"){px.push(o.x1,o.x2);py.push(o.y1,o.y2)}});px.sort((a,b)=>a-b);py.sort((a,b)=>a-b);
+    const pq=(a,t)=>a[Math.min(a.length-1,Math.max(0,Math.round((a.length-1)*t)))],P0=px.length?[pq(px,.001),pq(py,.001),pq(px,.999),pq(py,.999)]:null,pm=P0?Math.max(P0[2]-P0[0],P0[3]-P0[1])*.02:0;
+    const onPaper=o=>!!P0&&o.x1>=P0[0]-pm&&o.x1<=P0[2]+pm&&o.y1>=P0[1]-pm&&o.y1<=P0[3]+pm;
+    other.forEach(o=>{const s=(o.s||"").trim();if(!s||/^\^@/.test(s))return;const x=o.x1*main,y=o.y1*main;if((x<x0-mx||x>x1+mx||y<y0-my||y>y1+my)&&!onPaper(o))return;
       texts.push({t:clean(s),x,y,layer:lname(o.glay,o.lay),other:true});otherN++})}
   return {segs,arcs,texts,insunits:4,scale:main,hidden:hiddenN,otherTexts:otherN,solid:solidN,listErr:!!J.listErr};
 }

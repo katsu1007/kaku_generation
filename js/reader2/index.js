@@ -7,9 +7,9 @@
  *   title { project, sheet, scale, date }：表題欄から読めた工事の名前・図面の名前・縮尺・日付
  *   text { total, joined, parts, kinds }：文字の数、つないだ数、種類ごとの数 */
 import { analyze as analyzeFrame } from './frame.js';
-import { joinTexts, classify, equipment, titleInfo, sheetTitles } from './text.js';
+import { joinTexts, classify, equipment, titleInfo, sheetTitles, labelBoxes } from './text.js';
 
-export const VER = 4;   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
+export const VER = 5;   // 5：表題欄の枠が無い図面でも、見出しのかたまりから工事名称などを読む（現場トイレ）。   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物
@@ -83,7 +83,8 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
     if (r) fxOut.push({ k, t: x.t, why: r.type === 'title' ? '表題欄の中にあります（会社のマークなどの見間違い）' : '表の中にあります（表の線や文字の見間違い）' });
   });
   const equip = equipment(J.texts, A.regions.filter(r => r.type === 'table').map(r => r.box)).slice(0, 40);
-  const title = titleInfo(J.texts, A.regions.filter(r => r.type === 'title').map(r => r.box));
+  const tbx = A.regions.filter(r => r.type === 'title').map(r => r.box);
+  const title = titleInfo(J.texts, tbx.length ? tbx : labelBoxes(J.texts));   // 表題欄の枠が見つからない時は、見出しのかたまりで
   const sheets0 = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
   const skipB = A.regions.filter(r => r.type === 'title' || r.type === 'table').map(r => r.box);
   const sheets = sheets0.flatMap(x => (x.kind !== 'table' && splitBands(x.box, J.texts, segs, skipB)) || [x]);
