@@ -5,6 +5,7 @@
  *   warn＝入れ忘れの可能性が高い ／ tip＝工事の内容によっては要らない（画面で「この案件では要らない」にできる）
  *   key は project.checksOff[key] で消した物を覚えるための名前 */
 import { DEFAULTS, isRoomBased, lineQty, hasCode } from './calc.js';
+import { fixturesInUse } from './sheets.js';
 
 const FIX = {
   toilet: ['便器', ['便器', 'トイレ']], urinal: ['小便器', ['小便器']], counter: ['洗面台', ['洗面']], sink: ['手洗器・流し', ['手洗', '流し']],
@@ -58,8 +59,8 @@ export function workChecks(project, opt = DEFAULTS) {
   }
 
   /* 図面の器具 */
-  const fx = d.fixtures || [], cnt = {};
-  fx.forEach(x => { cnt[x.t] = (cnt[x.t] || 0) + 1; });
+  const fx = d.fixtures || [], cnt = {}, use = fixturesInUse(d);   // 使わない図・表・表題欄の中の器具は数えない
+  fx.forEach((x, k) => { if (use[k]) cnt[x.t] = (cnt[x.t] || 0) + 1; });
   if (cnt.unknown) add('fxUnknown', 'warn', `図面に「判定保留」の器具が ${cnt.unknown} 個あります。図面で種類を決めてください。`, { step: 2 });
   Object.keys(FIX).forEach(t => {
     if (!cnt[t]) return;

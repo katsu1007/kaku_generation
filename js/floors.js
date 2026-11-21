@@ -7,6 +7,7 @@
  * 階ごとに切り上げ直すので、合計は見積もり全体と少しずれることがある（画面と書類に出す）。 */
 import { totals } from './calc.js';
 import { syncDemoLines } from './project.js';
+import { fixturesInUse } from './sheets.js';
 
 export const floorsOf = p => { const o = []; (p.rooms || []).forEach(r => { const f = String(r.lv || '').trim(); if (f && !o.includes(f)) o.push(f); }); return o; };
 
@@ -55,7 +56,7 @@ export function floorBreakdown(p, o) {
   const fxAt = x => floorAt((x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2);
   /* 器具の数（種類ごと・階ごと） */
   const fxc = {}; [...F, null].forEach(f => { fxc[f] = {}; });
-  (d.fixtures || []).forEach(x => { const f = fxAt(x); fxc[f][x.t] = (fxc[f][x.t] || 0) + 1; });
+  const useF = fixturesInUse(d); (d.fixtures || []).forEach((x, k) => { if (!useF[k]) return; const f = fxAt(x); fxc[f][x.t] = (fxc[f][x.t] || 0) + 1; });
   const fixAll = t => [...F, null].reduce((s, f) => s + (fxc[f][t] || 0), 0);
 
   const build = f => {

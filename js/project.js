@@ -8,6 +8,8 @@ import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
+import { sheetsOf, fixturesInUse } from './sheets.js';
+export { sheetsOf, fixturesInUse };
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
 import { planView, roomColor } from './planview.js';
 import { classifyFixtureDisplay, classifyCluster, buildChairContexts, SYM_VERDICTS, SYM_DICT } from './symdict.js';
@@ -308,17 +310,6 @@ function r2lines(d, on) {
 /* 1枚の図面に図がいくつも並んでいる時（1階の今・1階の改修・2階の改修 など）、使う図を選ぶ。
    図は図枠ごと（解析の sheets）。選んだ結果は drawing.sheetUse に図枠の位置をキーにして覚える。
    覚えていない時は、改修の図と今の図が両方ある図面だけ、今の図を使わない（それ以外は全部使う） */
-const sheetKey = (b) => `${Math.round(b[0] * 10)},${Math.round(b[1] * 10)}`;
-export function sheetsOf(d) {
-  const S = ((d && d.analysis && d.analysis.sheets) || []).filter(x => x && x.box);
-  if (S.length < 2) return [];
-  const both = S.some(x => x.kind === 'plan') && S.some(x => x.kind === 'now'), U = d.sheetUse || {};
-  /* 図面の上の図から順に（左右は左から）。同じ名前の図が2つ以上ある時は「（1つ目）」などを付ける */
-  const T = [...S].sort((p, q) => Math.abs(q.box[3] - p.box[3]) > 1 ? q.box[3] - p.box[3] : p.box[0] - q.box[0]);
-  const cnt = {}, seen = {}; T.forEach(x => { cnt[x.title] = (cnt[x.title] || 0) + 1; });
-  return T.map((x, k) => { const key = sheetKey(x.box); const dup = x.title && cnt[x.title] > 1 ? `（${(seen[x.title] = (seen[x.title] || 0) + 1)}つ目）` : '';
-    return { ...x, title: x.title ? x.title + dup : '', key, k, use: key in U ? !!U[key] : !(x.kind === 'table' || (both && x.kind === 'now')) }; });
-}
 /* 使わない図の中の区画（区画の真ん中が図枠の中）に「除外」の印 */
 export function sheetMarks(d) {
   const out = {}, off = sheetsOf(d).filter(x => !x.use);
@@ -532,12 +523,12 @@ function fixSummary(d) {
   const fx = d.fixtures || [];
   if (!fx.length) return d.fixtures ? '<div class="small muted" style="margin-top:8px">器具は見つかりませんでした。</div>' : '';
   const TF = typeFixMap(d);
-  const c = {}; let nCorr = 0, nMark = 0;
-  fx.forEach((x, k) => { const t = shownFixType(TF, x, k); c[t] = (c[t] || 0) + 1; const tf = TF[k]; if (tf) { if (tf.shown) nCorr++; else if (tf.confirm) nMark++; } });
+  const c = {}; let nCorr = 0, nMark = 0, nOff = 0; const use = fixturesInUse(d);
+  fx.forEach((x, k) => { if (!use[k]) { nOff++; return; } const t = shownFixType(TF, x, k); c[t] = (c[t] || 0) + 1; const tf = TF[k]; if (tf) { if (tf.shown) nCorr++; else if (tf.confirm) nMark++; } });
   const note = (nCorr || nMark) ? `<div class="small muted" style="flex-basis:100%">辞書と寸法の照合による${[nCorr ? `表示の補正 ${nCorr} 件` : '', nMark ? `要確認 ${nMark} 件` : ''].filter(Boolean).join('・')}があります（保存してある判定そのものは変えていません。理由は下のシンボル判定の一覧で見られます）</div>` : '';
   return `<div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><b class="small">図面の器具</b>
     ${Object.entries(c).map(([t, n]) => `<span class="pill ${t === 'unknown' ? 'warn' : t === 'other' ? '' : 'info'}">${esc(FIX_NAMES[t] || t)} ${n}</span>`).join('')}
-    <span class="spacer"></span><button class="btn sm primary" data-act="fixLines">${icon('list')}器具を明細に入れる</button>${note}</div>`;
+    <span class="spacer"></span><button class="btn sm primary" data-act="fixLines">${icon('list')}器具を明細に入れる</button>${note}${nOff ? `<div class="small muted" style="flex-basis:100%">使わない図・表・表題欄の中の器具 ${nOff} 個は数えていません（図の印で変えられます）</div>` : ''}</div>`;
 }
 
 /* ゾーン分け（部屋の候補）：色はゾーンの並び順で決める */
@@ -637,8 +628,8 @@ function fixLinesDialog(p, after) {
   const fx = (p.drawing && p.drawing.fixtures) || [];
   /* 種類はタイプ補正後の表示で数える（保存してある判定は変えない。js/typefix.js） */
   const TF = typeFixMap(p.drawing);
-  const c = {}; const corrIn = {}; let nCorr = 0;
-  fx.forEach((x, k) => { const t = shownFixType(TF, x, k); c[t] = (c[t] || 0) + 1; if (TF[k] && TF[k].shown) { corrIn[t] = (corrIn[t] || 0) + 1; nCorr++; } });
+  const c = {}; const corrIn = {}; let nCorr = 0; const use = fixturesInUse(p.drawing); let nOff = 0;
+  fx.forEach((x, k) => { if (!use[k]) { nOff++; return; } const t = shownFixType(TF, x, k); c[t] = (c[t] || 0) + 1; if (TF[k] && TF[k].shown) { corrIn[t] = (corrIn[t] || 0) + 1; nCorr++; } });
   const items = masterItems();
   const types = Object.keys(c).filter(t => FIX_ITEMS[t]);
   const opts2 = (t, kind, def) => {
@@ -652,7 +643,7 @@ function fixLinesDialog(p, after) {
   const codeOfType = t => modelFor(t, eq);
   const m = modal({
     title: '図面の器具を明細に入れる', wide: true,
-    body: `<p class="small muted" style="margin-top:0">種類ごとに、入れる品目と数を確かめてください。前に入れた器具の行は入れ直します。${skip ? `「判定保留」「器具ではない」の ${skip} 個は入れません。` : ''}${nCorr ? `種類は辞書と寸法で照合した補正後の表示です（補正 ${nCorr} 件。理由は図面タブのシンボル判定の一覧で見られます）。` : ''}</p>
+    body: `<p class="small muted" style="margin-top:0">種類ごとに、入れる品目と数を確かめてください。前に入れた器具の行は入れ直します。${skip ? `「判定保留」「器具ではない」の ${skip} 個は入れません。` : ''}${nOff ? `使わない図・表・表題欄の中の ${nOff} 個は入れません。` : ''}${nCorr ? `種類は辞書と寸法で照合した補正後の表示です（補正 ${nCorr} 件。理由は図面タブのシンボル判定の一覧で見られます）。` : ''}</p>
       <div class="grid" style="gap:10px">${types.map(t => `<div class="card" style="padding:12px" data-ft="${t}"><div class="row" style="margin-bottom:8px"><b>${esc(FIX_NAMES[t])}</b><span class="pill info">図面で ${c[t]} 個</span>${corrIn[t] ? `<span class="pill warn">うち補正 ${corrIn[t]} 件</span>` : ''}${codeOfType(t) ? `<span class="pill ok">図面の品番 ${esc(codeOfType(t))}</span>` : ''}</div>
         <div class="grid g3"><label class="f">本体<select class="in" data-k="body">${opts2(t, 'mat', FIX_ITEMS[t][0])}</select></label>
         <label class="f">取付の手間<select class="in" data-k="labor">${opts2(t, 'labor', FIX_ITEMS[t][1])}</select></label>
