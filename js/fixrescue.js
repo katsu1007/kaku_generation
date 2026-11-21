@@ -85,6 +85,15 @@ function KF_build(ents, P, roles) {
   /* 扉と同じ層では、0.9m以上のただの線も壁として外す（器具はポリラインや曲線、短い線で描かれている） */
   const longMix = o => o.k === 'line' && mixLy.has(o.ly) && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .9;
   const C = K.filter((o, i) => !wl.has(i) && !longMix(o) && !(o.k === 'line' && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) > 3) && !(o.k === 'arc' && o.r >= .45));
+  /* 四角の中の×（天井点検口・吹抜の印）は器具ではない：中点で交わる同じ長さの斜めの線2本と、その四角の辺を外す
+     （小便器の上の点検口とつながって、小便器が洗面台の大きさに見えていた。2026-11-22） */
+  { const D = C.filter(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .2 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .2), drop = new Set();
+    for (let i = 0; i < D.length; i++) for (let j = i + 1; j < D.length; j++) { const a = D[i], c = D[j], la = Math.hypot(a.pts[1][0] - a.pts[0][0], a.pts[1][1] - a.pts[0][1]), lc = Math.hypot(c.pts[1][0] - c.pts[0][0], c.pts[1][1] - c.pts[0][1]);
+      if (la > 1.4 || Math.abs(la - lc) > .02) continue; const ma = [(a.pts[0][0] + a.pts[1][0]) / 2, (a.pts[0][1] + a.pts[1][1]) / 2], mc = [(c.pts[0][0] + c.pts[1][0]) / 2, (c.pts[0][1] + c.pts[1][1]) / 2];
+      if (Math.hypot(ma[0] - mc[0], ma[1] - mc[1]) > .01) continue; const B = [Math.min(a.b[0], c.b[0]), Math.min(a.b[1], c.b[1]), Math.max(a.b[2], c.b[2]), Math.max(a.b[3], c.b[3])];
+      if (Math.abs(a.b[0] - c.b[0]) > .01 || Math.abs(a.b[2] - c.b[2]) > .01) continue;
+      drop.add(a); drop.add(c); C.forEach(o => { if (o.k === 'line' && !o.cv && o.b[0] >= B[0] - .01 && o.b[2] <= B[2] + .01 && o.b[1] >= B[1] - .01 && o.b[3] <= B[3] + .01 && ((o.b[3] - o.b[1] < .005 && (Math.abs(o.b[1] - B[1]) < .01 || Math.abs(o.b[1] - B[3]) < .01)) || (o.b[2] - o.b[0] < .005 && (Math.abs(o.b[0] - B[0]) < .01 || Math.abs(o.b[0] - B[2]) < .01)))) drop.add(o); }); }
+    if (drop.size) for (let k = C.length - 1; k >= 0; k--) if (drop.has(C[k])) C.splice(k, 1); }
   const fx = []; let n = 0;
   const group = (C, depth) => { const par = C.map((_, i) => i), f = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; }; const ord = C.map((_, i) => i).sort((a, b) => C[a].b[0] - C[b].b[0]), pad = .015;
     for (let a = 0; a < ord.length; a++) { const i = ord[a], A = C[i].b; for (let q = a + 1; q < ord.length; q++) { const j = ord[q], B = C[j].b; if (B[0] > A[2] + pad) break; if (C[i].ly !== C[j].ly || B[1] > A[3] + pad || A[1] > B[3] + pad) continue; par[f(i)] = f(j); } }
@@ -94,9 +103,23 @@ function KF_build(ents, P, roles) {
     for (let i = GS.length - 1; i >= 0; i--) { const a = GS[i].b; const k = GS.findIndex((o, j) => j < i && o.g[0].ly === GS[i].g[0].ly && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) <= 3.6 && o.b[0] <= a[0] && o.b[1] <= a[1] && o.b[2] >= a[2] && o.b[3] >= a[3]); if (k >= 0) { GS[k].g.push(...GS[i].g); GS.splice(i, 1); } }
     const mk = g => { let b = [Infinity, Infinity, -Infinity, -Infinity], cv = 0, circ = 0, burn = 0; g.forEach(o => { if (o.circ && o.r >= .05 && o.r <= .14) burn++; b = [Math.min(b[0], o.b[0]), Math.min(b[1], o.b[1]), Math.max(b[2], o.b[2]), Math.max(b[3], o.b[3])]; cv += o.cv; circ += o.circ; });
       const rect = !cv && KF_SAN.test(g[0].ly || '') && g.length >= 2, rb = rect ? KF_rbowls(g) : 0; if (rect) { burn = g.filter(o => o.cl && Math.abs((o.b[2] - o.b[0]) - (o.b[3] - o.b[1])) < .03 && (o.b[2] - o.b[0]) >= .12 && (o.b[2] - o.b[0]) <= .3).length; }
-      const bowl = rect ? rb : KF_bowls(g), tub = g.reduce((m, o) => o.cv ? Math.max(m, o.b[2] - o.b[0], o.b[3] - o.b[1]) : m, 0), w = b[2] - b[0], h = b[3] - b[1], t0 = rect && !(rb || g.some(o => o.cl && o.pts.length >= 7)) ? null : KF_guess(w, h, rect ? 1 : cv, circ, g.length, burn, bowl, tub), t = (g[0].resc && !cv && !circ) ? null : t0;
-      return { b, cv, circ, w, h, t, n: g.length, ly: g[0].ly, bowl }; };
-    const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl });
+      const bowl = rect ? rb : KF_bowls(g), tub = g.reduce((m, o) => o.cv ? Math.max(m, o.b[2] - o.b[0], o.b[3] - o.b[1]) : m, 0), w = b[2] - b[0], h = b[3] - b[1], t0 = rect && !(rb || g.some(o => o.cl && o.pts.length >= 7)) ? null : KF_guess(w, h, rect ? 1 : cv, circ, g.length, burn, bowl, tub);
+      let t = (g[0].resc && !cv && !circ) ? null : t0;
+      /* 形で見分け直す（救済の図面だけ。2026-11-22） */
+      const s0 = Math.min(w, h), l0 = Math.max(w, h);
+      /* メーカーの細かい図の洋便器（線が数百本）：便座・タンクの形で 45〜65cm×55〜80cm、丸（排水口・水栓）はほとんど無い */
+      let det = 0, jp = 0;
+      if (g.length >= 300 && cv >= 150 && s0 >= .45 && s0 <= .65 && l0 >= .55 && l0 <= .8 && circ <= 1 && t !== 'urinal') { t = 'toilet'; det = 1; }
+      /* 和便器：細長い楕円（短い方 20〜36cm・長い方 50〜80cm・長さが幅の1.9倍以上）。丸い物がくっついて洗面台に見える時も、その形が中心なら便器 */
+      else if (!t || t === 'counter' || t === 'sink') { const jb = KF_jbowl(g); if (jb) { t = 'toilet'; b = jb.b; jp = 1; } }
+      /* 断面の斜線（短い平行な斜めの線だけ）は曲線ではない：扉の枠・壁の切り口を便器・手洗いと見ない */
+      if (t && t !== 'counter' && !g.some(o => o.cv && o.k !== 'line')) { const A = {}; let nl = 0; g.forEach(o => { if (o.k !== 'line' || !o.cv) return; nl++; const a = Math.round(((Math.atan2(o.pts[1][1] - o.pts[0][1], o.pts[1][0] - o.pts[0][0]) * 180 / Math.PI + 180) % 180) / 5); A[a] = (A[a] || 0) + 1; });
+        if (nl >= 4 && Math.max(...Object.values(A)) >= nl * .8) t = null; }
+      /* 置き型の洗面器：半円・楕円の鉢（40〜60cm×50〜75cm）に水栓・排水口の丸が2つ以上 */
+      if (!t && circ >= 2 && bowl >= 1 && cv >= 10 && s0 >= .4 && s0 <= .6 && l0 >= .5 && l0 <= .75) t = 'counter';
+      const diag = g.some(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .1 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .1 && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .2) ? 1 : 0;
+      return { b, cv, circ, w: b[2] - b[0], h: b[3] - b[1], t, n: g.length, ly: g[0].ly, bowl, det, jp, diag }; };
+    const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl, det: r.det || 0, row: r.row || 0, jp: r.jp || 0, diag: r.diag || 0 });
     GS.map(o => o.g).forEach(g => { const r = mk(g), w = r.w, h = r.h;
       if (!r.t) {
         const lg = KF_lshape(g, r.b); if (lg) { const B = r.b, band = l => ({ S: [B[0], B[1], B[2], B[1] + l.D], N: [B[0], B[3] - l.D, B[2], B[3]], W: [B[0], B[1], B[0] + l.D, B[3]], E: [B[2] - l.D, B[1], B[2], B[3]] })[l.sd], bs = lg.map(band);
@@ -104,6 +127,15 @@ function KF_build(ents, P, roles) {
           const inner = g.filter(o => !inB(o) && o.cv); const sub = g.filter(inB);
           const bowl = inner.length ? 0 : KF_bowls(sub), burn = inner.length ? 0 : sub.filter(o => o.circ && o.r >= .05 && o.r <= .14).length, len = lg[0].L + lg[1].L + Math.max(lg[0].D, lg[1].D);
           const t = burn >= 2 || bowl >= 2 && len >= 3 ? 'kitchen' : bowl >= 1 ? 'counter' : null; if (t) { const lb = lg.slice().sort((p, q) => q.L - p.L)[0]; fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t, ot: t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: bowl, L: lg.map(l => l.sd).join(''), back: lb.sd, bd: 0 }); return; } }
+        /* 角の丸い四角の槽（SK・カウンターの角鉢）：線の端どうしでつながった閉じた形。仕切りや扉の線と箱が重なって
+           大きいかたまりになっていても、槽だけを取り出す。同じ大きさの槽が並ぶ所はカウンター1台、1つだけで排水口の丸がある物は SK */
+        if (depth < 2 && Math.max(w, h) > .9) { const tb = KF_tubs(g); if (tb.length) { const used = new Set();
+          tb.forEach(T => { if (used.has(T)) return; const row = tb.filter(q => !used.has(q) && KF_sameRow(T, q, tb)); row.forEach(q => used.add(q));
+            const B = row.reduce((a, q) => [Math.min(a[0], q.b[0]), Math.min(a[1], q.b[1]), Math.max(a[2], q.b[2]), Math.max(a[3], q.b[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+            const t = row.length >= 2 ? 'counter' : (T.drain && Math.min(T.b[2] - T.b[0], T.b[3] - T.b[1]) >= .3 ? 'slop' : null); if (!t) return;
+            put({ b: B, t, cv: row.reduce((a, q) => a + q.cv, 0), circ: row.reduce((a, q) => a + (q.drain ? 1 : 0), 0), n: row.reduce((a, q) => a + q.items.length, 0), ly: g[0].ly, bowl: row.length, row: row.length }); });
+          const rest = g.filter(o => !tb.some(T => used.has(T) && o.b[0] >= T.b[0] - .01 && o.b[1] >= T.b[1] - .01 && o.b[2] <= T.b[2] + .01 && o.b[3] <= T.b[3] + .01));
+          if (rest.length < g.length) { if (rest.length) group(rest, depth + 1); return; } } }
         let rest = g, got = false; g.filter(o => o.cl && (o.b[2] - o.b[0]) >= .25 && (o.b[3] - o.b[1]) >= .25 && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) <= 3.6).sort((p, q) => (q.b[2] - q.b[0]) * (q.b[3] - q.b[1]) - (p.b[2] - p.b[0]) * (p.b[3] - p.b[1])).forEach(o => {
           if (!rest.includes(o)) return; const sub = rest.filter(q => q.b[0] >= o.b[0] - .01 && q.b[1] >= o.b[1] - .01 && q.b[2] <= o.b[2] + .01 && q.b[3] <= o.b[3] + .01); if (sub.length === g.length || sub.length < 3) return;
           const A = (o.b[2] - o.b[0]) * (o.b[3] - o.b[1]); if (sub.some(q => q !== o && q.cl && (q.b[2] - q.b[0]) * (q.b[3] - q.b[1]) > A * .3)) return; const r2 = mk(sub); if (r2.t) { put(r2); rest = rest.filter(q => !sub.includes(q)); got = true; } });
@@ -114,6 +146,8 @@ function KF_build(ents, P, roles) {
           const rest2 = g.filter(o => !big(o)); if (rest2.length && rest2.length < g.length) group(rest2, depth + 1); } return; }
       put(r); }); };
   group(C, 0);
+  /* 細かい図の洋便器に重なる別のかたまり（便器の楕円・便座のふた）は同じ便器（2026-11-22） */
+  fx.filter(x => x.det).forEach(x => { for (let k = fx.length - 1; k >= 0; k--) { const o = fx[k]; if (o === x || o.det) continue; const ov = KF_ov(o.b, x.b); if (ov > .3) fx.splice(k, 1); } });
   /* ほかの器具の中に入っている物（カウンターの鉢など）は外す */
   for (let k = fx.length - 1; k >= 0; k--) { const a = fx[k].b; if (fx.some((o, j) => j !== k && o.b[0] <= a[0] + .01 && o.b[1] <= a[1] + .01 && o.b[2] >= a[2] - .01 && o.b[3] >= a[3] - .01 && (o.b[2] - o.b[0]) * (o.b[3] - o.b[1]) > (a[2] - a[0]) * (a[3] - a[1]))) fx.splice(k, 1); }
   fx.forEach(x => KF_orient(x, P));
@@ -123,19 +157,61 @@ function KF_build(ents, P, roles) {
     if (x.t === 'sink' && w >= .3 && w <= .45 && d >= .28 && d <= .47 && d >= .8 * w && d <= 1.3 * w) x.uc = 1; });
   /* 手洗器・小便器は壁に付いている物だけ（椅子・丸テーブルなどを外す） */
   for (let k = fx.length - 1; k >= 0; k--) if ((fx[k].t === 'sink' || fx[k].t === 'unknown') && !(fx[k].back && fx[k].bd <= .1)) fx.splice(k, 1);
+  /* 和便器のロータンク：ブースの隅の三角（斜めの線のある 55cm までの小さい物）で、和便器から50cm以内の物は便器の一部。
+     手洗い・便器として数えない（三井屋の現況図で、かつに教わった。2026-11-22） */
+  const JP = fx.filter(x => x.jp); if (JP.length) for (let k = fx.length - 1; k >= 0; k--) { const x = fx[k]; if (x.jp || x.det || !x.diag || !(x.t === 'sink' || x.t === 'toilet' || x.t === 'unknown')) continue;
+    if (Math.max(x.b[2] - x.b[0], x.b[3] - x.b[1]) > .55) continue;
+    if (JP.some(j => Math.max(j.b[0] - x.b[2], x.b[0] - j.b[2], 0) <= .5 && Math.max(j.b[1] - x.b[3], x.b[1] - j.b[3], 0) <= .5)) fx.splice(k, 1); }
   KF_urinals(fx);
   /* 1台だけの小便器の形の物は、部屋の名前が男子便所なら小便器 */
   fx.forEach(x => { if (!x.uc || x.t !== 'sink') return; const c = [(x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2]; const f = P.faces.find(f => pip(c[0], c[1], f.poly)); if (f && /男子|男性|紳士|MEN|小便/i.test(f.name || '')) x.t = x.ot = 'urinal'; });
   return fx;
 }
+/* 2つの四角の重なり（小さい方に対する割合） */
+function KF_ov(a, b) { const ix = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])), iy = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1])); const m = Math.min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1])); return m > 0 ? ix * iy / m : 0; }
+/* 曲線のかたまり（鉢・便器の形）の外形。KF_bowls と同じつなぎ方で、85cm までの物 */
+function KF_curveBoxes(g) { const C = g.filter(o => !o.circ && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) <= .85); if (!C.some(o => o.cv) || C.length > 3000) return [];
+  const B = C.map(o => ({ b: [...o.b], cv: o.cv })); B.sort((p, q) => p.b[0] - q.b[0]); let ch = true, it = 0;
+  while (ch && it++ < 30) { ch = false; for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) { const a = B[i].b, c = B[j].b; if (c[0] > a[2] + .01) break; if (c[1] <= a[3] + .01 && a[1] <= c[3] + .01) { const nb = [Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.max(a[2], c[2]), Math.max(a[3], c[3])]; if (Math.max(nb[2] - nb[0], nb[3] - nb[1]) > .85) continue; B[i].b = nb; B[i].cv += B[j].cv; B.splice(j, 1); ch = true; j--; } } }
+  return B.filter(o => o.cv); }
+/* 和便器の形：細長い楕円の曲線のかたまりが1つで、かたまり全体の曲線の半分以上を占める */
+function KF_jbowl(g) { const cvAll = g.reduce((a, o) => a + o.cv, 0); if (cvAll < 8) return null;
+  const K = KF_curveBoxes(g).filter(o => { const s = Math.min(o.b[2] - o.b[0], o.b[3] - o.b[1]), l = Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]); return s >= .2 && s <= .36 && l >= .5 && l <= .8 && l >= 1.9 * s && o.cv >= 8; });
+  if (K.length !== 1 || K[0].cv < cvAll * .5) return null; return K[0]; }
+/* 角の丸い四角の槽：線・円弧の端どうしが付いて閉じた形（端は全部2本以上が集まる）。角の曲線が2つ以上（手前の角だけ丸い鉢もある）、直線も2本以上。
+   30〜75cm×35〜95cm、長さが幅の1.6倍まで。槽の中にもう1つ槽がある時（二重の縁）は外の方。中に小さい丸（半径6cm以下）があれば排水口 */
+function KF_tubs(g) { const it = g.filter(o => !o.circ && o.pts && o.pts.length >= 2 && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) <= .95); if (it.length > 4000) return [];
+  const key = p => Math.round(p[0] / .006) + ',' + Math.round(p[1] / .006), par = it.map((_, i) => i), f = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+  const at = {}; it.forEach((o, i) => { [o.pts[0], o.pts[o.pts.length - 1]].forEach(p => { const k = key(p); (at[k] = at[k] || []).push(i); }); });
+  Object.values(at).forEach(l => { for (let k = 1; k < l.length; k++) par[f(l[k])] = f(l[0]); });
+  const C = {}; it.forEach((o, i) => { (C[f(i)] = C[f(i)] || []).push(o); });
+  let T = Object.values(C).map(items => { const b = items.reduce((a, o) => [Math.min(a[0], o.b[0]), Math.min(a[1], o.b[1]), Math.max(a[2], o.b[2]), Math.max(a[3], o.b[3])], [Infinity, Infinity, -Infinity, -Infinity]);
+    const w = b[2] - b[0], h = b[3] - b[1], s = Math.min(w, h), l = Math.max(w, h); if (s < .3 || s > .75 || l < .35 || l > .95 || l > 1.6 * s) return null;
+    const cv = items.filter(o => o.cv).length, st = items.filter(o => !o.cv).length; if (cv < 2 || st < 2) return null;
+    const cnt = {}; items.forEach(o => { [o.pts[0], o.pts[o.pts.length - 1]].forEach(p => { const k = key(p); cnt[k] = (cnt[k] || 0) + 1; }); });
+    if (Object.values(cnt).some(v => v < 2)) return null;
+    return { b, items, cv }; }).filter(Boolean);
+  T = T.filter(o => !T.some(q => q !== o && q.b[0] <= o.b[0] + .005 && q.b[1] <= o.b[1] + .005 && q.b[2] >= o.b[2] - .005 && q.b[3] >= o.b[3] - .005 && (q.b[2] - q.b[0]) * (q.b[3] - q.b[1]) > (o.b[2] - o.b[0]) * (o.b[3] - o.b[1])));
+  T.forEach(o => { o.drain = g.some(q => { if (q.k !== 'circle') return false; const d = Math.max(q.b[2] - q.b[0], q.b[3] - q.b[1]), cx = (q.b[0] + q.b[2]) / 2, cy = (q.b[1] + q.b[3]) / 2; return d > .02 && d <= .12 && cx > o.b[0] && cx < o.b[2] && cy > o.b[1] && cy < o.b[3]; }); });
+  return T; }
+/* 同じ大きさ（差5cm以内）の槽が横か縦に揃って並ぶ（すき間60cm以内でつながる）か */
+function KF_sameRow(a, b, all) { if (a === b) return true; const sz = o => [o.b[2] - o.b[0], o.b[3] - o.b[1]];
+  const ok = (p, q) => { const A = sz(p), B = sz(q); if (Math.abs(A[0] - B[0]) > .05 || Math.abs(A[1] - B[1]) > .05) return false;
+    const hor = Math.abs(p.b[1] - q.b[1]) < .03 && Math.abs(p.b[3] - q.b[3]) < .03, ver = Math.abs(p.b[0] - q.b[0]) < .03 && Math.abs(p.b[2] - q.b[2]) < .03;
+    const gap = hor ? Math.max(p.b[0], q.b[0]) - Math.min(p.b[2], q.b[2]) : ver ? Math.max(p.b[1], q.b[1]) - Math.min(p.b[3], q.b[3]) : Infinity; return gap >= -.01 && gap <= .6; };
+  const seen = new Set([a]), st = [a]; while (st.length) { const p = st.pop(); for (const q of all) if (!seen.has(q) && ok(p, q)) { if (q === b) return true; seen.add(q); st.push(q); } } return false; }
 /* 同じ大きさの小さい器具が並んでいたら小便器（NEXT の KF_urinals の写し） */
 function KF_urinals(fx) {
   const T = fx.filter(x => x.t === 'toilet' && x.back && !x.v); T.forEach(a => { const hor = a.back === 'N' || a.back === 'S', pa = KF_backPos(a), wa = a.b[2] - a.b[0], ha = a.b[3] - a.b[1];
     const row = T.filter(b => b.back === a.back && Math.abs(KF_backPos(b) - pa) < .06 && Math.abs((b.b[2] - b.b[0]) - wa) < .03 && Math.abs((b.b[3] - b.b[1]) - ha) < .03); if (row.length < 2) return;
-    const c = row.map(b => hor ? (b.b[0] + b.b[2]) / 2 : (b.b[1] + b.b[3]) / 2).sort((p, q) => p - q); const gp = c.slice(1).map((v, i) => v - c[i]); if (Math.max(...gp) <= .85) row.forEach(b => { b.t = b.ot = 'urinal'; }); });
+    const c = row.map(b => hor ? (b.b[0] + b.b[2]) / 2 : (b.b[1] + b.b[3]) / 2).sort((p, q) => p - q); const gp = c.slice(1).map((v, i) => v - c[i]); if (Math.max(...gp) <= 1.0) row.forEach(b => { b.t = b.ot = 'urinal'; }); });
   const U = fx.filter(x => x.uc && x.t === 'sink'); U.forEach(a => { const hor = a.back === 'N' || a.back === 'S', pa = KF_backPos(a);
     const row = U.filter(b => b.back === a.back && Math.abs(KF_backPos(b) - pa) < .06); if (row.length < 2) return; const c = row.map(b => hor ? (b.b[0] + b.b[2]) / 2 : (b.b[1] + b.b[3]) / 2).sort((p, q) => p - q);
     if (c.slice(1).every((v, i) => v - c[i] <= 1.2)) row.forEach(b => { b.t = b.ot = 'urinal'; }); });
+  /* 小便器の列の続き（同じ壁・同じ幅・1m以内）にある手洗いの大きさの物も小便器（上の点検口の線を外した時に形が欠けた物など） */
+  fx.filter(x => x.t === 'urinal' && x.back).forEach(u => { const hor = u.back === 'N' || u.back === 'S', wu = hor ? u.b[2] - u.b[0] : u.b[3] - u.b[1], cu = hor ? (u.b[0] + u.b[2]) / 2 : (u.b[1] + u.b[3]) / 2;
+    fx.forEach(x => { if (x.t !== 'sink' || x.back !== u.back || Math.abs(KF_backPos(x) - KF_backPos(u)) >= .15) return; const wx = hor ? x.b[2] - x.b[0] : x.b[3] - x.b[1], cx = hor ? (x.b[0] + x.b[2]) / 2 : (x.b[1] + x.b[3]) / 2;
+      if (Math.abs(wx - wu) <= .05 && Math.abs(cx - cu) <= 1.0) x.t = x.ot = 'urinal'; }); });
   const S = fx.filter(x => x.t === 'sink'); const used = new Set();
   S.forEach(a => { if (used.has(a)) return; const w = a.b[2] - a.b[0], h = a.b[3] - a.b[1]; [true, false].forEach(hor => { if (used.has(a)) return;
     const row = S.filter(b => !used.has(b) && Math.abs((b.b[2] - b.b[0]) - w) < .03 && Math.abs((b.b[3] - b.b[1]) - h) < .03 && Math.abs(hor ? b.b[1] - a.b[1] : b.b[0] - a.b[0]) < .03);
