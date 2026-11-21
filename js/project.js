@@ -1128,12 +1128,20 @@ function stepRooms(ctx) {
       return;
     }
     const own = owner();
+    /* 床を拾った所・まだの所の数と広さ（図面の斜線と同じ数え方。図枠の内側・除外・保留・隣にまとめた区画は数えない） */
+    const pickedRow = () => { const d = p.drawing, F = d.plan.faces, mk = faceMarks() || {}, j = d.faceJoin || {}, off = d.faceOff || {};
+      const pin = (x, y, P) => { let c = false; for (let i = 0, k = P.length - 1; i < P.length; k = i++) { if (((P[i][1] > y) !== (P[k][1] > y)) && x < (P[k][0] - P[i][0]) * (y - P[i][1]) / (P[k][1] - P[i][1]) + P[i][0]) c = !c; } return c; };
+      let nd = 0, ad = 0, nt = 0, at = 0;
+      F.forEach(f => { if (own.has(f.i)) { nd++; ad += f.area || 0; return; } if (mk[f.i] || j[f.i] != null || off[f.i] || !f.poly || f.poly.length < 3) return;
+        let k = 0; for (const o of F) { if (o !== f && o.area < f.area && pin(o.cx, o.cy, f.poly) && ++k >= 2) break; } if (k >= 2) return; nt++; at += f.area || 0; });
+      const r2 = v => Math.round(v * 100) / 100;
+      return `<span class="small" style="width:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--accent);opacity:.5;vertical-align:-2px"></span> 部屋にした所 <b>${nd}</b>区画・${r2(ad)}㎡</span><span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:1.5px dashed #ff8a3d;background:repeating-linear-gradient(45deg,rgba(255,138,61,.5) 0 2px,transparent 2px 5px);vertical-align:-2px"></span> まだの所 <b>${nt}</b>区画・${r2(at)}㎡</span></span>`; };
     const fl = body.querySelector('#dwgFaces');
     if (fl) fl.innerHTML = [...p.drawing.plan.faces].sort((a, b) => a.no - b.no).map(f => `<button data-face="${f.i}" class="${sel.has(f.i) ? 'on' : ''} ${own.has(f.i) && !sel.has(f.i) ? 'used' : ''}">区画${f.no}${f.name ? ' ' + esc(f.name) : ''} ${Math.round(f.area * 100) / 100}㎡</button>`).join('');
     const bar = body.querySelector('#dwgBar');
     if (bar) bar.innerHTML = sel.size
       ? `<span class="small"><b>${sel.size} 区画</b>を選んでいます${selGeo ? `（床 ${Math.round((selGeo.area - (selGeo.holes && !holesOn ? selGeo.holes.area : 0)) * 100) / 100}㎡）` : ''}。続けてタップで足す・もう一度で外す。</span>${sel.size === 1 && (p.drawing.faceFix || {})[[...sel][0]] ? '<span class="pill info">辺を手直し済み</span>' : ''}${selGeo && selGeo.holes ? `<label class="row small" style="gap:6px;width:100%;cursor:pointer"><input type="checkbox" data-holes ${holesOn ? 'checked' : ''} style="width:20px;height:20px">中の机・棚などで囲まれた所 ${selGeo.holes.area}㎡ も床に入れる（図面で橙に塗った所）</label>` : ''}<span class="spacer"></span><button class="btn primary" data-act="mkOne">${icon('check')}終了：1部屋にする</button>${sel.size > 1 ? `<button class="btn" data-act="mkEach">1区画ずつ部屋にする</button>` : ''}<button class="btn" data-act="selSame" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button>${[...sel].some(i => own.has(i)) ? `<button class="btn" data-act="unassign">部屋から外す</button>` : ''}<button class="btn" data-act="faceJoin" title="棚や机で割れた小さい区画を、接している長さがいちばん長い隣の区画（部屋）の床に入れます">隣の部屋にまとめる</button><button class="btn" data-act="faceOff" title="部屋ではない所（表・家具・外など）を、灰色にして数えないようにします">区画ではない</button>${sel.size === 1 ? `<button class="btn" data-act="faceFix" title="壁の段差などを区画の辺が読み取れていない時、この区画の辺だけを、図面の実線に沿うように直します（直せる所が無い時は、何も変わりません）">辺を実線に直す</button>` : ''}${[...sel].some(i => (p.drawing.faceOff || {})[i] || (p.drawing.faceJoin || {})[i] != null || (p.drawing.faceFix || {})[i]) ? `<button class="btn" data-act="faceBack">元に戻す</button>` : ''}<button class="btn ghost" data-act="selClear">選ぶのをやめる</button>`
-      : `<span class="small muted">部屋にする区画を順番にタップして、選び終わったら「終了」。そのまま床・壁・天井の仕上げを決められます。</span><span class="spacer"></span><button class="btn sm" data-act="selRest">まだ部屋にしていない区画を全部選ぶ</button>`;
+      : `${pickedRow()}<span class="small muted">部屋にする区画を順番にタップして、選び終わったら「終了」。そのまま床・壁・天井の仕上げを決められます。</span><span class="spacer"></span><button class="btn sm" data-act="selRest">まだ部屋にしていない区画を全部選ぶ</button>`;
   };
   /* コンセントを器具に合わせて置く（自分で置いた物は残す）。「反対側へ」にした器具は器具の真ん中で反対側 */
   const placeOutlets = () => {
@@ -1280,7 +1288,7 @@ function stepRooms(ctx) {
     if (p.drawing && p.drawing.plan) {
       view = planView(body.querySelector('#dwgView'), p.drawing.plan, {
         keep: keepV,
-        selected: () => sel, owner, fixtures: fxDisplayList, symbols: () => symList(p.drawing).map(s => ({ b: s.b, color: SYM_VERDICTS[s.verdict].color, label: s.verdict === 'hit' ? s.category : s.verdict === 'near' ? '類似' : '不明', on: s.k === symSel })), roomJudge: () => roomJudgeEntries(p.drawing), zones: () => zoneEntries(p.drawing, zoneSel), bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
+        selected: () => sel, owner, unpicked: () => (mode === 'room' ? (f => { const d = p.drawing; return (d.faceJoin || {})[f.i] == null && !(d.faceOff || {})[f.i]; }) : null), fixtures: fxDisplayList, symbols: () => symList(p.drawing).map(s => ({ b: s.b, color: SYM_VERDICTS[s.verdict].color, label: s.verdict === 'hit' ? s.category : s.verdict === 'near' ? '類似' : '不明', on: s.k === symSel })), roomJudge: () => roomJudgeEntries(p.drawing), zones: () => zoneEntries(p.drawing, zoneSel), bg: p.drawing.bg && p.sketch && p.sketch.img ? { ...p.sketch.img, s: p.drawing.bg.s } : null, fixSel: () => (mode === 'fix' ? fsel : -1), mode: () => mode, fixG: p.drawing.fixG || '', fixGd: p.drawing.fixGd || '',
         extraTools: `<button class="iconbtn" data-act="dwgFs" title="${dwgFs ? '全画面をやめる' : '全画面で編集する'}" aria-label="${dwgFs ? '全画面をやめる' : '全画面で編集する'}">${icon(dwgFs ? 'shrink' : 'full')}</button>`,
         marks: () => faceMarks(),
         /* 部屋にした区画は、区画ごとの番号を消して、部屋に1つだけ名前と広さを出す（かつ「まとめたら細かい区画の数字消して真ん中にまとめた数字に」） */

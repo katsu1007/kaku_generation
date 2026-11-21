@@ -138,11 +138,21 @@ export function planView(box, plan, opt = {}) {
     /* 新しい読み取りの印（図枠・表）：除外は灰色、保留は点線の枠。選んだ時・部屋にした時は、いつもの色が先 */
     const marks = (opt.marks && opt.marks()) || null, mk = f => (marks && (marks[f.i] || marks[String(f.i)])) || null;
     /* 大きい区画を先に描いて、小さい区画を上に重ねる（大きい区画の下に小さい区画が隠れて押せなくならないように） */
-    svg.querySelector('.faces').innerHTML = [...plan.faces].sort((a, b) => b.area - a.area).map(f => {
+    /* 床を拾った所（部屋にした区画）と、まだの所の見分け（2026-11-22）：部屋を作る時だけ、まだ部屋にしていない区画に
+       橙の斜線と点線のふちを付ける。部屋にした区画は部屋の色を濃くして、ふちも部屋の色。図枠の内側（ほかの区画を2つ以上含む区画）・
+       除外・保留・隣にまとめた区画（opt.unpicked で外す）には付けない */
+    const unp = opt.unpicked ? opt.unpicked() : null, pinP = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { if (((P[i][1] > y) !== (P[j][1] > y)) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c; } return c; };
+    const wrapsP = z => { let k = 0; for (const o of plan.faces) { if (o !== z && o.area < z.area && o.poly && pinP(o.cx, o.cy, z.poly) && ++k >= 2) return true; } return false; };
+    const hatch = unp ? `<defs><pattern id="${gid}h" patternUnits="userSpaceOnUse" width="${lw * 9}" height="${lw * 9}" patternTransform="rotate(45)"><rect width="${lw * 9}" height="${lw * 9}" fill="#ff8a3d" fill-opacity=".07"/><line x1="0" y1="0" x2="0" y2="${lw * 9}" stroke="#ff8a3d" stroke-width="${lw * 1.6}" stroke-opacity=".55"/></pattern></defs>` : '';
+    svg.querySelector('.faces').innerHTML = hatch + [...plan.faces].sort((a, b) => b.area - a.area).map(f => {
       const o = owner.get(f.i), s = sel.has(f.i), m = !s && o == null ? mk(f) : null;
-      const fill = s ? 'var(--accent)' : o != null ? roomColor(o) : m && m.s === 'out' && !m.hide ? '#8a93a0' : 'transparent';
-      const op = s ? 0.45 : o != null ? 0.22 : m && m.s === 'out' && !m.hide ? 0.32 : 0;
-      return `<polygon data-i="${f.i}" points="${f.poly.map(p => p[0] + ',' + -p[1]).join(' ')}" fill="${fill}" fill-opacity="${op}" stroke="${s ? 'var(--accent)' : m && m.s === 'hold' ? 'var(--warn)' : 'none'}" ${m && m.s === 'hold' ? `stroke-dasharray="${lw * 6} ${lw * 4}"` : ''} stroke-width="${lw * 2.5}" style="cursor:pointer"/>`;
+      const todo = unp && !s && o == null && !m && f.poly && f.poly.length >= 3 && unp(f) && !wrapsP(f);
+      const fill = s ? 'var(--accent)' : o != null ? roomColor(o) : m && m.s === 'out' && !m.hide ? '#8a93a0' : todo ? `url(#${gid}h)` : 'transparent';
+      const op = s ? 0.45 : o != null ? (unp ? 0.34 : 0.22) : m && m.s === 'out' && !m.hide ? 0.32 : todo ? 1 : 0;
+      const st = s ? 'var(--accent)' : m && m.s === 'hold' ? 'var(--warn)' : todo ? '#ff8a3d' : o != null && unp ? roomColor(o) : 'none';
+      const dash = m && m.s === 'hold' ? `stroke-dasharray="${lw * 6} ${lw * 4}"` : todo ? 'stroke-dasharray="5 4" vector-effect="non-scaling-stroke"' : '';
+      const sw = todo ? 1.5 : o != null && unp && !s ? lw * 1.2 : lw * 2.5;
+      return `<polygon data-i="${f.i}" points="${f.poly.map(p => p[0] + ',' + -p[1]).join(' ')}" fill="${fill}" fill-opacity="${op}" stroke="${st}" ${dash} stroke-width="${sw}" style="cursor:pointer"/>`;
     }).join('');
     svg.querySelector('.labels').innerHTML = plan.faces.map(f => {
       const o = owner.get(f.i), s = sel.has(f.i);
