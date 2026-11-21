@@ -1,0 +1,3570 @@
+/* シンボル辞書（認識専用）— 図面の中の図形が「何であるか」を、幾何そのものではなく
+ * 特徴（寸法・縦横比・円弧の割合・閉じているか・内側の閉曲線・分割線）で照合する。
+ * 目的は図面の読み取り・解釈・認識だけ。メーカーの元データは使わず、
+ * 一般化したルールパターンと、商用利用可能な素材（Innerscene=CC0 1.0、
+ * nasji.com=商用利用可・帰属不要の表明、2026-11-19確認）の実測特徴だけでできている。
+ * 出典は各パターンの source に記録。幾何そのものは保持しない。
+ * 認識のしきい値は類似度 0.90（2026-11-18 決定。誤認を避けるため高め）。
+ * 0.90 未満、または候補が僅差のものは「不明」「要確認」のまま残し、確定しない。 */
+export const SYM_THRESHOLD = 0.90;
+export const SYM_DICT = [
+ {
+  "id": "wc-western",
+  "category": "洋式大便器",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "壁掛け式",
+    "size_range_mm": {
+     "short": [
+      350,
+      450
+     ],
+     "long": [
+      460,
+      590
+     ]
+    },
+    "aspect_range": [
+     1.1,
+     1.55
+    ],
+    "primitives": {
+     "arc_share": [
+      0.3,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": true,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "notes": "便器本体は楕円・円弧主体。背面は壁に接して直線になりやすい"
+   },
+   {
+    "origin": "rule",
+    "label": "タンク式（床置き）",
+    "size_range_mm": {
+     "short": [
+      350,
+      490
+     ],
+     "long": [
+      630,
+      810
+     ]
+    },
+    "aspect_range": [
+     1.4,
+     2.05
+    ],
+    "primitives": {
+     "arc_share": [
+      0.25,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": true,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "notes": "便器＋タンクを一体で囲った外形。タンク側が直線的"
+   },
+   {
+    "origin": "measured",
+    "label": "バリアフリー（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/accessible-wc-plan-cad-block-f351620d/download",
+     "block": "201_FURNITURE_BLOCKS_ACCESSIBLE_WC_PLAN",
+     "file": "accessible-wc-plan-cad-block-f351620d.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 710,
+      "long": 725
+     },
+     "aspect": 1.02,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "ELLIPSE": 3
+     },
+     "arc_share": 0.6,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "タンク式（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/close-coupled-wc-plan-cad-block-49c9196f/download",
+     "block": "201_FURNITURE_BLOCKS_CLOSE_COUPLED_WC_PLAN",
+     "file": "close-coupled-wc-plan-cad-block-49c9196f.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 430,
+      "long": 675
+     },
+     "aspect": 1.57,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "ELLIPSE": 3
+     },
+     "arc_share": 0.75,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "壁掛け式（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/wall-hung-wc-plan-cad-block-937a5652/download",
+     "block": "201_FURNITURE_BLOCKS_WALL_HUNG_WC_PLAN",
+     "file": "wall-hung-wc-plan-cad-block-937a5652.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 590,
+      "long": 675
+     },
+     "aspect": 1.14,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "ELLIPSE": 3
+     },
+     "arc_share": 0.6,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   }
+  ]
+ },
+ {
+  "id": "urinal",
+  "category": "小便器",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "壁掛け式",
+    "size_range_mm": {
+     "short": [
+      300,
+      490
+     ],
+     "long": [
+      320,
+      590
+     ]
+    },
+    "aspect_range": [
+     0.85,
+     1.5
+    ],
+    "primitives": {
+     "arc_share": [
+      0.3,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "notes": "涙滴形〜半楕円。壁側が直線、前方が丸い"
+   },
+   {
+    "origin": "measured",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/urinal-plan-cad-block-f06078da/download",
+     "block": "201_FURNITURE_BLOCKS_URINAL_PLAN",
+     "file": "urinal-plan-cad-block.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 500
+     },
+     "aspect": 1.11,
+     "hist": {
+      "CIRCLE": 1,
+      "ELLIPSE": 1,
+      "LWPOLYLINE": 1
+     },
+     "arc_share": 0.67,
+     "closed_outline": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-urinal（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-urinal",
+     "block": "URINAL",
+     "file": "bathroom__nasji-urinal.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 355.6,
+      "long": 457.2
+     },
+     "aspect": 1.29,
+     "hist": {
+      "LINE": 11,
+      "ELLIPSE": 2,
+      "CIRCLE": 2,
+      "LWPOLYLINE": 1
+     },
+     "arc_share": 0.25,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 16
+    }
+   }
+  ]
+ },
+ {
+  "id": "washbasin",
+  "category": "洗面器",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "洗面器（カウンター・壁掛け）",
+    "size_range_mm": {
+     "short": [
+      370,
+      570
+     ],
+     "long": [
+      440,
+      760
+     ]
+    },
+    "aspect_range": [
+     1,
+     1.65
+    ],
+    "primitives": {
+     "arc_share": [
+      0.15,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": true,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "notes": "外形（矩形〜角丸）の内側にボウルの楕円が入る二重構造が特徴"
+   },
+   {
+    "origin": "rule",
+    "label": "手洗い器（小型）",
+    "size_range_mm": {
+     "short": [
+      270,
+      370
+     ],
+     "long": [
+      390,
+      570
+     ]
+    },
+    "aspect_range": [
+     1.25,
+     1.8
+    ],
+    "primitives": {
+     "arc_share": [
+      0.15,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "notes": "角丸矩形が典型。トイレ内の手洗い用"
+   },
+   {
+    "origin": "measured",
+    "label": "洗面器2連（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/double-basin-plan-cad-block-0f88f09b/download",
+     "block": "201_FURNITURE_BLOCKS_DOUBLE_BASIN_PLAN",
+     "file": "double-basin-plan-cad-block-0f88f09b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 480,
+      "long": 1200
+     },
+     "aspect": 2.5,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "ELLIPSE": 2,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.57,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ペデスタル式（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/pedestal-basin-plan-cad-block-f98bbfe4/download",
+     "block": "201_FURNITURE_BLOCKS_PEDESTAL_BASIN_PLAN",
+     "file": "pedestal-basin-plan-cad-block-f98bbfe4.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 480,
+      "long": 600
+     },
+     "aspect": 1.25,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "ELLIPSE": 2,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.6,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "洗面器（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/single-basin-plan-cad-block-4797164b/download",
+     "block": "201_FURNITURE_BLOCKS_SINGLE_BASIN_PLAN",
+     "file": "single-basin-plan-cad-block-4797164b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 480,
+      "long": 600
+     },
+     "aspect": 1.25,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "ELLIPSE": 1,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-bath-rect（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-bath-rect",
+     "block": "SINK-BATH-RECT",
+     "file": "bathroom__nasji-sink-bath-rect.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 558.8,
+      "long": 787.4
+     },
+     "aspect": 1.41,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 16,
+      "ARC": 8,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.34,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 29
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-bath-rnd（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-bath-rnd",
+     "block": "SINK-BATH-RND",
+     "file": "bathroom__nasji-sink-bath-rnd.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 558.8,
+      "long": 736.6
+     },
+     "aspect": 1.32,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 4,
+      "LINE": 8
+     },
+     "arc_share": 0.27,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 15
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-comp-1（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-comp-1",
+     "block": "SINK-COMP-1",
+     "file": "bathroom__nasji-sink-comp-1.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 508,
+      "long": 609.6
+     },
+     "aspect": 1.2,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 17,
+      "ARC": 8,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.33,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 30
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-comp-3（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-comp-3",
+     "block": "SINK-COMP-3",
+     "file": "bathroom__nasji-sink-comp-3.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 2438.4
+     },
+     "aspect": 4,
+     "hist": {
+      "LWPOLYLINE": 9,
+      "LINE": 47,
+      "ARC": 24,
+      "CIRCLE": 6
+     },
+     "arc_share": 0.35,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 86
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-corner（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-corner",
+     "block": "SINK-CORNER",
+     "file": "bathroom__nasji-sink-corner.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 609.6
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 16,
+      "ARC": 8,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.34,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 29
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "rectangular-washbasin-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/rectangular-washbasin-plan",
+     "block": "A$C7CEF525E",
+     "file": "bathroom__rectangular-washbasin-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 430,
+      "long": 570
+     },
+     "aspect": 1.33,
+     "hist": {
+      "LINE": 15,
+      "ARC": 6,
+      "CIRCLE": 4,
+      "LWPOLYLINE": 1
+     },
+     "arc_share": 0.38,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 26
+    }
+   }
+  ]
+ },
+ {
+  "id": "locker",
+  "category": "ロッカー",
+  "kind": "収納・什器",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "2連（W900級）",
+    "size_range_mm": {
+     "short": [
+      440,
+      630
+     ],
+     "long": [
+      840,
+      960
+     ]
+    },
+    "aspect_range": [
+     1.4,
+     2.05
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": 1,
+     "straight_back": true
+    },
+    "notes": "矩形＋前面の扉分割線。奥行は450〜600mm台が標準"
+   },
+   {
+    "origin": "rule",
+    "label": "1連（W450級）",
+    "size_range_mm": {
+     "short": [
+      440,
+      630
+     ],
+     "long": [
+      400,
+      520
+     ]
+    },
+    "aspect_range": [
+     0.75,
+     1.1
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": 0,
+     "straight_back": true
+    },
+    "notes": "単体は正方形に近い矩形。連なって描かれることが多い"
+   }
+  ]
+ },
+ {
+  "id": "desk",
+  "category": "机・デスク",
+  "kind": "オフィス什器",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "一般",
+    "size_range_mm": {
+     "short": [
+      450,
+      850
+     ],
+     "long": [
+      900,
+      2100
+     ]
+    },
+    "aspect_range": [
+     1.35,
+     2.8
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.15
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": null,
+     "straight_back": null
+    },
+    "notes": "矩形主体。背面パネルの帯が付く型もある"
+   },
+   {
+    "origin": "rule",
+    "label": "ベンチデスク（長机）",
+    "size_range_mm": {
+     "short": [
+      550,
+      1800
+     ],
+     "long": [
+      2400,
+      7200
+     ]
+    },
+    "aspect_range": [
+     2,
+     9
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.12
+     ],
+     "closed_outline": true,
+     "inner_closed": null,
+     "divider_min": 1,
+     "straight_back": null
+    },
+    "needs_features": [
+     "arcShare",
+     "closed",
+     "dividers"
+    ],
+    "notes": "両側に椅子が並ぶ長いベンチ式の机。内側に分割線（脚・配線ダクト等）がある事が条件。寸法だけでは判定しない（needs_features）"
+   },
+   {
+    "origin": "measured",
+    "label": "ベンチデスク一体型（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/bench-desk-pair-plan-cad-block-0f156e78/download",
+     "block": "201_FURNITURE_BLOCKS_BENCH_DESK_PAIR_PLAN",
+     "file": "bench-desk-pair-plan-cad-block-0f156e78.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1100,
+      "long": 2400
+     },
+     "aspect": 2.18,
+     "hist": {
+      "LWPOLYLINE": 8
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 8
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "コンソールテーブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/console-table-plan-cad-block-3106da33/download",
+     "block": "201_FURNITURE_BLOCKS_CONSOLE_TABLE_PLAN",
+     "file": "console-table-plan-cad-block-3106da33.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 350,
+      "long": 1300
+     },
+     "aspect": 3.71,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "コーナーデスク（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/corner-desk-plan-cad-block-8143a44f/download",
+     "block": "201_FURNITURE_BLOCKS_CORNER_DESK_PLAN",
+     "file": "corner-desk-plan-cad-block-8143a44f.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1200,
+      "long": 1400
+     },
+     "aspect": 1.17,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ドレッサー（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/dressing-table-plan-cad-block-4f02a242/download",
+     "block": "201_FURNITURE_BLOCKS_DRESSING_TABLE_PLAN",
+     "file": "dressing-table-plan-cad-block-4f02a242.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 700,
+      "long": 1200
+     },
+     "aspect": 1.71,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "コーヒーテーブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/rectangular-coffee-table-plan-cad-block-e3411af5/download",
+     "block": "201_FURNITURE_BLOCKS_RECTANGULAR_COFFEE_TABLE_PLAN",
+     "file": "rectangular-coffee-table-plan-cad-block-e3411af5.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 700,
+      "long": 1100
+     },
+     "aspect": 1.57,
+     "hist": {
+      "LWPOLYLINE": 1
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 1
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ダイニングテーブル4人・椅子付き（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/rectangular-dining-table-four-seats-plan-cad-block-e9c537ab/download",
+     "block": "201_FURNITURE_BLOCKS_RECTANGULAR_DINING_TABLE_FOUR_SEATS_PLAN",
+     "file": "rectangular-dining-table-four-seats-plan-cad-block-e9c537ab.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1200,
+      "long": 1900
+     },
+     "aspect": 1.58,
+     "hist": {
+      "LWPOLYLINE": 9
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ダイニングテーブル6人・椅子付き（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/rectangular-dining-table-six-seats-plan-cad-block-04a9f345/download",
+     "block": "201_FURNITURE_BLOCKS_RECTANGULAR_DINING_TABLE_SIX_SEATS_PLAN",
+     "file": "rectangular-dining-table-six-seats-plan-cad-block-04a9f345.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1800,
+      "long": 1900
+     },
+     "aspect": 1.06,
+     "hist": {
+      "LWPOLYLINE": 13
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 13
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "会議テーブル・椅子付き（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/rectangular-meeting-table-plan-cad-block-f54702ab/download",
+     "block": "201_FURNITURE_BLOCKS_RECTANGULAR_MEETING_TABLE_PLAN",
+     "file": "rectangular-meeting-table-plan-cad-block-f54702ab.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1800,
+      "long": 1900
+     },
+     "aspect": 1.06,
+     "hist": {
+      "LWPOLYLINE": 9
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "丸コーヒーテーブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/round-coffee-table-plan-cad-block-8ababc9b/download",
+     "block": "201_FURNITURE_BLOCKS_ROUND_COFFEE_TABLE_PLAN",
+     "file": "round-coffee-table-plan-cad-block-8ababc9b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1100,
+      "long": 1100
+     },
+     "aspect": 1,
+     "hist": {
+      "CIRCLE": 1
+     },
+     "arc_share": 1,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 1
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "丸ダイニングテーブル・椅子付き（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/round-dining-table-four-seats-plan-cad-block-192d44d3/download",
+     "block": "201_FURNITURE_BLOCKS_ROUND_DINING_TABLE_FOUR_SEATS_PLAN",
+     "file": "round-dining-table-four-seats-plan-cad-block-192d44d3.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2220,
+      "long": 2220
+     },
+     "aspect": 1,
+     "hist": {
+      "CIRCLE": 1,
+      "LWPOLYLINE": 8
+     },
+     "arc_share": 0.11,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "丸会議テーブル・椅子付き（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/round-meeting-table-plan-cad-block-4b5941f7/download",
+     "block": "201_FURNITURE_BLOCKS_ROUND_MEETING_TABLE_PLAN",
+     "file": "round-meeting-table-plan-cad-block-4b5941f7.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2820,
+      "long": 2820
+     },
+     "aspect": 1,
+     "hist": {
+      "CIRCLE": 1,
+      "LWPOLYLINE": 8
+     },
+     "arc_share": 0.11,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "サイドテーブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/side-table-plan-cad-block-34218654/download",
+     "block": "201_FURNITURE_BLOCKS_SIDE_TABLE_PLAN",
+     "file": "side-table-plan-cad-block-34218654.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 600,
+      "long": 600
+     },
+     "aspect": 1,
+     "hist": {
+      "CIRCLE": 1
+     },
+     "arc_share": 1,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 1
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ストレートデスク（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/straight-desk-plan-cad-block-37bb965b/download",
+     "block": "201_FURNITURE_BLOCKS_STRAIGHT_DESK_PLAN",
+     "file": "straight-desk-plan-cad-block-37bb965b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 700,
+      "long": 1200
+     },
+     "aspect": 1.71,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "l-shaped-computer-desk-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/l-shaped-computer-desk-plan",
+     "block": "A$C6FC27815",
+     "file": "furniture__l-shaped-computer-desk-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2010,
+      "long": 2210
+     },
+     "aspect": 1.1,
+     "hist": {
+      "LINE": 230,
+      "ARC": 22,
+      "CIRCLE": 5,
+      "LWPOLYLINE": 5
+     },
+     "arc_share": 0.1,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 262
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-classroom-desk（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-classroom-desk",
+     "block": "CLASSROOM-DESK",
+     "file": "furniture__nasji-classroom-desk.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 508,
+      "long": 609.6
+     },
+     "aspect": 1.2,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-coffee-table-48x24（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-coffee-table-48x24",
+     "block": "COFFEE-TABLE-48X24",
+     "file": "furniture__nasji-coffee-table-48x24.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 1219.2
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-coffee-table-oval-48x26（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-coffee-table-oval-48x26",
+     "block": "COFFEE-TABLE-OVAL-48X26",
+     "file": "furniture__nasji-coffee-table-oval-48x26.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 660.4,
+      "long": 1219.2
+     },
+     "aspect": 1.85,
+     "hist": {
+      "ELLIPSE": 3
+     },
+     "arc_share": 1,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-conference-table-10（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-conference-table-10",
+     "block": "CONFERENCE-TABLE-10",
+     "file": "furniture__nasji-conference-table-10.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1219.2,
+      "long": 3048
+     },
+     "aspect": 2.5,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 3
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 6
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-conference-table-12（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-conference-table-12",
+     "block": "CONFERENCE-TABLE-12",
+     "file": "furniture__nasji-conference-table-12.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1371.6,
+      "long": 3657.6
+     },
+     "aspect": 2.67,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 4
+     },
+     "arc_share": 0.57,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-conference-table-6（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-conference-table-6",
+     "block": "CONFERENCE-TABLE-6",
+     "file": "furniture__nasji-conference-table-6.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 914.4,
+      "long": 1828.8
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.4,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-conference-table-8（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-conference-table-8",
+     "block": "CONFERENCE-TABLE-8",
+     "file": "furniture__nasji-conference-table-8.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1219.2,
+      "long": 2438.4
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.4,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-desk-60x30（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-desk-60x30",
+     "block": "DESK-60X30",
+     "file": "furniture__nasji-desk-60x30.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 762,
+      "long": 1524
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 5,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.2,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 10
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-lab-bench-72（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-lab-bench-72",
+     "block": "LAB-BENCH-72",
+     "file": "furniture__nasji-lab-bench-72.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 762,
+      "long": 1828.8
+     },
+     "aspect": 2.4,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 4,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.25,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 8
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-table-30x48（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-table-30x48",
+     "block": "TABLE-30X48",
+     "file": "furniture__nasji-table-30x48.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 762,
+      "long": 1219.2
+     },
+     "aspect": 1.6,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-table-oval-42x84（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-table-oval-42x84",
+     "block": "TABLE-OVAL-42X84",
+     "file": "furniture__nasji-table-oval-42x84.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1066.8,
+      "long": 2133.6
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 9,
+      "LINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 11
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-workbench-72（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-workbench-72",
+     "block": "WORKBENCH-72",
+     "file": "furniture__nasji-workbench-72.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 1828.8
+     },
+     "aspect": 3,
+     "hist": {
+      "LWPOLYLINE": 5,
+      "LINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 8
+    }
+   }
+  ]
+ },
+ {
+  "id": "chair",
+  "category": "椅子",
+  "kind": "オフィス什器",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "一般",
+    "size_range_mm": {
+     "short": [
+      390,
+      730
+     ],
+     "long": [
+      390,
+      760
+     ]
+    },
+    "aspect_range": [
+     0.8,
+     1.3
+    ],
+    "primitives": {
+     "arc_share": [
+      0.3,
+      1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": null,
+     "straight_back": false
+    },
+    "notes": "座面＋背もたれで円弧を多く含む。ほぼ正方形の外形"
+   },
+   {
+    "origin": "measured",
+    "label": "アームチェア（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/armchair-plan-cad-block-83848260/download",
+     "block": "201_FURNITURE_BLOCKS_ARMCHAIR_PLAN",
+     "file": "armchair-plan-cad-block-83848260.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 850,
+      "long": 950
+     },
+     "aspect": 1.12,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ダイニングチェア（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/dining-chair-plan-cad-block-5061c00f/download",
+     "block": "201_FURNITURE_BLOCKS_DINING_CHAIR_PLAN",
+     "file": "dining-chair-plan-cad-block-5061c00f.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 480,
+      "long": 500
+     },
+     "aspect": 1.04,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ハイチェア（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/high-chair-plan-cad-block-a21602fa/download",
+     "block": "201_FURNITURE_BLOCKS_HIGH_CHAIR_PLAN",
+     "file": "high-chair-plan-cad-block-a21602fa.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 500,
+      "long": 590
+     },
+     "aspect": 1.18,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "事務椅子（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/office-task-chair-plan-cad-block-3d0841c9/download",
+     "block": "201_FURNITURE_BLOCKS_OFFICE_TASK_CHAIR_PLAN",
+     "file": "office-task-chair-plan-cad-block-3d0841c9.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 633.2,
+      "long": 665.7
+     },
+     "aspect": 1.05,
+     "hist": {
+      "LWPOLYLINE": 7
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "来客用椅子（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/visitor-chair-plan-cad-block-656d39f8/download",
+     "block": "201_FURNITURE_BLOCKS_VISITOR_CHAIR_PLAN",
+     "file": "visitor-chair-plan-cad-block-656d39f8.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 480,
+      "long": 500
+     },
+     "aspect": 1.04,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-fitting-bench-42（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-fitting-bench-42",
+     "block": "FITTING-BENCH-42",
+     "file": "bathroom__nasji-fitting-bench-42.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 508,
+      "long": 1066.8
+     },
+     "aspect": 2.1,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "angular-upholstered-armchair-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/angular-upholstered-armchair-plan",
+     "block": "A$C7EC567CE",
+     "file": "furniture__angular-upholstered-armchair-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1202.1,
+      "long": 1328.6
+     },
+     "aspect": 1.11,
+     "hist": {
+      "LINE": 7,
+      "ARC": 4,
+      "LWPOLYLINE": 1
+     },
+     "arc_share": 0.33,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 12
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "curved-back-dining-chair-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/curved-back-dining-chair-plan",
+     "block": "A$C29F5351B",
+     "file": "furniture__curved-back-dining-chair-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 403.1,
+      "long": 674.7
+     },
+     "aspect": 1.67,
+     "hist": {
+      "LINE": 6,
+      "ARC": 4,
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0.33,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 12
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "detailed-salon-chair-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/detailed-salon-chair-plan",
+     "block": "A$C04B47921",
+     "file": "furniture__detailed-salon-chair-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 562,
+      "long": 1443.3
+     },
+     "aspect": 2.57,
+     "hist": {
+      "LINE": 57,
+      "LWPOLYLINE": 18,
+      "ARC": 51,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.41,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 127
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "five-star-swivel-office-chair-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/five-star-swivel-office-chair-plan",
+     "block": "A$C649664E4",
+     "file": "furniture__five-star-swivel-office-chair-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 487.4,
+      "long": 856.4
+     },
+     "aspect": 1.76,
+     "hist": {
+      "LINE": 9,
+      "ARC": 17,
+      "CIRCLE": 1,
+      "LWPOLYLINE": 5
+     },
+     "arc_share": 0.56,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 32
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-armchair-30（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-armchair-30",
+     "block": "ARMCHAIR-30",
+     "file": "furniture__nasji-armchair-30.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 762,
+      "long": 812.8
+     },
+     "aspect": 1.07,
+     "hist": {
+      "LWPOLYLINE": 5,
+      "LINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-chair-dining（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-chair-dining",
+     "block": "CHAIR-DINING",
+     "file": "furniture__nasji-chair-dining.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 457.2,
+      "long": 529.2
+     },
+     "aspect": 1.16,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ornate-upholstered-armchair-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/ornate-upholstered-armchair-plan",
+     "block": "A$C7B1448BC",
+     "file": "furniture__ornate-upholstered-armchair-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 428.2,
+      "long": 768.8
+     },
+     "aspect": 1.8,
+     "hist": {
+      "LINE": 1,
+      "LWPOLYLINE": 66
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 67
+    }
+   }
+  ]
+ },
+ {
+  "id": "storage",
+  "category": "収納（棚・キャビネット）",
+  "kind": "収納・什器",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "一般",
+    "size_range_mm": {
+     "short": [
+      310,
+      520
+     ],
+     "long": [
+      780,
+      2500
+     ]
+    },
+    "aspect_range": [
+     1.7,
+     5.5
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.1
+     ],
+     "closed_outline": true,
+     "inner_closed": false,
+     "divider_min": 1,
+     "straight_back": true
+    },
+    "notes": "細長い矩形＋扉・棚板の分割線。壁際に並ぶ"
+   },
+   {
+    "origin": "measured",
+    "label": "本棚（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/bookcase-plan-cad-block-f1f3a7e8/download",
+     "block": "201_FURNITURE_BLOCKS_BOOKCASE_PLAN",
+     "file": "bookcase-plan-cad-block-f1f3a7e8.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 320,
+      "long": 900
+     },
+     "aspect": 2.81,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "チェスト（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/chest-of-drawers-plan-cad-block-0142d84f/download",
+     "block": "201_FURNITURE_BLOCKS_CHEST_OF_DRAWERS_PLAN",
+     "file": "chest-of-drawers-plan-cad-block-0142d84f.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 900
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "書類棚（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/filing-cabinet-plan-cad-block-6e915456/download",
+     "block": "201_FURNITURE_BLOCKS_FILING_CABINET_PLAN",
+     "file": "filing-cabinet-plan-cad-block-6e915456.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 470,
+      "long": 620
+     },
+     "aspect": 1.32,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "メディアキャビネット（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/media-cabinet-plan-cad-block-f4a09b71/download",
+     "block": "201_FURNITURE_BLOCKS_MEDIA_CABINET_PLAN",
+     "file": "media-cabinet-plan-cad-block-f4a09b71.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 1600
+     },
+     "aspect": 3.56,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ナイトテーブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/nightstand-plan-cad-block-97795bc2/download",
+     "block": "201_FURNITURE_BLOCKS_NIGHTSTAND_PLAN",
+     "file": "nightstand-plan-cad-block-97795bc2.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 500
+     },
+     "aspect": 1.11,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "脇机・ワゴン（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/office-pedestal-plan-cad-block-fcdbc806/download",
+     "block": "201_FURNITURE_BLOCKS_OFFICE_PEDESTAL_PLAN",
+     "file": "office-pedestal-plan-cad-block-fcdbc806.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 420,
+      "long": 550
+     },
+     "aspect": 1.31,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "サイドボード（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/sideboard-plan-cad-block-4ba5d5b0/download",
+     "block": "201_FURNITURE_BLOCKS_SIDEBOARD_PLAN",
+     "file": "sideboard-plan-cad-block-4ba5d5b0.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 1600
+     },
+     "aspect": 3.56,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "収納棚（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/storage-cupboard-plan-cad-block-b8096457/download",
+     "block": "201_FURNITURE_BLOCKS_STORAGE_CUPBOARD_PLAN",
+     "file": "storage-cupboard-plan-cad-block-b8096457.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 900
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ワードローブ（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/two-door-wardrobe-plan-cad-block-0ebd8e25/download",
+     "block": "201_FURNITURE_BLOCKS_TWO_DOOR_WARDROBE_PLAN",
+     "file": "two-door-wardrobe-plan-cad-block-0ebd8e25.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 600,
+      "long": 1200
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-bookshelf-48x12（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-bookshelf-48x12",
+     "block": "BOOKSHELF-48X12",
+     "file": "furniture__nasji-bookshelf-48x12.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 304.8,
+      "long": 1219.2
+     },
+     "aspect": 4,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 12
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 14
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-bookshelf-72x12（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-bookshelf-72x12",
+     "block": "BOOKSHELF-72X12",
+     "file": "furniture__nasji-bookshelf-72x12.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 304.8,
+      "long": 1828.8
+     },
+     "aspect": 6,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 18
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 20
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-closet-rod-shelf-72（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-closet-rod-shelf-72",
+     "block": "CLOSET-ROD-SHELF-72",
+     "file": "furniture__nasji-closet-rod-shelf-72.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 1828.8
+     },
+     "aspect": 3,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 16
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 17
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-closet-rod-shelf-84（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-closet-rod-shelf-84",
+     "block": "CLOSET-ROD-SHELF-84",
+     "file": "furniture__nasji-closet-rod-shelf-84.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 2133.6
+     },
+     "aspect": 3.5,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 18
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 19
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-closet-rod-shelf-96（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-closet-rod-shelf-96",
+     "block": "CLOSET-ROD-SHELF-96",
+     "file": "furniture__nasji-closet-rod-shelf-96.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 2438.4
+     },
+     "aspect": 4,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 20
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 21
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-dresser-60（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-dresser-60",
+     "block": "DRESSER-60",
+     "file": "furniture__nasji-dresser-60.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 508,
+      "long": 1524
+     },
+     "aspect": 3,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 8
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-file-cabinet（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-file-cabinet",
+     "block": "FILE-CABINET",
+     "file": "furniture__nasji-file-cabinet.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 381,
+      "long": 1209
+     },
+     "aspect": 3.17,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 4
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-garage-storage-cabinet-36（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-garage-storage-cabinet-36",
+     "block": "GARAGE-STORAGE-CABINET-36",
+     "file": "furniture__nasji-garage-storage-cabinet-36.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 914.4
+     },
+     "aspect": 1.5,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 8
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-nightstand（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-nightstand",
+     "block": "NIGHTSTAND",
+     "file": "furniture__nasji-nightstand.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 457.2,
+      "long": 558.8
+     },
+     "aspect": 1.22,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-pass-shelf-48（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/nasji-pass-shelf-48",
+     "block": "PASS-SHELF-48",
+     "file": "kitchen__nasji-pass-shelf-48.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 355.6,
+      "long": 1219.2
+     },
+     "aspect": 3.43,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 4
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 5
+    }
+   }
+  ]
+ },
+ {
+  "category": "浴槽",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "浴槽（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/bath-plan-cad-block-0f33a3e3/download",
+     "block": "201_FURNITURE_BLOCKS_BATH_PLAN",
+     "file": "bath-plan-cad-block-0f33a3e3.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 750,
+      "long": 1700
+     },
+     "aspect": 2.27,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.25,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-tub（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-tub",
+     "block": "TUB",
+     "file": "bathroom__nasji-tub.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 762,
+      "long": 1524
+     },
+     "aspect": 2,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "LINE": 6,
+      "ARC": 4,
+      "CIRCLE": 3
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 14
+    }
+   }
+  ]
+ },
+ {
+  "category": "ベッド",
+  "kind": "家具",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "2段ベッド（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/bunk-bed-plan-cad-block-fead4a43/download",
+     "block": "201_FURNITURE_BLOCKS_BUNK_BED_PLAN",
+     "file": "bunk-bed-plan-cad-block-fead4a43.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1000,
+      "long": 2200
+     },
+     "aspect": 2.2,
+     "hist": {
+      "LWPOLYLINE": 9
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "ダブル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/double-bed-plan-cad-block-f2ade2fa/download",
+     "block": "201_FURNITURE_BLOCKS_DOUBLE_BED_PLAN",
+     "file": "double-bed-plan-cad-block-f2ade2fa.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1450,
+      "long": 2020
+     },
+     "aspect": 1.39,
+     "hist": {
+      "LWPOLYLINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 6
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "キング（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/king-bed-plan-cad-block-32c512e2/download",
+     "block": "201_FURNITURE_BLOCKS_KING_BED_PLAN",
+     "file": "king-bed-plan-cad-block-32c512e2.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2030,
+      "long": 2150
+     },
+     "aspect": 1.06,
+     "hist": {
+      "LWPOLYLINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 6
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "クイーン（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/queen-bed-plan-cad-block-879618d7/download",
+     "block": "201_FURNITURE_BLOCKS_QUEEN_BED_PLAN",
+     "file": "queen-bed-plan-cad-block-879618d7.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1620,
+      "long": 2150
+     },
+     "aspect": 1.33,
+     "hist": {
+      "LWPOLYLINE": 6
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 6
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "シングル（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/single-bed-plan-cad-block-59a27591/download",
+     "block": "201_FURNITURE_BLOCKS_SINGLE_BED_PLAN",
+     "file": "single-bed-plan-cad-block-59a27591.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1000,
+      "long": 2020
+     },
+     "aspect": 2.02,
+     "hist": {
+      "LWPOLYLINE": 5
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-bed-king（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-bed-king",
+     "block": "BED-KING",
+     "file": "furniture__nasji-bed-king.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1930.4,
+      "long": 2032
+     },
+     "aspect": 1.05,
+     "hist": {
+      "LWPOLYLINE": 5,
+      "LINE": 5
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 10
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-bed（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-bed",
+     "block": "BED",
+     "file": "furniture__nasji-bed.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 1524,
+      "long": 2108.2
+     },
+     "aspect": 1.38,
+     "hist": {
+      "LWPOLYLINE": 5,
+      "LINE": 5
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 10
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-daybed-75x39（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-daybed-75x39",
+     "block": "DAYBED-75X39",
+     "file": "furniture__nasji-daybed-75x39.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 990.6,
+      "long": 1905
+     },
+     "aspect": 1.92,
+     "hist": {
+      "LWPOLYLINE": 5,
+      "LINE": 4
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 9
+    }
+   }
+  ]
+ },
+ {
+  "category": "キッチン・洗濯設備",
+  "kind": "設備",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "コンロ（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/cooktop-plan-cad-block-c3d59671/download",
+     "block": "201_FURNITURE_BLOCKS_COOKTOP_PLAN",
+     "file": "cooktop-plan-cad-block-c3d59671.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 520,
+      "long": 600
+     },
+     "aspect": 1.15,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "CIRCLE": 4
+     },
+     "arc_share": 0.8,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "食洗機（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/dishwasher-plan-cad-block-6bc2b01b/download",
+     "block": "201_FURNITURE_BLOCKS_DISHWASHER_PLAN",
+     "file": "dishwasher-plan-cad-block-6bc2b01b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 600,
+      "long": 600
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 3
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 6
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "電子レンジ（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/microwave-plan-cad-block-1316c7ff/download",
+     "block": "201_FURNITURE_BLOCKS_MICROWAVE_PLAN",
+     "file": "microwave-plan-cad-block-1316c7ff.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 420,
+      "long": 520
+     },
+     "aspect": 1.24,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "レンジクッカー（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/range-cooker-plan-cad-block-c5e040b1/download",
+     "block": "201_FURNITURE_BLOCKS_RANGE_COOKER_PLAN",
+     "file": "range-cooker-plan-cad-block-c5e040b1.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 600,
+      "long": 650
+     },
+     "aspect": 1.08,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "CIRCLE": 4
+     },
+     "arc_share": 0.57,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "冷蔵庫（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/refrigerator-plan-cad-block-326c85c5/download",
+     "block": "201_FURNITURE_BLOCKS_REFRIGERATOR_PLAN",
+     "file": "refrigerator-plan-cad-block-326c85c5.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 650,
+      "long": 680
+     },
+     "aspect": 1.05,
+     "hist": {
+      "LWPOLYLINE": 11
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 11
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "冷蔵庫・大型（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/tall-refrigerator-freezer-plan-cad-block-6899be3e/download",
+     "block": "201_FURNITURE_BLOCKS_TALL_REFRIGERATOR_FREEZER_PLAN",
+     "file": "tall-refrigerator-freezer-plan-cad-block-6899be3e.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 700,
+      "long": 700
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 11
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 11
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "冷蔵庫・カウンター下（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/under-counter-refrigerator-plan-cad-block-e1644e04/download",
+     "block": "201_FURNITURE_BLOCKS_UNDER_COUNTER_REFRIGERATOR_PLAN",
+     "file": "under-counter-refrigerator-plan-cad-block-e1644e04.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 550,
+      "long": 600
+     },
+     "aspect": 1.09,
+     "hist": {
+      "LWPOLYLINE": 9
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 9
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "壁掛けオーブン（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/wall-oven-plan-cad-block-916d22ec/download",
+     "block": "201_FURNITURE_BLOCKS_WALL_OVEN_PLAN",
+     "file": "wall-oven-plan-cad-block-916d22ec.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 550,
+      "long": 600
+     },
+     "aspect": 1.09,
+     "hist": {
+      "LWPOLYLINE": 3
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "洗濯機（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/washing-machine-plan-cad-block-0fe41000/download",
+     "block": "201_FURNITURE_BLOCKS_WASHING_MACHINE_PLAN",
+     "file": "washing-machine-plan-cad-block-0fe41000.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 600,
+      "long": 600
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 1,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.67,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 3
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "built-in-oven-plan-symbol（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/built-in-oven-plan-symbol",
+     "block": "\\U+70E4\\U+7BB1",
+     "file": "kitchen__built-in-oven-plan-symbol.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 727.1,
+      "long": 885.5
+     },
+     "aspect": 1.22,
+     "hist": {
+      "LINE": 22,
+      "ARC": 4
+     },
+     "arc_share": 0.15,
+     "closed_outline": false,
+     "inner_closed": false,
+     "n_entities": 26
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-cooktop-30（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/nasji-cooktop-30",
+     "block": "COOKTOP-30",
+     "file": "kitchen__nasji-cooktop-30.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 533.4,
+      "long": 762
+     },
+     "aspect": 1.43,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 9,
+      "CIRCLE": 12
+     },
+     "arc_share": 0.52,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 23
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-microwave（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/nasji-microwave",
+     "block": "MICROWAVE",
+     "file": "kitchen__nasji-microwave.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 457.2,
+      "long": 609.6
+     },
+     "aspect": 1.33,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 4,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.14,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-range-30（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/nasji-range-30",
+     "block": "RANGE-30",
+     "file": "kitchen__nasji-range-30.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 635,
+      "long": 762
+     },
+     "aspect": 1.2,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 10,
+      "CIRCLE": 12
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 24
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-range-commercial-36（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/nasji-range-commercial-36",
+     "block": "RANGE-COMMERCIAL-36",
+     "file": "kitchen__nasji-range-commercial-36.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 812.8,
+      "long": 914.4
+     },
+     "aspect": 1.12,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 15,
+      "CIRCLE": 12
+     },
+     "arc_share": 0.41,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 29
+    }
+   }
+  ]
+ },
+ {
+  "category": "ソファ",
+  "kind": "家具",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "L字（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/l-sectional-sofa-plan-cad-block-7fedf660/download",
+     "block": "201_FURNITURE_BLOCKS_L_SECTIONAL_SOFA_PLAN",
+     "file": "l-sectional-sofa-plan-cad-block-7fedf660.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2150,
+      "long": 2850
+     },
+     "aspect": 1.33,
+     "hist": {
+      "LWPOLYLINE": 7
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "オットマン（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/ottoman-plan-cad-block-1e7eb8f9/download",
+     "block": "201_FURNITURE_BLOCKS_OTTOMAN_PLAN",
+     "file": "ottoman-plan-cad-block-1e7eb8f9.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 550,
+      "long": 650
+     },
+     "aspect": 1.18,
+     "hist": {
+      "LWPOLYLINE": 2
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": false,
+     "n_entities": 2
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "リクライニングチェア（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/recliner-plan-cad-block-bb2d2c86/download",
+     "block": "201_FURNITURE_BLOCKS_RECLINER_PLAN",
+     "file": "recliner-plan-cad-block-bb2d2c86.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 850,
+      "long": 1430
+     },
+     "aspect": 1.68,
+     "hist": {
+      "LWPOLYLINE": 4
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "3人掛け（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/three-seat-sofa-plan-cad-block-4517f70b/download",
+     "block": "201_FURNITURE_BLOCKS_THREE_SEAT_SOFA_PLAN",
+     "file": "three-seat-sofa-plan-cad-block-4517f70b.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 950,
+      "long": 2200
+     },
+     "aspect": 2.32,
+     "hist": {
+      "LWPOLYLINE": 5
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 5
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "2人掛け（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/two-seat-sofa-plan-cad-block-510966fe/download",
+     "block": "201_FURNITURE_BLOCKS_TWO_SEAT_SOFA_PLAN",
+     "file": "two-seat-sofa-plan-cad-block-510966fe.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 950,
+      "long": 1650
+     },
+     "aspect": 1.74,
+     "hist": {
+      "LWPOLYLINE": 4
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "compact-two-seat-loveseat-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/compact-two-seat-loveseat-plan",
+     "block": "A$C7C1D08AD",
+     "file": "furniture__compact-two-seat-loveseat-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 992.8,
+      "long": 1281
+     },
+     "aspect": 1.29,
+     "hist": {
+      "LINE": 18,
+      "ARC": 4
+     },
+     "arc_share": 0.18,
+     "closed_outline": false,
+     "inner_closed": false,
+     "n_entities": 22
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sectional-l-96（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/furniture/nasji-sectional-l-96",
+     "block": "SECTIONAL-L-96",
+     "file": "furniture__nasji-sectional-l-96.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 2438.4,
+      "long": 2438.4
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 6,
+      "LINE": 7
+     },
+     "arc_share": 0,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 13
+    }
+   }
+  ]
+ },
+ {
+  "category": "シャワー",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "シャワートレー（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/shower-tray-plan-cad-block-ed3e609f/download",
+     "block": "201_FURNITURE_BLOCKS_SHOWER_TRAY_PLAN",
+     "file": "shower-tray-plan-cad-block-ed3e609f.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 900,
+      "long": 900
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 6,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.14,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   }
+  ]
+ },
+ {
+  "category": "流し・SK",
+  "kind": "衛生器具",
+  "patterns": [
+   {
+    "origin": "measured",
+    "label": "掃除流し（CC0実測）",
+    "source": {
+     "license": "CC0 1.0",
+     "ref": "https://www.innerscene.com/api/library/utility-sink-plan-cad-block-42e8de44/download",
+     "block": "201_FURNITURE_BLOCKS_UTILITY_SINK_PLAN",
+     "file": "utility-sink-plan-cad-block-42e8de44.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 550,
+      "long": 600
+     },
+     "aspect": 1.09,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "ELLIPSE": 1,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.5,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 4
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-floor-sink（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-floor-sink",
+     "block": "FLOOR-SINK",
+     "file": "bathroom__nasji-floor-sink.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 304.8,
+      "long": 304.8
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 2,
+      "LINE": 4,
+      "CIRCLE": 1
+     },
+     "arc_share": 0.14,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 7
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-kitchen-dbl（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-kitchen-dbl",
+     "block": "SINK-KITCHEN-DBL",
+     "file": "bathroom__nasji-sink-kitchen-dbl.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 558.8,
+      "long": 838.2
+     },
+     "aspect": 1.5,
+     "hist": {
+      "LWPOLYLINE": 4,
+      "LINE": 26,
+      "ARC": 16,
+      "CIRCLE": 4
+     },
+     "arc_share": 0.4,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 50
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-kitchen-sgl（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-kitchen-sgl",
+     "block": "SINK-KITCHEN-SGL",
+     "file": "bathroom__nasji-sink-kitchen-sgl.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 558.8,
+      "long": 762
+     },
+     "aspect": 1.36,
+     "hist": {
+      "LWPOLYLINE": 4,
+      "LINE": 16,
+      "ARC": 8,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.33,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 30
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "nasji-sink-mop（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/bathroom/nasji-sink-mop",
+     "block": "SINK-MOP",
+     "file": "bathroom__nasji-sink-mop.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 609.6,
+      "long": 609.6
+     },
+     "aspect": 1,
+     "hist": {
+      "LWPOLYLINE": 3,
+      "LINE": 16,
+      "ARC": 8,
+      "CIRCLE": 2
+     },
+     "arc_share": 0.34,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 29
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "double-bowl-kitchen-sink-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/double-bowl-kitchen-sink-plan",
+     "block": "A$C678E413C",
+     "file": "kitchen__double-bowl-kitchen-sink-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 815,
+      "long": 865.3
+     },
+     "aspect": 1.06,
+     "hist": {
+      "LINE": 37,
+      "CIRCLE": 5,
+      "ARC": 36
+     },
+     "arc_share": 0.53,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 78
+    }
+   },
+   {
+    "origin": "measured",
+    "label": "unequal-double-bowl-sink-plan（nasji実測）",
+    "source": {
+     "license": "Free for commercial use (nasji.com FAQ, 2026-11-19確認)",
+     "ref": "https://nasji.com/cad-blocks/kitchen/unequal-double-bowl-sink-plan",
+     "block": "A$C30C52308",
+     "file": "kitchen__unequal-double-bowl-sink-plan.dxf"
+    },
+    "features": {
+     "size_mm": {
+      "short": 450,
+      "long": 815
+     },
+     "aspect": 1.81,
+     "hist": {
+      "LINE": 35,
+      "CIRCLE": 5,
+      "ARC": 36
+     },
+     "arc_share": 0.54,
+     "closed_outline": true,
+     "inner_closed": true,
+     "n_entities": 76
+    }
+   }
+  ]
+ },
+ {
+  "id": "hydrant",
+  "category": "消火栓",
+  "kind": "設備",
+  "patterns": [
+   {
+    "origin": "rule",
+    "label": "屋内消火栓箱（標準寸法）",
+    "size_range_mm": {
+     "short": [
+      200,
+      300
+     ],
+     "long": [
+      600,
+      1100
+     ]
+    },
+    "aspect_range": [
+     2,
+     5.5
+    ],
+    "primitives": {
+     "arc_share": [
+      0,
+      0.3
+     ],
+     "closed_outline": true,
+     "inner_closed": null,
+     "divider_min": null,
+     "straight_back": true
+    },
+    "needs_features": [
+     "arcShare"
+    ],
+    "notes": "国交省「公共建築設備工事標準図（機械設備工事編）」の機材標準寸法：HB-1 幅700〜800×奥行200〜300、HB-4 幅600〜900×奥行200〜250、消火器箱併設形 幅900〜1,100×奥行200〜300。廊下壁際の浅い箱で、部屋・収納と誤らないために置く（2026-11-21 Web参照基準から追加。寸法という事実のみで、幾何は取り込んでいない）。寸法だけでは浅型カウンター洗面（600×250級）と区別できないため、線の特徴がある候補（クラスタ）にだけ当てる（needs_features）"
+   }
+  ]
+ }
+];
+
+/* 特徴 f: { short, long, arcShare, closed, innerClosed, dividers }
+ *  short/long は外形の短辺・長辺（mm）。dividers は内部の分割線の本数（数えられない時は null）。 */
+function gateRange(v, range) { return v == null || range == null || (v >= range[0] && v <= range[1]); }
+
+export function scorePattern(p, f) {
+  /* 特徴が要るパターン（例：ベンチデスクは分割線の本数が条件）は、特徴が無い入力（器具の寸法だけの判定）では当てない */
+  if (p.needs_features) for (const k of p.needs_features) if (f[k] == null) return null;
+  if (p.origin === "measured") {
+    const s = p.features.size_mm;
+    const tolS = Math.max(18, s.short * 0.05), tolL = Math.max(18, s.long * 0.05);
+    if (Math.abs(f.short - s.short) > tolS || Math.abs(f.long - s.long) > tolL) return null;
+    if (f.arcShare != null && Math.abs(f.arcShare - p.features.arc_share) > 0.3) return null;
+    if (f.closed != null && p.features.closed_outline != null && f.closed !== p.features.closed_outline) return null;
+    if (f.innerClosed != null && p.features.inner_closed != null && f.innerClosed !== p.features.inner_closed) return null;
+    const close = 1 - (Math.abs(f.short - s.short) / s.short + Math.abs(f.long - s.long) / s.long) / 2;
+    return Math.max(0, Math.min(1, close));
+  }
+  const sr = p.size_range_mm, pr = p.primitives || {};
+  if (!gateRange(f.short, sr.short) || !gateRange(f.long, sr.long)) return null;
+  if (f.short && f.long && !gateRange(f.long / f.short, p.aspect_range)) return null;
+  if (!gateRange(f.arcShare, pr.arc_share)) return null;
+  if (pr.closed_outline != null && f.closed != null && f.closed !== pr.closed_outline) return null;
+  if (pr.inner_closed != null && f.innerClosed != null && f.innerClosed !== pr.inner_closed) return null;
+  if (pr.divider_min != null && f.dividers != null && f.dividers < pr.divider_min) return null;
+  const cs = (v, r) => 1 - Math.min(1, Math.abs(v - (r[0] + r[1]) / 2) / ((r[1] - r[0]) / 2 + 1));
+  return 0.90 + 0.10 * (cs(f.short, sr.short) + cs(f.long, sr.long)) / 2;
+}
+
+/* ===== 寸法特性による確定の制限（2026-11-21、Web参照基準の実測から） =====
+ * パターンの形のスコアが十分でも、外形寸法がその器具の実在寸法帯から外れていれば
+ * 「形だけでは確定しない」として類似（要確認）に落とす。出典は
+ * ~/workspace/kaku/work/symbol-webref/REFERENCE.md（国交省標準図・メーカー公表寸法という
+ * 事実のみ）と、実図面シンボルの実測（TOILET_JWW.md：便器の平面幅はリモコン付きで496、
+ * 描画寸法は公称より10〜15mm短いので帯は描画実測基準）。
+ * 帯は short=短辺・long=長辺（mm）。どちらの辺が幅でどちらが奥行かは外形だけでは
+ * 分からないので、両方向の割り当てが両方とも成り立たない時だけ外す（保守側）。
+ * - 洋式大便器：描画の長さ上限は約800（実測最大785＋余裕）。幅はリモコン付き496が上限級。
+ *   長さ>820 または 幅>510 は便器として確定しない。
+ * - 小便器：幅330〜460・出寸法320〜420（LIXIL/TOTO公表寸法、Pass 2 で奥行上限420に拡張）。
+ *   両辺がこの枠に収まらない物は確定しない。
+ * - 浴槽：UB浴槽は幅800〜900・在来は700〜750、長さは公表の小型級からUB最大級の1,750まで。
+ *   幅680〜950・長さ850〜1,750 の外は確定しない。なお長さの下限850には、かつて
+ *   実例と誤認した図面由来の「小型浴槽帯」の話が混ざっていた（その実例は和式便器
+ *   だった。BATH_RULE_REVIEW §4.3）。公表寸法では 750〜800 長の小型浴槽も実在する
+ *   ため逆向きのリスクはあるが、正例がゼロの現状では数値は凍結し、本物の浴槽の
+ *   実例で検証できたら再調整する。
+ * - 洗面器（単体ボウルの奥行条件）：単体ボウルは奥行380以上が洗面器、360以下は手洗器の帯。
+ *   ただし幅が手洗器の上限（500）を超えカウンター幅（600）に届かない中間の物は、
+ *   手洗器でも洗面ボウルでもカウンターでもあり得ないので確定しない（奥行≤360・幅520〜580）。
+ *   カウンター型（幅600級）は奥行が浅い物が実在する（実測600×250）ため、この条件の対象外。
+ * - SK重なり帯：SK（560×456級）と洗面器単体（500〜600×450〜550）は寸法が完全に重なる。
+ *   幅525〜600×奥行450〜460 では寸法を根拠に確定しない（洗面器・流し・SK の双方）。
+ * 戻り値: 落とす理由のキー文字列、または null（制限なし） */
+export function sizeVetoReason(category, f) {
+  const s = f && f.short, l = f && f.long;
+  if (!(s > 0) || !(l > 0)) return null;
+  switch (category) {
+    case '洋式大便器':
+      if (l > 820 || s > 510) return 'toilet-size';
+      return null;
+    case '小便器':
+      if (s < 320 || s > 420 || l < 330 || l > 460) return 'urinal-size';
+      return null;
+    case '浴槽':
+      if (s < 680 || s > 950 || l < 850 || l > 1750) return 'bath-size';
+      return null;
+    case '洗面器':
+      if (s <= 360 && l > 520 && l < 580) return 'basin-depth';
+      if (s >= 450 && s <= 460 && l >= 525 && l <= 600) return 'sk-overlap';
+      return null;
+    case '流し・SK':
+      if (s >= 450 && s <= 460 && l >= 525 && l <= 600) return 'sk-overlap';
+      return null;
+  }
+  return null;
+}
+
+/* 判定の3区分（画面の色分け用）：検出＝緑、類似＝橙、不明＝灰色 */
+export const SYM_VERDICTS = {
+  hit: { key: "hit", name: "検出", color: "#3ccf8e" },
+  near: { key: "near", name: "類似", color: "#ffb020" },
+  unknown: { key: "unknown", name: "不明", color: "#9aa7b8" }
+};
+
+/* 図面から拾った器具の外形（b = [x0, y0, x1, y1]、単位は m）から辞書で判定する。
+ * 器具のデータには外形しか無いので、判定に使う特徴は寸法だけ（円弧の割合・輪郭の閉じなどは null＝ゲートを通す）。
+ * userDict（自分の辞書：利用者が「これは何か」を教えた { name, short, long } の配列）が最優先。
+ *   寸法が実測パターンと同じ許容（±max(18mm, 5%)）で合えば、その名前で検出（mine: true）。
+ * scale（任意）：図面の寸法の自動補正（js/symscale.js）。図面の座標が実寸の scale 倍で
+ *   描かれている時、寸法の判定だけ実寸（寸法÷scale）で行う。戻り値の short/long は
+ *   図面から測ったままの値（表示用）。scale が 1 の時は従来と完全に同じ。
+ * 戻り値: { verdict: "hit" | "near" | "unknown", category, score, short, long, mine? }（short/long は mm） */
+export function classifyBox(b, userDict = [], scale = 1) {
+  if (!b || b.length < 4) return { verdict: "unknown", category: null, score: 0, short: 0, long: 0 };
+  const w = Math.abs(b[2] - b[0]) * 1000, h = Math.abs(b[3] - b[1]) * 1000;
+  const short = Math.min(w, h), long = Math.max(w, h);
+  const sc = (typeof scale === 'number' && Number.isFinite(scale) && scale > 0) ? scale : 1;
+  const eShort = short / sc, eLong = long / sc;
+  for (const u of userDict || []) {
+    if (!u || !u.name || !(u.short > 0) || !(u.long > 0)) continue;
+    const tolS = Math.max(18, u.short * 0.05), tolL = Math.max(18, u.long * 0.05);
+    if (Math.abs(eShort - u.short) <= tolS && Math.abs(eLong - u.long) <= tolL)
+      return { verdict: "hit", category: u.name, score: 1, short, long, mine: true };
+  }
+  const r = classifySymbol({ short, long, arcShare: null, closed: null, innerClosed: null, dividers: null }, sc);
+  if (r.result === "不明") return { verdict: "unknown", category: null, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore };
+  if (r.result === "要確認") return { verdict: "near", category: r.category, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore, sizeVeto: r.sizeVeto };
+  return { verdict: "hit", category: r.result, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore };
+}
+
+/* 器具の「表示用」判定（sw.46）：classifyBox の生判定を、画面に出す段位だけ落とした物。
+ * 器具への確定（classifyBox）は寸法だけが根拠で、形の特徴が無い。実測では
+ * 寸法のみの確定の正解率は 15.9%（13/82）しかなく、形で判定する家具クラスタの
+ * 確定（80.7%、230/285）と大きく違う（FIVE_DRAWING_REREVIEW §5）。そのため
+ * 表示では器具の hit を「類似（要確認）」までに落とし、確定とは出さない。
+ * ただし生の判定は rawVerdict に残し、タイプ補正（js/typefix.js）はそちらを使う
+ * （補正側は寸法以外の裏付けと組み合わせて判断するため）。
+ * 自分の辞書（mine）の hit は利用者本人が教えた判定なので落とさない */
+export function classifyFixtureDisplay(b, userDict = [], scale = 1) {
+  const r = classifyBox(b, userDict, scale);
+  if (r.verdict !== 'hit' || r.mine) return { ...r, rawVerdict: r.verdict };
+  return { ...r, verdict: 'near', rawVerdict: 'hit', capped: true };
+}
+
+/* 線の集まりから切り出した形（js/furndetect.js の候補）を判定する。
+ * f: { short, long（mm）, arcShare, closed, dividers }。自分の辞書が最優先（寸法で照合）。
+ * ctx（任意）: buildChairContexts が作る文脈。ある時だけ、「類似」を文脈で確定に上げる
+ * （椅子ルートと衛生ルート。下の文脈判定の節を参照）。
+ * ctx が無い時の戻り値は従来と完全に同じ。
+ * scale（任意）：classifyBox と同じ寸法の自動補正。判定だけ実寸で行い、戻り値の寸法は測ったまま。
+ * 戻り値は classifyBox と同じ形 */
+export function classifyCluster(f, userDict = [], ctx = null, scale = 1) {
+  const short = f && f.short, long = f && f.long;
+  if (!(short > 0) || !(long > 0)) return { verdict: "unknown", category: null, score: 0, short: 0, long: 0 };
+  const sc = (typeof scale === 'number' && Number.isFinite(scale) && scale > 0) ? scale : 1;
+  const eShort = short / sc, eLong = long / sc;
+  for (const u of userDict || []) {
+    if (!u || !u.name || !(u.short > 0) || !(u.long > 0)) continue;
+    const tolS = Math.max(18, u.short * 0.05), tolL = Math.max(18, u.long * 0.05);
+    if (Math.abs(eShort - u.short) <= tolS && Math.abs(eLong - u.long) <= tolL)
+      return { verdict: "hit", category: u.name, score: 1, short, long, mine: true };
+  }
+  const r = classifySymbol({ short, long, arcShare: f.arcShare != null ? f.arcShare : null, closed: f.closed != null ? f.closed : null, innerClosed: null, dividers: f.dividers != null ? f.dividers : null }, sc);
+  if (r.result === "不明") return { verdict: "unknown", category: null, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore };
+  if (r.result === "要確認") return promoteChair({ verdict: "near", category: r.category, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore, sizeVeto: r.sizeVeto }, ctx);
+  return { verdict: "hit", category: r.result, score: r.score, short, long, second: r.second, secondScore: r.secondScore, chairScore: r.chairScore };
+}
+
+/* ===== 文脈判定（2026-11-19、椅子→一般化） =====
+ * 椅子は平面の形が洗面器・小便器とほぼ同じで、形だけでは「類似（僅差）」止まりになる
+ * （実図面5件で類似止まり175件・確定は僅か）。2026-11-18 の合意どおり、文脈は
+ * 「形の判定が僅差の時だけ、その決着に使う」。はっきりした形の判定は文脈で覆さない。
+ * 実図面での測定（~/workspace/kaku/work/yardstick/chair_ctx_analysis*.mjs、
+ * diag_sym36*.mjs、proto_sym36_v2.mjs）で決めた条件：
+ *   - 形のスコアが 0.95 以上（実椅子候補は全て 0.979 以上。形そのものが弱い物は救わない）
+ *   - 支持：確定した机・デスクの縁まで 0.6m 以内／同じ寸法の候補が 2m 以内に2件以上
+ *     （机に付く・列をなす、が実椅子の姿）／属するゾーンの名前が事務・会議などの部屋名
+ *   - 水回りの文脈が先に効く（椅子には上げない）：ゾーン名が水回り／小さい区画（15㎡以下）
+ *     の中に水回りの文字（便・洗・湯・浴・トイレ等）がある／2m 以内に水回りの文字がある／
+ *     便器・小便器の器具の縁まで 0.5m 以内
+ * 昇格した判定には context を付ける（画面で「文脈で確定」と分かるように）。
+ *
+ * 一般化（sw.36）：実測で、食堂・待合の椅子は形の1位が洗面器（椅子は2位 0.954）になる
+ * ことが分かった（江南の食堂・待合で34件、目視確認済み）。そこで椅子ルートは
+ * 「1位が椅子」だけでなく「1位が衛生器具でも、椅子の形スコアが 0.95 以上あり、
+ * 支持があり、水回りでなければ椅子で確定」まで広げた。反復（列）の数え方も、
+ * 1位カテゴリを問わず「椅子の形スコア 0.95 以上の類似候補＋確定した椅子」に一般化した。
+ * 逆向きに、トイレ内の小便器の列（形は小便器1位・洋式大便器と僅差）は、衛生側の
+ * 確認シグナルで確定する：便器・小便器の器具の縁まで 1m 以内、または水回りの文字が
+ * 1m 以内にある物を「アンカー」とし、同寸法で連なる列全体に効かせる（三井屋の小便器3件）。
+ * 確認シグナルは降格シグナルより厳しく取る（ゾーン名は確認には使わない。実測で、
+ * 待合の椅子が入った区画に「女子トイレ」のゾーン名が付く例があり、ゾーン名だけで
+ * 洗面器に確定すると誤認になるため）。
+ * またゾーン名の水回り降格は、区画が 20㎡ を超える場合は効かせない（複数の部屋が
+ * 混ざった大きな区画では、ゾーン名がその場所の部屋名とは限らないため。同上の実測）。 */
+export const CHAIR_CTX_FLOOR = 0.95;
+const CHAIR_DESK_MAX = 0.6;      /* 机の縁までの距離（m） */
+const CHAIR_REP_MIN = 2;         /* 同じ寸法の候補がこの件数以上、近くにあれば「列」 */
+const CHAIR_REP_R = 2.0;         /* 反復を数える半径（m） */
+const CHAIR_REP_TOL = 45;        /* 「同じ寸法」と見る許容（mm） */
+const CHAIR_WET_TEXT_MAX = 2.0;  /* 水回りの文字がこの距離（m）以内にあれば水回り文脈（降格用） */
+const CHAIR_SAN_MAX = 0.5;       /* 便器・小便器の縁までの距離（m、降格用） */
+const CHAIR_FACE_WET_MAX = 15;   /* 区画内の文字で水回りと見る区画の大きさ上限（㎡） */
+const ZONE_WET_FACE_MAX = 20;    /* ゾーン名で水回りと見る区画の大きさ上限（㎡） */
+const SAN_FIX_ANCHOR_MAX = 1.0;  /* 衛生の確認：便器・小便器の縁までの距離（m） */
+const SAN_TEXT_ANCHOR_MAX = 1.0; /* 衛生の確認：水回りの文字までの距離（m） */
+const SAN_CATS = new Set(['小便器', '洋式大便器', '洗面器', '流し・SK', '浴槽']);
+const WET_NAME_RE = /便|洗|湯|浴|トイレ|厠|WC/i;
+const OFFICE_NAME_RE = /事務|会議|応接|社長|役員|食堂|待合|休憩|ロビー|受付|打合|ミーティング|控室|談話|教室|研修|執務|講義|実習室|図書/;
+const SAN_TYPES = new Set(['toilet', 'urinal']);
+
+const pipC = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+const polyAreaC = P => { let a = 0; for (let i = 0, j = P.length - 1; i < P.length; j = i++) a += (P[j][0] + P[i][0]) * (P[j][1] - P[i][1]); return Math.abs(a / 2); };
+const edgeDistC = (a, b) => { const dx = Math.max(0, Math.max(a[0] - b[2], b[0] - a[2])); const dy = Math.max(0, Math.max(a[1] - b[3], b[1] - a[3])); return Math.hypot(dx, dy); };
+const chairScoreOf = r => (r && r.chairScore != null ? r.chairScore : (r && r.category === '椅子' ? r.score : 0));
+
+/* 素の判定 r に文脈 ctx を適用する。昇格する時だけ新しいオブジェクトを返し、それ以外は r をそのまま返す。
+ * 椅子ルート（context: "chair"）：1位が椅子、または1位が衛生器具でも椅子の形が有力な時、
+ *   水回りでなく支持があれば椅子で確定する。
+ * 衛生ルート（context: "sanitary"）：1位が衛生器具のまま、アンカー（器具・文字への近さ）
+ *   またはアンカーと同寸法で連なる列に属する時、その1位カテゴリで確定する。 */
+export function promoteChair(r, ctx) {
+  /* sizeVeto（寸法が実在帯の外）の類似は、文脈でも確定に上げない。寸法の不成立は文脈では覆らない */
+  if (!ctx || !r || r.mine || r.verdict !== 'near' || r.sizeVeto) return r;
+  const support = !!(ctx.desk || ctx.rep || ctx.office);
+  if (r.category === '椅子') {
+    if (!(r.score >= CHAIR_CTX_FLOOR)) return r;
+    if (ctx.wet) return r;
+    if (support) return { ...r, verdict: 'hit', context: 'chair' };
+    return r;
+  }
+  if (SAN_CATS.has(r.category) && r.score >= CHAIR_CTX_FLOOR) {
+    if (chairScoreOf(r) >= CHAIR_CTX_FLOOR && !ctx.wet && support)
+      return { ...r, verdict: 'hit', category: '椅子', context: 'chair' };
+    if (ctx.anchor || ctx.anchorGroup) return { ...r, verdict: 'hit', context: 'sanitary' };
+  }
+  return r;
+}
+
+/* 候補全体（clusters と、その素の判定 base）と周囲の情報 env から、候補ごとの文脈を作る。
+ * env: { zones: [{name, faces:[区画の i]}], faces: [{i, poly}], fixtures: [{b, t}], texts: [{t| s, x, y}] }
+ * 戻り値: clusters と同じ並びの配列（文脈で決着しうる「類似」候補以外は null） */
+/* scale（任意、既定 1）：寸法の自動補正。「同じ寸法」の許容（実寸で 45mm）は、
+ * 図面の測ったままの寸法で比べる時は scale 倍にして使う（距離の根拠は実寸のまま） */
+export function buildChairContexts(clusters, base, env = {}, scale = 1) {
+  const repTol = CHAIR_REP_TOL * ((typeof scale === 'number' && Number.isFinite(scale) && scale > 0) ? scale : 1);
+  const out = new Array((clusters || []).length).fill(null);
+  if (!clusters || !clusters.length) return out;
+  const zones = env.zones || [], faces = env.faces || [], fixtures = env.fixtures || [], texts = env.texts || [];
+  const candIdx = [], deskIdx = [], repPool = [], sanIdx = [];
+  clusters.forEach((x, j) => {
+    if (!x || !x.b || !base || !base[j]) return;
+    const b = base[j];
+    if (b.verdict === 'hit' && b.category === '机・デスク') deskIdx.push(j);
+    if (b.verdict === 'hit' && b.category === '椅子') repPool.push(j);
+    if (b.verdict !== 'near') return;
+    if (chairScoreOf(b) >= CHAIR_CTX_FLOOR) repPool.push(j);
+    if (b.category === '椅子' || chairScoreOf(b) >= CHAIR_CTX_FLOOR || (SAN_CATS.has(b.category) && b.score >= CHAIR_CTX_FLOOR)) candIdx.push(j);
+    if (SAN_CATS.has(b.category) && b.score >= CHAIR_CTX_FLOOR) sanIdx.push(j);
+  });
+  if (!candIdx.length) return out;
+  const faceArea = faces.map(f => (f && f.poly && f.poly.length >= 3) ? polyAreaC(f.poly) : null);
+  const faceZone = new Map();
+  zones.forEach(z => { for (const i of (z && z.faces) || []) if (!faceZone.has(i)) faceZone.set(i, z); });
+  const wetTexts = texts.filter(t => t && WET_NAME_RE.test(String(t.t != null ? t.t : (t.s || ''))));
+  const san = fixtures.filter(f => f && f.b && SAN_TYPES.has(f.t));
+  for (const j of candIdx) {
+    const x = clusters[j], cx = (x.b[0] + x.b[2]) / 2, cy = (x.b[1] + x.b[3]) / 2;
+    let deskDist = null;
+    for (const k of deskIdx) { const d = edgeDistC(x.b, clusters[k].b); if (deskDist == null || d < deskDist) deskDist = d; }
+    let rep = 0;
+    for (const k of repPool) {
+      if (k === j) continue; const o = clusters[k];
+      if (Math.abs(o.short - x.short) > repTol || Math.abs(o.long - x.long) > repTol) continue;
+      if (Math.hypot((o.b[0] + o.b[2]) / 2 - cx, (o.b[1] + o.b[3]) / 2 - cy) <= CHAIR_REP_R) rep++;
+    }
+    /* 属する区画（一番小さい物）と、そのゾーン */
+    let face = null, faceI = -1;
+    faces.forEach((f, fi) => { if (f && f.poly && f.poly.length >= 3 && faceArea[fi] != null && pipC(cx, cy, f.poly) && (face == null || faceArea[fi] < faceArea[faceI])) { face = f; faceI = fi; } });
+    const zone = face ? faceZone.get(face.i != null ? face.i : faceI) : null;
+    let wet = false;
+    /* ゾーン名の水回りは、小さい区画の時だけ根拠にする（大きな区画は複数室が混ざりうる） */
+    if (zone && WET_NAME_RE.test(String(zone.name || '')) && (faceArea[faceI] == null || faceArea[faceI] <= ZONE_WET_FACE_MAX)) wet = true;
+    if (!wet && face && faceArea[faceI] <= CHAIR_FACE_WET_MAX) {
+      for (const t of wetTexts) { if (pipC(+t.x, +t.y, face.poly)) { wet = true; break; } }
+    }
+    let wetTextDist = null;
+    for (const t of wetTexts) { const d = Math.hypot(+t.x - cx, +t.y - cy); if (wetTextDist == null || d < wetTextDist) wetTextDist = d; }
+    if (!wet && wetTextDist != null && wetTextDist <= CHAIR_WET_TEXT_MAX) wet = true;
+    let sanDist = null;
+    for (const f of san) { const d = edgeDistC(x.b, f.b); if (sanDist == null || d < sanDist) sanDist = d; }
+    if (!wet && sanDist != null && sanDist <= CHAIR_SAN_MAX) wet = true;
+    out[j] = {
+      desk: deskDist != null && deskDist <= CHAIR_DESK_MAX,
+      rep: rep >= CHAIR_REP_MIN,
+      office: !!(zone && OFFICE_NAME_RE.test(String(zone.name || ''))),
+      wet,
+      anchor: (sanDist != null && sanDist <= SAN_FIX_ANCHOR_MAX) || (wetTextDist != null && wetTextDist <= SAN_TEXT_ANCHOR_MAX),
+      anchorGroup: false,
+      deskDist: deskDist == null ? null : Math.round(deskDist * 100) / 100,
+      repCount: rep,
+      sanDist: sanDist == null ? null : Math.round(sanDist * 100) / 100,
+      wetTextDist: wetTextDist == null ? null : Math.round(wetTextDist * 100) / 100
+    };
+  }
+  /* 衛生のアンカーは、同寸法（±45mm）で中心間 2m 以内で連なる列全体に効かせる */
+  if (sanIdx.length) {
+    const par = new Map(sanIdx.map(j => [j, j]));
+    const find = a => { while (par.get(a) !== a) { par.set(a, par.get(par.get(a))); a = par.get(a); } return a; };
+    for (let a = 0; a < sanIdx.length; a++) for (let b = a + 1; b < sanIdx.length; b++) {
+      const x = clusters[sanIdx[a]], y = clusters[sanIdx[b]];
+      if (Math.abs(x.short - y.short) > repTol || Math.abs(x.long - y.long) > repTol) continue;
+      const d = Math.hypot((x.b[0] + x.b[2]) / 2 - (y.b[0] + y.b[2]) / 2, (x.b[1] + x.b[3]) / 2 - (y.b[1] + y.b[3]) / 2);
+      if (d <= CHAIR_REP_R) { const ra = find(sanIdx[a]), rb = find(sanIdx[b]); if (ra !== rb) par.set(ra, rb); }
+    }
+    const anchored = new Set();
+    for (const j of sanIdx) if (out[j] && out[j].anchor) anchored.add(find(j));
+    for (const j of sanIdx) if (out[j] && anchored.has(find(j))) out[j].anchorGroup = true;
+  }
+  return out;
+}
+
+/* 戻り値: { result: カテゴリ名 | "要確認" | "不明", score, category, label,
+ *   second, secondScore（次点カテゴリとそのスコア）, chairScore（「椅子」カテゴリのスコア。
+ *   文脈判定が「形の上では椅子も有力」かを見るために常に返す） }
+ * scale（任意、既定 1）：図面の寸法の自動補正（js/symscale.js の symScale.factor）。
+ *   図面の座標が実寸の scale 倍で描かれている時、寸法がらみの判定（パターンの寸法照合と
+ *   sizeVeto の寸法帯）だけを実寸（short/long ÷ scale）で行う。形の特徴（円弧の割合・
+ *   閉じ具合・分割線）と縦横比は縮尺で変わらないので、そのまま使う。
+ *   scale が 1 の時は従来と完全に同じ結果になる。 */
+export function classifySymbol(f, scale = 1) {
+  const sc = (typeof scale === 'number' && Number.isFinite(scale) && scale > 0) ? scale : 1;
+  const ff = (sc === 1 || !f || !(f.short > 0) || !(f.long > 0)) ? f : { ...f, short: f.short / sc, long: f.long / sc };
+  /* まずカテゴリごとの最良スコアに集約する（同じカテゴリのパターン同士は競合しない。
+   * 集約しないと、同寸法のパターンを複数持つカテゴリが「僅差チェック」をすり抜けてしまう） */
+  const byCat = new Map();
+  for (const e of SYM_DICT) for (const p of e.patterns) {
+    const s = scorePattern(p, ff);
+    if (s == null) continue;
+    const cur = byCat.get(e.category);
+    if (!cur || s > cur.score) byCat.set(e.category, { score: s, category: e.category, kind: e.kind, label: p.label || p.origin });
+  }
+  const hits = [...byCat.values()];
+  hits.sort((a, b) => b.score - a.score);
+  const extra = {
+    second: hits.length > 1 ? hits[1].category : null,
+    secondScore: hits.length > 1 ? hits[1].score : 0,
+    chairScore: byCat.has("椅子") ? byCat.get("椅子").score : 0
+  };
+  if (!hits.length || hits[0].score < SYM_THRESHOLD) return { result: "不明", score: hits.length ? hits[0].score : 0, category: null, label: null, ...extra };
+  /* 寸法特性の制限：形のスコアが十分でも、寸法が実在帯の外なら確定しない（類似に落とす）。
+   * sizeVeto が付いた類似は、文脈判定（promoteChair）でも確定に上げない */
+  const veto = sizeVetoReason(hits[0].category, ff);
+  if (veto) return { result: "要確認", score: hits[0].score, category: hits[0].category, label: hits[0].label, sizeVeto: veto, ...extra };
+  if (hits.length > 1 && hits[0].category !== hits[1].category && hits[0].score - hits[1].score < 0.05)
+    return { result: "要確認", score: hits[0].score, category: hits[0].category, label: hits[0].label, ...extra };
+  return { result: hits[0].category, score: hits[0].score, category: hits[0].category, label: hits[0].label, ...extra };
+}

@@ -1,6 +1,6 @@
 /* KAKU Service Worker — オフライン対応とキャッシュ管理
  * アプリを更新したら VERSION の数字を上げてください（古いキャッシュが自動で消えます）。 */
-const VERSION = "2026-11-18.16";
+const VERSION = "2026-11-22.1";
 const CACHE = "kaku-generation-" + VERSION;
 
 /* 最初に必ず保存するもの（これが揃えばオフラインで起動できる） */
@@ -28,10 +28,19 @@ const CORE = [
   "./js/pages.js",
   "./js/export.js",
   "./js/master-data.js",
+  "./js/symdict.js",
+  "./js/furndetect.js",
+  "./js/fixrescue.js",
+  "./js/facerepair.js",
+  "./js/polygonize.js",
+  "./js/roomjudge.js",
+  "./js/zones.js",
+  "./js/dxf-dims.js",
   "./js/piping.js",
   "./js/drawing.js",
   "./js/planview.js",
   "./js/legacy.js",
+  "./js/textstitch.js",
   "./js/lighting.js",
   "./js/view3d.js",
   "./js/floors.js",
