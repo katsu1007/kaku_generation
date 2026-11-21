@@ -417,7 +417,12 @@ function symList(d) {
   const mine = userSyms();
   /* 器具の表示判定は classifyFixtureDisplay：寸法だけが根拠の器具の確定は表示では
    * 「類似」までに落とす（sw.46）。生の判定は rawVerdict に残り、タイプ補正が使う */
-  const list = fx.map((x, k) => ({ k, b: x && x.b, t: x && x.t, ...(x && x.b ? classifyFixtureDisplay(x.b, mine, scale) : { verdict: 'unknown', category: null, score: 0, short: 0, long: 0 }) })).filter(s => s.b);
+  /* 器具の救済が線の形で決めた器具（how）は、寸法だけの辞書判定より形の判定を出す（拾い方と符の表示を揃える。2026-11-22） */
+  const HOW = { jbowl: '和式便器', detail: '洋式大便器', sk: '流し・SK', bowlrow: '洗面器', basin: '洗面器' };
+  const inReg = fixturesInRegions(d);   /* 表・表題欄の中の器具は図面に出さないので、判定の一覧にも並べない */
+  const list = fx.map((x, k) => { if (!x || !x.b || inReg[k]) return { k }; const r = classifyFixtureDisplay(x.b, mine, scale);
+    if (x.how && HOW[x.how] && !(r.mine)) return { k, b: x.b, t: x.t, ...r, verdict: 'hit', rawVerdict: 'hit', category: HOW[x.how], shape: x.how, capped: false, sizeVeto: null };
+    return { k, b: x.b, t: x.t, ...r }; }).filter(s => s.b);
   const baseFu = fu.map(x => (x && x.b) ? classifyCluster(x, mine, null, scale) : null);
   let ctxs = [];
   try { ctxs = buildChairContexts(fu, baseFu, { zones: d.zones || [], faces, fixtures: fx, texts: (src2 && src2.texts) || [] }, scale); } catch (e) { ctxs = []; }
@@ -463,7 +468,9 @@ function typeFixMap(d) {
     if (needFaces) { try { faces = polygonizeFaces(psegs); } catch (e) { faces = null; } }
   }
   let map = fx.map(() => null);
-  try { map = correctFixtureTypes(fx, { verdicts, texts: (d.src2 && d.src2.texts) || [], zoneNames: (d.zones || []).map(z => z.name).filter(Boolean), scale, faces, segs }); }
+  /* 線の形で決めた器具（how）は、種類の直し（寸法と文脈の補正）の対象にしない＝手で直した器具と同じ扱い */
+  const fxT = fx.map(x => (x && x.how && !x.edited) ? { ...x, edited: true } : x);
+  try { map = correctFixtureTypes(fxT, { verdicts, texts: (d.src2 && d.src2.texts) || [], zoneNames: (d.zones || []).map(z => z.name).filter(Boolean), scale, faces, segs }); }
   catch (e) { console.warn('器具のタイプ補正に失敗', e); }
   tfCache.set(d, { S, tsig, zsig, psegs, map });
   return map;

@@ -108,18 +108,18 @@ function KF_build(ents, P, roles) {
       /* 形で見分け直す（救済の図面だけ。2026-11-22） */
       const s0 = Math.min(w, h), l0 = Math.max(w, h);
       /* メーカーの細かい図の洋便器（線が数百本）：便座・タンクの形で 45〜65cm×55〜80cm、丸（排水口・水栓）はほとんど無い */
-      let det = 0, jp = 0;
-      if (g.length >= 300 && cv >= 150 && s0 >= .45 && s0 <= .65 && l0 >= .55 && l0 <= .8 && circ <= 1 && t !== 'urinal') { t = 'toilet'; det = 1; }
+      let det = 0, jp = 0, how = '';
+      if (g.length >= 300 && cv >= 150 && s0 >= .45 && s0 <= .65 && l0 >= .55 && l0 <= .8 && circ <= 1 && t !== 'urinal') { t = 'toilet'; det = 1; how = 'detail'; }
       /* 和便器：細長い楕円（短い方 20〜36cm・長い方 50〜80cm・長さが幅の1.9倍以上）。丸い物がくっついて洗面台に見える時も、その形が中心なら便器 */
-      else if (!t || t === 'counter' || t === 'sink') { const jb = KF_jbowl(g); if (jb) { t = 'toilet'; b = jb.b; jp = 1; } }
+      else if (!t || t === 'counter' || t === 'sink') { const jb = KF_jbowl(g); if (jb) { t = 'toilet'; b = jb.b; jp = 1; how = 'jbowl'; } }
       /* 断面の斜線（短い平行な斜めの線だけ）は曲線ではない：扉の枠・壁の切り口を便器・手洗いと見ない */
       if (t && t !== 'counter' && !g.some(o => o.cv && o.k !== 'line')) { const A = {}; let nl = 0; g.forEach(o => { if (o.k !== 'line' || !o.cv) return; nl++; const a = Math.round(((Math.atan2(o.pts[1][1] - o.pts[0][1], o.pts[1][0] - o.pts[0][0]) * 180 / Math.PI + 180) % 180) / 5); A[a] = (A[a] || 0) + 1; });
         if (nl >= 4 && Math.max(...Object.values(A)) >= nl * .8) t = null; }
       /* 置き型の洗面器：半円・楕円の鉢（40〜60cm×50〜75cm）に水栓・排水口の丸が2つ以上 */
-      if (!t && circ >= 2 && bowl >= 1 && cv >= 10 && s0 >= .4 && s0 <= .6 && l0 >= .5 && l0 <= .75) t = 'counter';
+      if (!t && circ >= 2 && bowl >= 1 && cv >= 10 && s0 >= .4 && s0 <= .6 && l0 >= .5 && l0 <= .75) { t = 'counter'; how = 'basin'; }
       const diag = g.some(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .1 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .1 && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .2) ? 1 : 0;
-      return { b, cv, circ, w: b[2] - b[0], h: b[3] - b[1], t, n: g.length, ly: g[0].ly, bowl, det, jp, diag }; };
-    const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl, det: r.det || 0, row: r.row || 0, jp: r.jp || 0, diag: r.diag || 0 });
+      return { b, cv, circ, w: b[2] - b[0], h: b[3] - b[1], t, n: g.length, ly: g[0].ly, bowl, det, jp, diag, how }; };
+    const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl, det: r.det || 0, row: r.row || 0, jp: r.jp || 0, diag: r.diag || 0, how: r.how || '' });
     GS.map(o => o.g).forEach(g => { const r = mk(g), w = r.w, h = r.h;
       if (!r.t) {
         const lg = KF_lshape(g, r.b); if (lg) { const B = r.b, band = l => ({ S: [B[0], B[1], B[2], B[1] + l.D], N: [B[0], B[3] - l.D, B[2], B[3]], W: [B[0], B[1], B[0] + l.D, B[3]], E: [B[2] - l.D, B[1], B[2], B[3]] })[l.sd], bs = lg.map(band);
@@ -133,7 +133,7 @@ function KF_build(ents, P, roles) {
           tb.forEach(T => { if (used.has(T)) return; const row = tb.filter(q => !used.has(q) && KF_sameRow(T, q, tb)); row.forEach(q => used.add(q));
             const B = row.reduce((a, q) => [Math.min(a[0], q.b[0]), Math.min(a[1], q.b[1]), Math.max(a[2], q.b[2]), Math.max(a[3], q.b[3])], [Infinity, Infinity, -Infinity, -Infinity]);
             const t = row.length >= 2 ? 'counter' : (T.drain && Math.min(T.b[2] - T.b[0], T.b[3] - T.b[1]) >= .3 ? 'slop' : null); if (!t) return;
-            put({ b: B, t, cv: row.reduce((a, q) => a + q.cv, 0), circ: row.reduce((a, q) => a + (q.drain ? 1 : 0), 0), n: row.reduce((a, q) => a + q.items.length, 0), ly: g[0].ly, bowl: row.length, row: row.length }); });
+            put({ b: B, t, how: t === 'slop' ? 'sk' : 'bowlrow', cv: row.reduce((a, q) => a + q.cv, 0), circ: row.reduce((a, q) => a + (q.drain ? 1 : 0), 0), n: row.reduce((a, q) => a + q.items.length, 0), ly: g[0].ly, bowl: row.length, row: row.length }); });
           const rest = g.filter(o => !tb.some(T => used.has(T) && o.b[0] >= T.b[0] - .01 && o.b[1] >= T.b[1] - .01 && o.b[2] <= T.b[2] + .01 && o.b[3] <= T.b[3] + .01));
           if (rest.length < g.length) { if (rest.length) group(rest, depth + 1); return; } } }
         let rest = g, got = false; g.filter(o => o.cl && (o.b[2] - o.b[0]) >= .25 && (o.b[3] - o.b[1]) >= .25 && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) <= 3.6).sort((p, q) => (q.b[2] - q.b[0]) * (q.b[3] - q.b[1]) - (p.b[2] - p.b[0]) * (p.b[3] - p.b[1])).forEach(o => {
@@ -338,6 +338,7 @@ export function rescueFixtures(ents, plan, rot = 0, engineFixtures = [], roles =
       back: gback(x.back, rot),
       out: o ? rotG(o, rot).map(q3) : null,
       src: 'rescue', ly: x.ly || '',
+      ...(x.how ? { how: x.how } : {}),   /* 線の形で決めた器具（符の表示・種類の直しはこれを優先する） */
     });
   }
   /* エンジンの器具と重なる物・救済同士で重なる物は出さない（エンジン優先） */
