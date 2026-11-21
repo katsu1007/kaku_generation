@@ -20,3 +20,11 @@ export function fixturesInUse(d) {
   const B = [...off, ...reg];
   return fx.map(x => { if (!x || !x.b) return true; const cx = (x.b[0] + x.b[2]) / 2, cy = (x.b[1] + x.b[3]) / 2; return !B.some(b => cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3]); });
 }
+
+/* 表・表題欄（解析の table・title）の中にある器具の印（器具の真ん中で見る）。表題欄の会社のマークや「記事」の空の枠を
+   器具と拾った物は、図面にも器具として出さない（明細には fixturesInUse で元から入れていない）。手で直した器具は出す */
+export function fixturesInRegions(d) {
+  const fx = (d && d.fixtures) || [];
+  const reg = ((d && d.analysis && d.analysis.regions) || []).filter(r => r.box && (r.type === 'table' || r.type === 'title')).map(r => r.box);
+  return fx.map(x => { if (!x || !x.b || x.edited || !reg.length) return false; const cx = (x.b[0] + x.b[2]) / 2, cy = (x.b[1] + x.b[3]) / 2; return reg.some(b => cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3]); });
+}

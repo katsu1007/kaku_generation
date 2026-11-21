@@ -8,7 +8,7 @@ import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
-import { sheetsOf, fixturesInUse } from './sheets.js';
+import { sheetsOf, fixturesInUse, fixturesInRegions } from './sheets.js';
 export { sheetsOf, fixturesInUse };
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
 import { planView, roomColor } from './planview.js';
@@ -932,7 +932,7 @@ function stepRooms(ctx) {
   const fxList = () => (p.drawing && p.drawing.fixtures) || [];
   /* 図面に出す器具：タイプ補正がある物は補正後の種類で描く（保存データはそのまま。
    * 並びと数は fxList と同じなので、タップの番号もそのまま合う） */
-  const fxDisplayList = () => { const fx = fxList(); if (!p.drawing) return fx; const TF = typeFixMap(p.drawing); return fx.map((x, k) => (TF[k] && TF[k].shown) ? { ...x, t: TF[k].shown, ot: x.t } : x); };
+  const fxDisplayList = () => { const fx = fxList(); if (!p.drawing) return fx; const TF = typeFixMap(p.drawing), inReg = fixturesInRegions(p.drawing); return fx.map((x, k) => inReg[k] ? { ...x, t: 'other', ot: x.t } : (TF[k] && TF[k].shown) ? { ...x, t: TF[k].shown, ot: x.t } : x); };
   const owner = () => { const m = new Map(); p.rooms.forEach(r => (r.faces || []).forEach(i => m.set(i, r.color)));
     /* 隣にまとめた区画は、まとめ先の部屋の色で出す */
     Object.entries((p.drawing && p.drawing.faceJoin) || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); });
