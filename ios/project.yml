@@ -16,7 +16,7 @@ targets:
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: KAKU
+        CFBundleDisplayName: KAKU Gen
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -30,9 +30,9 @@ targets:
         UIFileSharingEnabled: false
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.katsu.kaku
+        PRODUCT_BUNDLE_IDENTIFIER: com.katsu.kakugen
         MARKETING_VERSION: "2.0"
-        CURRENT_PROJECT_VERSION: "22"
+        CURRENT_PROJECT_VERSION: "23"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

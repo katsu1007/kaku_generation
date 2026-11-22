@@ -32,4 +32,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete ipa-latest -y --cleanup-tag || true
-          gh release create ipa-latest Kaku.ipa --title "KAKU 最新版（iPhoneアプリ）" --notes "自動ビルド"
+          gh release create ipa-latest Kaku.ipa --title "KAKU Gen 最新版（iPhoneアプリ・kaku_generation）" --notes "自動ビルド"

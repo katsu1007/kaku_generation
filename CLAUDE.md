@@ -7,7 +7,7 @@
 - **kaku_generation は KAKU（kaku-estimate）を履歴ごと写した、独立の試し場**。かつの方針：「あくまでベースは KAKU。言語を変えたら良さそうになる機能だけ変更する」。サーバーは使わない
 - **KAKU 本体（kaku-estimate）は変更しない**。手元の写しでは remote `kaku-estimate` の push 先を止めてある。push は `origin`（katsu1007/kaku_generation）だけ。下の「コミットと公開」の `origin` もこちらを指す
 - 公開は https://katsu1007.github.io/kaku_generation/ （GitHub Pages を有効にした場合）。**KAKU と同じ katsu1007.github.io なので、保存場所の名前を分けてある**：IndexedDB `kaku_generation`、前のKAKUの保存キー `kaku-generation-v1`、キャッシュ `kaku-generation-`。戻さないこと
-- IPA は bundle ID が KAKU と同じ（com.katsu.kaku）。**作る前に bundle ID と名前を変える**（同じだと iPhone で KAKU とぶつかる）
+- IPA は **bundle ID を com.katsu.kakugen、ホーム画面の名前を「KAKU Gen」に変えた**（2026-11-22・かつ「ipaでお願い」。KAKU 本体の com.katsu.kaku とぶつからない＝両方入れられる。保存場所もアプリごとに別）。ダウンロードは https://github.com/katsu1007/kaku_generation/releases/download/ipa-latest/Kaku.ipa
 - 入れた物：読み取りの高速化（結果は完全に同じ）。遅さの原因は言語ではなく「1つごとに図面全体を見直す」作りだった
   - 区画の形・広さ・機器の外周・形をなぞる・小さい囲みの投票（`rgCompute0`・`rgFacePoly`）：区画のマス目の範囲だけ見る
   - ドアの円弧（`findDoors`）：線の端の位置の表で、円弧の中心の近くの線だけ調べる
