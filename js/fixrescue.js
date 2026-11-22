@@ -117,6 +117,9 @@ function KF_build(ents, P, roles) {
         if (nl >= 4 && Math.max(...Object.values(A)) >= nl * .8) t = null; }
       /* 置き型の洗面器：半円・楕円の鉢（40〜60cm×50〜75cm）に水栓・排水口の丸が2つ以上 */
       if (!t && circ >= 2 && bowl >= 1 && cv >= 10 && s0 >= .4 && s0 <= .6 && l0 >= .5 && l0 <= .75) { t = 'counter'; how = 'basin'; }
+      /* 鉢（内側の閉じた輪）が見えている洗面台は、形の証拠がある＝寸法だけの辞書の判定（机・SK）より先にする（むぎと決めた・2026-11-22）。
+         鉢2つ以上＝ボウルの並んだカウンター、鉢1つ＋水栓・排水口の丸2つ以上＝洗面器 */
+      if (t === 'counter' && !how) { if (bowl >= 2 && cv >= 4) how = 'bowls'; else if (bowl >= 1 && circ >= 2 && cv >= 10) how = 'basin'; }
       const diag = g.some(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .1 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .1 && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .2) ? 1 : 0;
       return { b, cv, circ, w: b[2] - b[0], h: b[3] - b[1], t, n: g.length, ly: g[0].ly, bowl, det, jp, diag, how }; };
     const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl, det: r.det || 0, row: r.row || 0, jp: r.jp || 0, diag: r.diag || 0, how: r.how || '' });

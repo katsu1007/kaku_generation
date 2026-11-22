@@ -418,7 +418,7 @@ function symList(d) {
   /* 器具の表示判定は classifyFixtureDisplay：寸法だけが根拠の器具の確定は表示では
    * 「類似」までに落とす（sw.46）。生の判定は rawVerdict に残り、タイプ補正が使う */
   /* 器具の救済が線の形で決めた器具（how）は、寸法だけの辞書判定より形の判定を出す（拾い方と符の表示を揃える。2026-11-22） */
-  const HOW = { jbowl: '和式便器', detail: '洋式大便器', sk: '流し・SK', bowlrow: '洗面器', basin: '洗面器' };
+  const HOW = { jbowl: '和式便器', detail: '洋式大便器', sk: '流し・SK', bowlrow: '洗面器', bowls: '洗面器', basin: '洗面器' };
   const inReg = fixturesInRegions(d);   /* 表・表題欄の中の器具は図面に出さないので、判定の一覧にも並べない */
   const list = fx.map((x, k) => { if (!x || !x.b || inReg[k]) return { k }; const r = classifyFixtureDisplay(x.b, mine, scale);
     if (x.how && HOW[x.how] && !(r.mine)) return { k, b: x.b, t: x.t, ...r, verdict: 'hit', rawVerdict: 'hit', category: HOW[x.how], shape: x.how, capped: false, sizeVeto: null };
