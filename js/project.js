@@ -1,6 +1,6 @@
 /* 案件の画面：① 現場 → ② 部屋 → ③ 工事 → ④ 確認 → ⑤ 書類 */
 import { state, registerView, setTop, go, touch, opts, findProject, masterItems, categories, removeProject, restoreProject, newProject, flush, trackUndo, paintUndo, stepUndo, rebaseUndo, resetUndo } from './app.js';
-import { roomGeom, lineQty, netQty, totals, check, MEASURES, KINDS, isRoomBased, hatsuCalc, hatsuItem, cutItem, ZANDO_F, wallGroup, lineBasis, okState, okMark, hasCode, missingWaste, isDemoArea, wasteRows } from './calc.js';
+import { lineSource, SOURCE_LABEL, roomGeom, lineQty, netQty, totals, check, MEASURES, KINDS, isRoomBased, hatsuCalc, hatsuItem, cutItem, ZANDO_F, wallGroup, lineBasis, okState, okMark, hasCode, missingWaste, isDemoArea, wasteRows } from './calc.js';
 import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
 import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
@@ -1987,7 +1987,7 @@ function lineCard(l, rooms, lines = []) {
     <button class="iconbtn del" data-act="delLine" title="この行を消す" aria-label="この行を消す">${icon('trash')}</button>
     ${auto || l.applyLoss ? `<div class="qtyinfo" data-out="qinfo:${l.id}"></div>` : ''}
     ${l.pipe ? pipePanel(l, lines) : ''}
-    <div class="basisrow"><button class="btn sm" data-act="basis">${icon('search')}数量の根拠・確認</button><span data-out="ok:${l.id}"></span>${hasCode(l) ? `<span class="mk" data-out="mk:${l.id}"></span>` : ''}</div>
+    <div class="basisrow"><button class="btn sm" data-act="basis">${icon('search')}数量の根拠・確認</button>${srcPill(lineSource(l, rooms, lines))}<span data-out="ok:${l.id}"></span>${hasCode(l) ? `<span class="mk" data-out="mk:${l.id}"></span>` : ''}</div>
     <details class="more" style="grid-column:1/-1"><summary>くわしく（区分・ロス率・原価・コピー）</summary>
       <div class="opts" style="margin-top:10px">
         <label class="f">区分<select class="in" data-lk="kind">${Object.entries(KINDS).map(([k, n]) => `<option value="${k}" ${(l.kind || 'other') === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -2144,6 +2144,8 @@ function basisDialog(p, l, after) {
   const mu = B.unit || '';
   const src = l.itemId ? masterItems().find(i => i.id === l.itemId && i.src) : null;   // 単価の出どころ（分かっている品目だけ）
   const hasOff = B.rows.some(r => r.off > 0);
+  const S = lineSource(l, p.rooms, p.lines);
+  const srcTxt = `<p class="small" style="margin:0 0 8px">数量の出どころ：${srcPill(S)}${B.type === 'room' && S.src === 'mixed' ? `　図面の部屋 ${S.nDraw}・手で作った部屋 ${S.nMan}` : ''}</p>`;
   let how;
   if (B.type === 'room') {
     how = `<p class="small muted" style="margin:0 0 8px">${esc(MEASURES[B.measure].label)}を、部屋ごとに足しています。</p>
@@ -2167,7 +2169,7 @@ function basisDialog(p, l, after) {
   const st = okState(l, p.rooms, o, p.lines);
   const m = modal({
     title: `「${l.name || '名前のない行'}」の数量の根拠`, wide: true,
-    body: `${how}
+    body: `${srcTxt}${how}
       <p class="small muted" style="margin:10px 0 0">${lossTxt}</p>
       <table class="sum" style="margin-top:10px">
         <tr><td>見積もりの数量</td><td>${fmt(B.qty, 3)} ${u}</td></tr>
@@ -2179,6 +2181,19 @@ function basisDialog(p, l, after) {
   });
   $('#bsOk', m.el).onclick = () => { l.ok = okMark(l, p.rooms, o, p.lines); touch(p); m.close(); after && after(); };
   const off = $('#bsOff', m.el); if (off) off.onclick = () => { delete l.ok; touch(p); m.close(); after && after(); };
+}
+
+/* 数量の出どころの札（図面から／手入力／図面＋手入力） */
+function srcPill(S) {
+  const cls = S.src === 'drawing' ? 'info' : S.src === 'mixed' ? 'acc' : '';
+  return `<span class="pill ${cls} srcpill" title="数量の出どころ">${SOURCE_LABEL[S.src]}</span>`;
+}
+/* ④の数量の確認：出どころごとの行数と金額（金額は小計の内訳。足すと小計になる） */
+function srcSum(p, o) {
+  const t = totals(p, o), g = { drawing: [0, 0], manual: [0, 0], mixed: [0, 0] };
+  p.lines.forEach((l, i) => { const k = lineSource(l, p.rooms, p.lines).src; g[k][0]++; g[k][1] += t.lines[i].amount; });
+  const cell = k => g[k][0] ? `<span>${srcPill({ src: k })} ${g[k][0]} 行・${yen(g[k][1])}</span>` : '';
+  return `<div class="row small" style="gap:12px;flex-wrap:wrap;margin-bottom:10px"><span class="muted">数量の出どころ</span>${cell('drawing')}${cell('mixed')}${cell('manual')}</div>`;
 }
 
 /* ---------- ④ 確認 ---------- */
@@ -2201,6 +2216,7 @@ function stepCheck({ p, body, refresh }) {
         ${wOn.length ? `<div class="checks">${wOn.map(wRow).join('')}</div>` : `<div class="row">${icon('checkc')}<b>気になる所はありません</b></div>`}
         ${wOff.length ? `<details class="more" style="margin-top:10px"><summary>「要らない」にした物（${wOff.length}）</summary><div class="checks" style="margin-top:8px">${wOff.map(wRow).join('')}</div></details>` : ''}</div>
       ${p.lines.length ? `<div class="card" style="margin-bottom:14px" id="okSum"><h2>数量の確認</h2><div class="sub">③工事の「数量の根拠・確認」で、行ごとに根拠を見て印を付けられます。印を付けた後で数量か単価が変わると、ここに出ます。</div>
+        ${srcSum(p, o)}
         <div class="row"><span class="pill ${nOk === p.lines.length ? 'ok' : ''}">確認済み <b>${nOk}</b> ／ ${p.lines.length} 行</span>${chg.length ? `<span class="pill warn">確認の後で変わった ${chg.length} 行</span>` : ''}</div>
         ${chg.length ? `<div class="checks" style="margin-top:10px">${chg.map(l => `<div class="chk warn">${icon('alert')}<span style="flex:1">「${esc(l.name || '名前のない行')}」は、確認した時（${fmt(l.ok.qty, 3)}${esc(l.unit || '')} × ${yen(l.ok.price)}）から変わっています。</span><button class="btn sm" data-fix="${esc(l.id)}" data-step="3">見る</button></div>`).join('')}</div>` : ''}</div>` : ''}
       <div class="grid g2">

@@ -1,0 +1,35 @@
+# 数量の出どころの札（③工事の行・数量の根拠・④確認の内訳）と、組み合わせの入れ忘れ（スマホの幅）
+from playwright.sync_api import sync_playwright
+import os
+os.makedirs('tests/e2e/shots', exist_ok=True)
+U=os.environ.get('KAKU_URL','http://localhost:8765/')
+with sync_playwright() as p:
+    b=p.chromium.launch()
+    pg=b.new_page(viewport={'width':390,'height':844},device_scale_factor=2,is_mobile=True,has_touch=True)
+    errs=[];pg.on('pageerror',lambda e:errs.append(str(e)))
+    pg.goto(U);pg.wait_for_timeout(800)
+    pg.check('#nt_ok');pg.click('#nt_go');pg.wait_for_timeout(300);pg.click('#i_sample');pg.wait_for_timeout(800)
+    ok=lambda name,c:print(('OK  ' if c else 'NG  ')+name)
+    pid=pg.evaluate("async()=>(await import('./js/app.js')).state.projects[0].id")
+    # 見本の部屋2つのうち1つを「図面の部屋」にする（図面を読まずに出どころの決まりだけ確かめる）
+    pg.evaluate("async()=>{const a=await import('./js/app.js');const p=a.state.projects[0];p.rooms[0].src='plan';a.touch(p)}")
+    pg.evaluate(f"location.hash='#/p/{pid}/3'");pg.wait_for_timeout(700)
+    pills=pg.evaluate("[...document.querySelectorAll('.srcpill')].map(e=>e.textContent)")
+    exp=pg.evaluate("""async()=>{const a=await import('./js/app.js');const c=await import('./js/calc.js');const p=a.state.projects[0];return p.lines.map(l=>c.SOURCE_LABEL[c.lineSource(l,p.rooms,p.lines).src])}""")
+    ok('③の行ごとに出どころの札（行の数だけ・決まりどおり）', pills==exp and len(pills)>0)
+    print('  ',pills)
+    pg.screenshot(path='tests/e2e/shots/srcpill_3.png')
+    pg.locator('[data-act=basis]').first.click();pg.wait_for_timeout(400)
+    ok('数量の根拠に「数量の出どころ」', '数量の出どころ' in pg.inner_text('.modal'))
+    pg.screenshot(path='tests/e2e/shots/srcpill_basis.png')
+    pg.keyboard.press('Escape');pg.wait_for_timeout(200)
+    if pg.locator('.modal [data-close]').count(): pg.locator('.modal [data-close]').first.click()
+    pg.evaluate(f"location.hash='#/p/{pid}/4'");pg.wait_for_timeout(700)
+    t=pg.inner_text('#okSum')
+    ok('④に出どころごとの行数と金額', '数量の出どころ' in t)
+    s=pg.evaluate("""async()=>{const a=await import('./js/app.js');const c=await import('./js/calc.js');const p=a.state.projects[0];const t=c.totals(p,a.opts());
+      const g={};p.lines.forEach((l,i)=>{const k=c.lineSource(l,p.rooms,p.lines).src;g[k]=(g[k]||0)+t.lines[i].amount});return [Object.values(g).reduce((x,y)=>x+y,0),t.subtotal]}""")
+    ok('出どころごとの金額を足すと小計', s[0]==s[1])
+    pg.locator('#okSum').screenshot(path='tests/e2e/shots/srcpill_4.png')
+    ok('エラーなし', not errs);print(errs)
+    b.close()

@@ -203,6 +203,42 @@ export function lineBasis(line, rooms, opt = DEFAULTS, lines) {
   return out;
 }
 
+/* 数量の出どころ：図面から来た数量か、手で入れた数量か（金額・数量は変えない。見せるだけ）。
+ * 戻り値 { src: 'drawing'|'manual'|'mixed', nDraw, nMan }（部屋から数える行は、図面の部屋と手で作った部屋の数）
+ *   図面の器具から入れた行（fromFix）・図面で入れた物から作った行（fromDemo：壁の解体・照明・配線・電気など）＝図面
+ *   部屋から数える行＝入る部屋が図面の部屋（src 'plan'）だけなら図面、手で作った部屋だけなら手入力、両方なら両方
+ *   廃材の行＝もとの解体の行の出どころ、配管から数える行＝元の配管の行の出どころ、ほか＝手入力 */
+export function lineSource(line, rooms, lines, seen = new Set()) {
+  const one = s => ({ src: s, nDraw: s === 'drawing' ? 1 : 0, nMan: s === 'manual' ? 1 : 0 });
+  if (!line) return one('manual');
+  if (line.fromFix || line.fromDemo) return one('drawing');
+  const b = line.basis;
+  if (seen.has(line)) return one('manual');
+  seen.add(line);
+  const merge = list => {
+    const d = list.some(x => x.src !== 'manual'), m = list.some(x => x.src !== 'drawing');
+    return { src: d && m ? 'mixed' : d ? 'drawing' : 'manual', nDraw: list.filter(x => x.src !== 'manual').length, nMan: list.filter(x => x.src !== 'drawing').length };
+  };
+  if (b && b.measure === 'link') {
+    const par = (lines || []).find(x => x.id === b.line);
+    return par ? lineSource(par, rooms, lines, seen) : one('manual');
+  }
+  if (b && b.measure === 'waste') {
+    const kind = b.kind || 'w-waste';
+    const src = (lines || []).filter(l => l !== line && isDemoArea(l) && wasteKind(l.itemId) === kind).map(l => lineSource(l, rooms, lines, seen));
+    return src.length ? merge(src) : one('manual');
+  }
+  if (isRoomBased(line)) {
+    const ids = b.rooms === 'all' || !Array.isArray(b.rooms) ? null : new Set(b.rooms);
+    const rs = (rooms || []).filter(r => !ids || ids.has(r.id));
+    if (!rs.length) return one('manual');
+    const nDraw = rs.filter(r => r.src === 'plan').length, nMan = rs.length - nDraw;
+    return { src: nDraw && nMan ? 'mixed' : nDraw ? 'drawing' : 'manual', nDraw, nMan };
+  }
+  return one('manual');
+}
+export const SOURCE_LABEL = Object.freeze({ drawing: '図面から', manual: '手入力', mixed: '図面＋手入力' });
+
 /* 「確認済み」の印：付けた時の数量と単価を覚えておき、後で変わったら「変わりました」にする。
  * 戻り値 'ok'（確認済みのまま）／'changed'（確認の後で数量か単価が変わった）／''（まだ確認していない） */
 export function okState(line, rooms, opt = DEFAULTS, lines) {

@@ -96,6 +96,31 @@ export function workChecks(project, opt = DEFAULTS) {
       const work = lines.some(l => l.kind !== 'mat' && !/^demo/.test(l.cat || '') && !/解体|撤去/.test(l.name || '') && (l.cat === c || (l.basis && l.basis.measure === c) || re.test(l.name || '')));
       if (!work) add('lab:' + c, 'tip', `${label}の材料がありますが、張る手間の行が見当たりません。材工の単価なら、このままで構いません。`, { step: 3 });
     });
+    /* 組み合わせ：部屋から数える解体の行に入っている部屋が、同じ所（床・壁・天井）の仕上げの行に入っていない。
+     * 図面で入れた壁の解体（間仕切りを撤去する・fromDemo）は部屋から数えないので見ない */
+    const roomSet = l => (l.basis.rooms === 'all' || !Array.isArray(l.basis.rooms)) ? null : new Set(l.basis.rooms);
+    const covered = (list, r) => list.some(l => { const s = roomSet(l); return !s || s.has(r.id); });
+    {
+      const miss = [];
+      [['demoF', 'floor', '床'], ['demoW', 'wall', '壁'], ['demoC', 'ceil', '天井']].forEach(([dc, fc, label]) => {
+        const dl = lines.filter(l => l.cat === dc && isRoomBased(l) && !l.fromDemo && (l.layer || 1) === 1);
+        if (!dl.length) return;
+        const fl = lines.filter(l => isRoomBased(l) && (l.cat === fc || (fc !== 'floor' && l.cat === 'paint' && l.basis.measure === fc)));
+        rooms.filter(r => covered(dl, r) && !covered(fl, r)).forEach(r => { let m = miss.find(x => x.r === r); if (!m) miss.push(m = { r, parts: [] }); m.parts.push(label); });
+      });
+      if (miss.length) add('demoNoFin', 'tip', `解体するのに、同じ所の仕上げの行に入っていない部屋があります：${miss.slice(0, 4).map(m => `「${m.r.name || '名前なし'}」（${m.parts.join('・')}）`).join('')}${miss.length > 4 ? ` ほか${miss.length - 4}部屋` : ''}。解体だけで終わる工事なら、このままで構いません。`, { step: 3, roomId: miss[0].r.id });
+    }
+    /* 組み合わせ：ボード・下地ごと解体する部屋が、新しいボード（下地）の行に入っていない（クロスだけ張り替える時はボードは要らないので、ボードごと解体した時だけ見る） */
+    [['wall', /^demoW$/, '壁'], ['ceil', /^demoC$/, '天井']].forEach(([ms, dre, label]) => {
+      const dl = lines.filter(l => dre.test(l.cat || '') && isRoomBased(l) && !l.fromDemo && /ボード|下地|軽鉄/.test(`${l.name || ''} ${l.spec || ''}`));
+      if (!dl.length) return;
+      const isNew = l => (l.cat === 'board' || l.cat === 'lgs' || /ボード|下地/.test(l.name || '')) && !/^demo/.test(l.cat || '') && !/解体|撤去/.test(l.name || '');
+      /* ボード・軽鉄を数量で入れた行（部屋に結び付いていない）がある時は、どの部屋の分か分からないので出さない */
+      if (lines.some(l => isNew(l) && !isRoomBased(l))) return;
+      const bl = lines.filter(l => isNew(l) && isRoomBased(l) && l.basis.measure === ms);
+      const un = rooms.filter(r => covered(dl, r) && !covered(bl, r));
+      if (un.length) add('boardMiss:' + ms, 'warn', `${names(un)}は${label}をボード・下地ごと解体しますが、新しい${label}のボード（下地）の行に入っていません。`, { step: 3, roomId: un[0].id });
+    });
     /* 品番・色：1行でも入れている案件だけ、入れていない仕上げ材を知らせる（品番を使わない案件では出さない） */
     const coded = lines.filter(hasCode), noCode = coded.filter(l => !String(l.code || '').trim());
     if (noCode.length && noCode.length < coded.length) add('noCode', 'tip', `仕上げ材 ${noCode.length} 行に品番・色が入っていません（「${noCode[0].name || '名前のない行'}」${noCode.length > 1 ? ' など' : ''}）。`, { step: 3, lineId: noCode[0].id });
