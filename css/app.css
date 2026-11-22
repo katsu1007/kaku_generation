@@ -103,6 +103,15 @@ textarea.in { min-height: 84px; resize: vertical; }
 .hello { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
 .hello h2 { font-size: 28px; margin: 0; letter-spacing: -.01em; }
 .hello p { margin: 4px 0 0; color: var(--muted); }
+.bkline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -10px 0 20px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); font-size: 13.5px; color: var(--muted); }
+.bkline b { color: var(--text); font-weight: 650; }
+.bkline.warn { border-color: var(--warn); background: var(--warn-soft); }
+.bkline.warn b { color: var(--warn); }
+.bkline .spacer { flex: 1; }
+.bkline svg { width: 18px; height: 18px; flex: none; }
+.logoset { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; grid-column: 1/-1; }
+.logoset .lprev { width: 160px; height: 56px; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; background: #fff; overflow: hidden; color: #888; font-size: 12px; }
+.logoset .lprev img { max-width: 150px; max-height: 50px; object-fit: contain; }
 .eyebrow { font-size: 11px; letter-spacing: .16em; color: var(--faint); font-weight: 700; margin-bottom: 6px; }
 .actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .action { text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 15px; padding: 16px; display: flex; flex-direction: column; gap: 8px; min-height: 118px; color: var(--text); text-decoration: none; }
@@ -306,6 +315,8 @@ details.more[open] > summary::before { content: "－ "; }
 .doc .tot tr.g td { font-weight: 700; font-size: 11pt; background: #f2f2f2; }
 .doc .note { margin-top: 14px; border: 1px solid #888; padding: 8px 10px; min-height: 50px; font-size: 9.5pt; white-space: pre-wrap; }
 .doc .bank { margin-top: 10px; font-size: 9.5pt; }
+.doc .co .colog { display: block; width: auto; height: auto; max-width: 46mm; max-height: 16mm; margin: 0 0 4px auto; object-fit: contain; }
+.doc .disc { margin-top: 6px; font-size: 8.5pt; color: #333; white-space: pre-wrap; }
 .doc h2 { font-size: 12pt; margin: 18px 0 6px; border-left: 4px solid #111; padding-left: 8px; }
 .unitwrap span svg { width: 18px; height: 18px; display: block; }
 .action[disabled] { opacity: .5; pointer-events: none; }

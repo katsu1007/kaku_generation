@@ -5,6 +5,7 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import { BUILTIN_ITEMS } from './master-data.js';
 import { icon, esc, yen, toast, modal, ask, share, matchItem, $ } from './ui.js';
+import { EST_NOTE_DEFAULT } from './docs.js';
 
 /* ---------- 単価マスター ---------- */
 registerView('master', async el => {
@@ -144,7 +145,14 @@ registerView('settings', async el => {
     <div class="card"><h2>会社情報・振込先</h2><div class="sub">見積書・請求書に載ります。空欄の項目は載りません。</div>
       <div class="grid g2">${cf('name', '会社名')}${cf('person', 'あなたの名前（担当者）')}${cf('zip', '郵便番号')}${cf('address', '住所')}${cf('tel', '電話')}${cf('fax', 'FAX')}${cf('email', 'メール')}${cf('regNo', '適格請求書の登録番号', 'T1234567890123')}
       <label class="f" style="grid-column:1/-1">振込先<input class="in" data-c="bank" value="${esc(c.bank || '')}" placeholder="例：瀬戸信用金庫 ○○支店 普通 1234567 カ）○○"></label>
-      <label class="f" style="grid-column:1/-1">請求書の一言<input class="in" data-c="payNote" value="${esc(c.payNote || '')}" placeholder="例：恐れ入りますが振込手数料はご負担ください。"></label></div></div>
+      <label class="f" style="grid-column:1/-1">請求書の一言<input class="in" data-c="payNote" value="${esc(c.payNote || '')}" placeholder="例：恐れ入りますが振込手数料はご負担ください。"></label>
+      <div class="f" style="grid-column:1/-1"><label class="f" style="margin:0">ロゴ<span class="hint">見積書・請求書の会社名の上に載ります（PNG・JPEG）</span></label>
+        <div class="logoset"><div class="lprev">${c.logo ? `<img src="${esc(c.logo)}" alt="ロゴ">` : 'ロゴなし'}</div>
+        <label class="btn" style="cursor:pointer">${icon('up')}${c.logo ? '画像を変える' : '画像を選ぶ'}<input type="file" id="logoIn" accept="image/png,image/jpeg,image/webp" hidden></label>
+        ${c.logo ? `<button class="btn ghost" id="logoOff">${icon('trash')}外す</button>` : ''}</div></div>
+      <label class="f" style="grid-column:1/-1">見積書の注意書き<span class="hint">見積書のいちばん下に毎回載ります。空にすると標準の文に戻ります</span>
+        <textarea class="in" data-c="estNote" rows="3" placeholder="${esc(EST_NOTE_DEFAULT)}">${esc(c.estNote || '')}</textarea></label>
+      <label class="row" style="grid-column:1/-1;gap:8px;cursor:pointer"><input type="checkbox" id="estNoteOn" style="width:20px;height:20px" ${c.estNoteOff ? '' : 'checked'}>見積書に注意書きを載せる</label></div></div>
     <div class="card"><h2>計算の決まり</h2><div class="sub">空欄なら薄い字の数字を使います。変えると全部の案件の数量・金額が変わります。</div>
       <div class="grid g4">${sf('matRate', '材料の掛け率', '%', '定価の何%で仕入れるか')}${sf('laborRate', '手間の原価率', '%', '手間の単価の何%が原価か')}${sf('loss', '材料のロス率', '%')}${sf('taxRate', '消費税', '%')}
       ${sf('ceilH', '天井高の標準', 'm')}${sf('doorArea', 'ドア1か所の面積', '㎡')}${sf('doorW', 'ドアの幅', 'm', '巾木から引く')}${sf('winArea', '窓1か所の面積', '㎡', '寸法を入れない時')}
@@ -171,15 +179,15 @@ registerView('settings', async el => {
       await saveSettings(); toast('保存しました');
     }
   });
-  $('#bexp').onclick = async () => {
-    try {
-      const data = await store.exportAll();
-      const d = new Date();
-      await share(new Blob([JSON.stringify(data)], { type: 'application/json' }), `KAKU_バックアップ_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`);
-      s.lastBackup = Date.now(); await saveSettings();
-      toast(`${data.projects.length} 件の案件を書き出しました`);
-    } catch (err) { toast(err.message, { bad: true }); }
+  $('#bexp').onclick = async () => { if (await backupNow()) render(); };
+  /* ロゴ：画像を小さくしてから会社情報に入れる（見積書・請求書の会社名の上に載る） */
+  $('#logoIn').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { c.logo = await shrinkLogo(f); await saveKV('company', c); toast('ロゴを保存しました'); render(); }
+    catch (err) { toast(err.message, { bad: true }); }
   };
+  const lo = $('#logoOff'); if (lo) lo.onclick = async () => { delete c.logo; await saveKV('company', c); toast('ロゴを外しました'); render(); };
+  $('#estNoteOn').onchange = async e => { if (e.target.checked) delete c.estNoteOff; else c.estNoteOff = true; await saveKV('company', c); toast(e.target.checked ? '見積書に注意書きを載せます' : '見積書に注意書きを載せません'); };
   $('#bimp').onchange = async e => {
     const f = e.target.files[0]; if (!f) return;
     try {
@@ -243,6 +251,32 @@ registerView('help', async el => {
 
 
 /* ---------- はじめにお読みください（最初の1回。確認しないと進めない） ---------- */
+/* バックアップを書き出す（設定とホームのボタンから）。書き出せたら true */
+export async function backupNow() {
+  try {
+    const data = await store.exportAll();
+    const d = new Date();
+    await share(new Blob([JSON.stringify(data)], { type: 'application/json' }), `KAKU_バックアップ_${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`);
+    state.settings.lastBackup = Date.now(); await saveSettings();
+    toast(`${data.projects.length} 件の案件を書き出しました`);
+    return true;
+  } catch (err) { toast(err.message, { bad: true }); return false; }
+}
+/* ロゴの画像を、横 600px・縦 200px までに縮めて data URL にする（会社情報に入れるので小さく） */
+async function shrinkLogo(file) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('PNG か JPEG の画像を選んでください。');
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('画像を読めませんでした。')); i.src = url; });
+    const k = Math.min(1, 600 / img.naturalWidth, 200 / img.naturalHeight);
+    const w = Math.max(1, Math.round(img.naturalWidth * k)), h = Math.max(1, Math.round(img.naturalHeight * k));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    cv.getContext('2d').drawImage(img, 0, 0, w, h);
+    const out = file.type === 'image/jpeg' ? cv.toDataURL('image/jpeg', 0.9) : cv.toDataURL('image/png');
+    if (out.length > 400000) throw new Error('画像が大きすぎます。もう少し小さい画像を選んでください。');
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
 export const NOTICE_HTML = `<ul style="margin:0;padding-left:1.2em;display:grid;gap:10px">
   <li><b>KAKU の数量と金額は概算です。</b>部屋の寸法・図面の読み取り・ロス率・単価の目安から計算しているため、実際の数量や金額と違うことがあります。</li>
   <li><b>見積書を出す前に、数量・単価・金額を必ずご自身で確かめてください。</b>「④確認」の検算は計算の間違いや入れ忘れを見つけるためのもので、現場に合っているかまでは確かめられません。</li>

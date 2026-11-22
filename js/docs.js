@@ -123,10 +123,17 @@ export async function printDoc(html) {
   setTimeout(done, 60000);
 }
 
+/* 見積書の下に載せる注意書き（設定 → 会社情報で変えられる。空なら標準の文。印を外すと載せない） */
+export const EST_NOTE_DEFAULT = '本見積書は、現地調査・図面をもとに算出した概算です。現場の状況や数量の確定により、金額が変わる場合があります。';
+export function estNoteOf(c = state.company || {}) {
+  if (c.estNoteOff) return '';
+  return (c.estNote || '').trim() || EST_NOTE_DEFAULT;
+}
+const logoImg = c => (c.logo && /^data:image\/(png|jpeg|webp);base64,/.test(c.logo)) ? `<img class="colog" src="${c.logo}" alt="">` : '';
 function companyBlock() {
   const c = state.company || {};
-  if (!c.name) return '<div class="co" style="color:#a00">（会社情報が未入力です：設定 → 会社情報）</div>';
-  return `<div class="co"><b>${esc(c.name)}</b><br>${c.zip ? '〒' + esc(c.zip) + '<br>' : ''}${esc(c.address || '')}${c.tel ? '<br>TEL ' + esc(c.tel) : ''}${c.fax ? '　FAX ' + esc(c.fax) : ''}${c.email ? '<br>' + esc(c.email) : ''}${c.regNo ? '<br>登録番号 ' + esc(c.regNo) : ''}${c.person ? '<br>担当 ' + esc(c.person) : ''}</div>`;
+  if (!c.name) return `<div class="co">${logoImg(c)}<span style="color:#a00">（会社情報が未入力です：設定 → 会社情報）</span></div>`;
+  return `<div class="co">${logoImg(c)}<b>${esc(c.name)}</b><br>${c.zip ? '〒' + esc(c.zip) + '<br>' : ''}${esc(c.address || '')}${c.tel ? '<br>TEL ' + esc(c.tel) : ''}${c.fax ? '　FAX ' + esc(c.fax) : ''}${c.email ? '<br>' + esc(c.email) : ''}${c.regNo ? '<br>登録番号 ' + esc(c.regNo) : ''}${c.person ? '<br>担当 ' + esc(c.person) : ''}</div>`;
 }
 function itemsTable(p, t) {
   return `<table class="items"><thead><tr><th style="width:4%">No</th><th>工事項目</th><th style="width:22%">規格・仕様</th><th style="width:10%">数量</th><th style="width:6%">単位</th><th style="width:12%">単価</th><th style="width:14%">金額</th></tr></thead><tbody>
@@ -152,7 +159,7 @@ export function estimateHtml(p, no, date, opt = opts()) {
       <div><table class="meta" style="margin-left:auto"><tr><td>見積番号</td><td>${esc(p.number || '')}${no ? '（第' + no + '版）' : ''}</td></tr><tr><td>発行日</td><td>${esc(date || today())}</td></tr></table>${companyBlock()}</div></div>
     <div class="amount"><span>御見積金額（税込）</span><b>${yen(t.grand)}</b></div>
     ${itemsTable(p, t)}${totTable(t)}
-    <div class="note">備考：${esc(p.note || '')}</div></div>`;
+    <div class="note">備考：${esc(p.note || '')}</div>${estNoteOf() ? `<div class="disc">${esc(estNoteOf())}</div>` : ''}</div>`;
 }
 function invoiceHtml(p) {
   const t = totals(p, opts()); const c = state.company || {};

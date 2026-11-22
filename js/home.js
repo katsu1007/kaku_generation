@@ -7,6 +7,14 @@ import { showIntro, showNotice } from './pages.js';
 
 export const STATUS = { draft: ['見積中', 'acc'], sent: ['提出済', 'info'], won: ['受注', 'ok'], lost: ['失注', ''] };
 
+/* 前回のバックアップ（ホームのいちばん上）。まだ無い・7日以上前なら黄色 */
+function bkLine() {
+  const t = state.settings.lastBackup;
+  const days = t ? Math.floor((Date.now() - t) / 86400000) : null;
+  const old = !t || days >= 7;
+  const txt = !t ? 'まだ書き出していません' : `${new Date(t).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}（${days === 0 ? '今日' : days + '日前'}）`;
+  return `<div class="bkline${old ? ' warn' : ''}">${icon('down')}<span>前回のバックアップ：<b>${txt}</b></span><span class="spacer"></span><button class="btn sm${old ? ' primary' : ''}" id="bkNow">バックアップを書き出す</button></div>`;
+}
 function summary(p) {
   const t = totals(p, opts());
   const c = check(p, opts());
@@ -90,6 +98,7 @@ registerView('home', async el => {
         <p>${ps.length ? `見積中・提出済の案件が ${open.length} 件あります。${errs ? `確認が必要な所が ${errs} か所あります。` : ''}` : '最初の案件を作ってみましょう。'}</p></div>
       <button class="btn primary big" id="newBtn">${icon('plus')}新しい見積もり</button>
     </div>
+    ${ps.length ? bkLine() : ''}
     <div class="eyebrow">何をしますか？</div>
     <div class="actions">
       <button class="action" id="aNew"><div class="ic">${icon('plus')}</div><b>見積もりを作る</b><span>現場の情報と部屋の寸法を入れると、数量が自動で出ます</span></button>
@@ -114,6 +123,7 @@ registerView('home', async el => {
       </div>
     </div>`;
   $('#newBtn').onclick = create;
+  const bk = $('#bkNow'); if (bk) bk.onclick = async () => { const { backupNow } = await import('./pages.js'); if (await backupNow()) render(); };
   $('#aNew').onclick = create;
   $('#aDwg').onclick = () => { const p = newProject(); go('#/p/' + encodeURIComponent(p.id) + '/2'); };
   el.querySelectorAll('[data-kpi]').forEach(b => b.onclick = () => {
