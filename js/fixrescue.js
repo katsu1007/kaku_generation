@@ -160,8 +160,9 @@ function KF_build(ents, P, roles) {
     if (x.t === 'sink' && w >= .3 && w <= .45 && d >= .28 && d <= .47 && d >= .8 * w && d <= 1.3 * w) x.uc = 1; });
   /* 手洗器・小便器は壁に付いている物だけ（椅子・丸テーブルなどを外す） */
   for (let k = fx.length - 1; k >= 0; k--) if ((fx[k].t === 'sink' || fx[k].t === 'unknown') && !(fx[k].back && fx[k].bd <= .1)) fx.splice(k, 1);
-  /* 和便器のロータンク：ブースの隅の三角（斜めの線のある 55cm までの小さい物）で、和便器から50cm以内の物は便器の一部。
-     手洗い・便器として数えない（三井屋の現況図で、かつに教わった。2026-11-22） */
+  /* 和便器の手洗い付きロータンク：ブースの隅の三角（斜めの線のある 55cm までの小さい物）で、和便器から50cm以内の物は
+     和式の一部（タンクの上で手も洗える形）。単独の器具としては数えない。和便器から離れて独立して立つ隅の三角は
+     隅付け手洗器として残す（かつ・むぎと決めた。付属か独立かで分ける。2026-11-22） */
   const JP = fx.filter(x => x.jp); if (JP.length) for (let k = fx.length - 1; k >= 0; k--) { const x = fx[k]; if (x.jp || x.det || !x.diag || !(x.t === 'sink' || x.t === 'toilet' || x.t === 'unknown')) continue;
     if (Math.max(x.b[2] - x.b[0], x.b[3] - x.b[1]) > .55) continue;
     if (JP.some(j => Math.max(j.b[0] - x.b[2], x.b[0] - j.b[2], 0) <= .5 && Math.max(j.b[1] - x.b[3], x.b[1] - j.b[3], 0) <= .5)) fx.splice(k, 1); }
