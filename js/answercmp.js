@@ -8,8 +8,20 @@ const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < 
 
 /* 正解の線 → 部屋の輪。いちばん内側の輪だけ（外まわりを2重に引いた時の外の輪は捨てる）。0.3㎡ 未満は捨てる。
  * texts（{t,x,y}）があれば、輪の中の文字を部屋の名前にする */
+/* 手で引いた線は角が数cm合っていない事が多い（大天で 46本の端が浮いていた）。浮いた端から 15cm 以内のほかの線の上のいちばん近い点へ、つなぐ線を足す */
+function closeGaps(segs, gap = 0.15) {
+  const S = (segs || []).filter(s => s && s.length >= 4), key = p => Math.round(p[0] / 0.02) + ',' + Math.round(p[1] / 0.02), deg = new Map();
+  S.forEach(s => [[s[0], s[1]], [s[2], s[3]]].forEach(p => deg.set(key(p), (deg.get(key(p)) || 0) + 1)));
+  const near = (p, own) => { let best = null, bd = gap;
+    S.forEach(t => { if (t === own) return; const dx = t[2] - t[0], dy = t[3] - t[1], L = dx * dx + dy * dy || 1, u = Math.max(0, Math.min(1, ((p[0] - t[0]) * dx + (p[1] - t[1]) * dy) / L)), q = [t[0] + u * dx, t[1] + u * dy], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (d < bd && d > 1e-4) { bd = d; best = q; } }); return best; };
+  const add = [];
+  S.forEach(s => [[s[0], s[1]], [s[2], s[3]]].forEach(p => { if (deg.get(key(p)) !== 1) return; const q = near(p, s); if (q) add.push([p[0], p[1], q[0], q[1]]); }));
+  return S.concat(add);
+}
+
 export function answerRooms(segs, texts = []) {
-  const F = polygonizeFaces(segs || [], { snap: 0.02 }).filter(f => f.area >= 0.3);
+  const F = polygonizeFaces(closeGaps(segs), { snap: 0.02 }).filter(f => f.area >= 0.3);
   return F.map((f, k) => {
     const name = (texts || []).filter(t => t && pip(t.x, t.y, f.poly)).map(t => String(t.t).trim()).filter(t => t && !/^[\d.,:＝=\s]+$/.test(t) && !/^(CH|ＣＨ)/i.test(t)).slice(0, 3).join('・');
     return { id: 'a' + (k + 1), name, area: Math.round(f.area * 100) / 100, poly: f.poly };
