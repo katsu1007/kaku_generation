@@ -1412,7 +1412,7 @@ const JO_RE=/(\d+(?:\.\d+)?)\s*(帖|畳|[Jj](?![A-Za-z]))/;
 const CH_RE=/CH\s*[=＝:：]?\s*[≒≈]?\s*(\d+(?:\.\d+)?)/i; /* 「CH≒2400」「CH：2400」も読む。天井高は 1.5〜5m の時だけ使う（違う数字を天井高にしない） */
 const WIN_RE=/(AW|SW|WW|FIX|窓|引違|すべり出し|縦すべり|上げ下げ)/i;
 const DOOR_RE=/(WD|SD|AD|ドア|扉|開き戸|引戸|引き戸|片開|親子)/i;
-const SKIP_LAYER=/(寸法|文字|注記|DIM|TEXT|TXT|図枠|枠|ハッチ|HATCH|家具|設備|通り芯|中心|補助|植栽|タイル|土間|目地|床仕上|基準線|点線|^Defpoints$)/i;
+const SKIP_LAYER=/(寸法|文字|注記|DIM|TEXT|TXT|図枠|枠|ハッチ|HATCH|家具|設備|通り芯|中心|補助|植栽|タイル|土間|目地|床仕上|基準線|点線|^Defpoints$|正解|ANSWER)/i;
 function pip(pt,poly){let ins=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>pt[1])!==(yj>pt[1]))&&(pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi))ins=!ins}return ins}
 const polyArea=p=>{let a=0;for(let i=0,j=p.length-1;i<p.length;j=i++)a+=(p[j][0]+p[i][0])*(p[j][1]-p[i][1]);return Math.abs(a/2)};
 const polyPeri=p=>{let s=0;for(let i=0,j=p.length-1;i<p.length;j=i++)s+=Math.hypot(p[i][0]-p[j][0],p[i][1]-p[j][1]);return s};

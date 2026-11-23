@@ -21,7 +21,7 @@ const pip = (x, y, poly) => { let inn = false;
   return inn; };
 
 /* エンジン（KF）と同じレイヤーの外し方・救済の条件 */
-const KF_SKIP = /寸法|DIM|通り?芯|GRID|基準|文字|TEXT|ANNO|注記|ハッチ|HATCH|図枠|FRAME|^E-|電気|電灯|動力|コンセント|ELEC|DENKI|配線|WIRE|弱電|照明/i;
+const KF_SKIP = /寸法|DIM|通り?芯|GRID|基準|文字|TEXT|ANNO|注記|ハッチ|HATCH|図枠|FRAME|^E-|電気|電灯|動力|コンセント|ELEC|DENKI|配線|WIRE|弱電|照明|正解|ANSWER/i;
 const KF_SAN = /衛生|設備|器具|機器|厨房|FIXT|SAN|PLUMB|EQ|WC|便|洗面/i;
 const FURN_RE = /家具|什器|備品|データ|デスク|FURN|DATA/i;   /* 家具・データ系の名前の層は救済しない */
 const KF_OUT = { toilet: 1, counter: 1 };
