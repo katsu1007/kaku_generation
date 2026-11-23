@@ -1576,6 +1576,9 @@ function rgSingleLines(){
       const C=[P(k,0),P(j,0),P(k,1),P(j,1)];const E=[[C[0],C[1]],[C[1],C[2]],[C[2],C[3]],[C[3],C[0]]].map(([a,b])=>edgeCover(a,b));
       if(E.filter(e=>e.cov>=0.5).length<1)continue;   // ×の四角の辺のどれか1つは線に乗っている（宙に浮いた×は使わない）
       E.forEach(e=>e.list.forEach(m=>{keep[m]=1}));
+      /* 「上部吹抜」（この階は床がある・上がつながる）はホールと1部屋（かつ・2026-11-23「1階だから一部屋にしたよ」）。見えない線は足さない */
+      {const cx=(C[0][0]+C[2][0])/2,cy=(C[0][1]+C[2][1])/2,R=Math.hypot(C[0][0]-C[2][0],C[0][1]-C[2][1])/2+3;
+        if((RG.texts||[]).some(t=>/上部吹/.test(norm(String(t.t||"")).replace(/\s+/g,""))&&Math.hypot(t.x*M-cx,t.y*M-cy)<=R))continue}
       /* 線の無い辺（ホールとの境目に線が無い吹き抜けなど）には、見えない線を足す */
       [[C[0],C[1]],[C[1],C[2]],[C[2],C[3]],[C[3],C[0]]].forEach(([a,b],q)=>{if(E[q].cov<0.5)extra.push([a[0],a[1],b[0],b[1]])})}}
   const off=new Set();for(let k=0;k<N;k++)if(!keep[k])off.add(ids[k]);off.extra=extra;return off;
