@@ -84,7 +84,9 @@ function KF_build(ents, P, roles) {
   AX.forEach((p, k) => { for (let j = k + 1; j < AX.length && AX[j].at - p.at <= .25; j++) { const q = AX[j]; if (q.h !== p.h || q.at - p.at < .09) continue; const ov = Math.min(p.hi, q.hi) - Math.max(p.lo, q.lo); if (ov >= .7 * Math.min(p.hi - p.lo, q.hi - q.lo)) { wl.add(p.i); wl.add(q.i); } } });
   /* 扉と同じ層では、0.9m以上のただの線も壁として外す（器具はポリラインや曲線、短い線で描かれている） */
   const longMix = o => o.k === 'line' && mixLy.has(o.ly) && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .9;
-  const C = K.filter((o, i) => !wl.has(i) && !longMix(o) && !(o.k === 'line' && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) > 3) && !(o.k === 'arc' && o.r >= .45));
+  const C = K.filter((o, i) => !wl.has(i) && !longMix(o) && !(o.k === 'line' && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) > 3) && !(o.k === 'arc' && o.r >= .45)
+    /* 4m を超える折れ線（曲線なし）は器具ではない：部屋・外壁を閉じた折れ線で描く図面で、全部の器具が1つのかたまりになっていた（2026-11-23） */
+    && !(o.k === 'poly' && !o.cv && Math.max(o.b[2] - o.b[0], o.b[3] - o.b[1]) > 4));
   /* 四角の中の×（天井点検口・吹抜の印）は器具ではない：中点で交わる同じ長さの斜めの線2本と、その四角の辺を外す
      （小便器の上の点検口とつながって、小便器が洗面台の大きさに見えていた。2026-11-22） */
   { const D = C.filter(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .2 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .2), drop = new Set();
@@ -120,6 +122,14 @@ function KF_build(ents, P, roles) {
       /* 鉢（内側の閉じた輪）が見えている洗面台は、形の証拠がある＝寸法だけの辞書の判定（机・SK）より先にする（むぎと決めた・2026-11-22）。
          鉢2つ以上＝ボウルの並んだカウンター、鉢1つ＋水栓・排水口の丸2つ以上＝洗面器 */
       if (t === 'counter' && !how) { if (bowl >= 2 && cv >= 4) how = 'bowls'; else if (bowl >= 1 && circ >= 2 && cv >= 10) how = 'basin'; }
+      /* 丸だけのかたまり（重なった椅子の丸など）は便器ではない：便器はタンク・便座の形がある（2026-11-23） */
+      if (t === 'toilet' && !det && !jp && g.every(o => o.circ)) t = null;
+      /* SK（むぎの設計 docs/from-muse-2026-11-23.md の2）：外の四角の中に、曲線の無い閉じた四角（片側 4〜11cm 内側）があり、
+         その中に排水口の丸（12cm まで）。短い方 42〜50cm・長い方 44〜74cm。洗面器は内側が楕円・丸なので入らない */
+      if ((!t || t === 'sink' || t === 'counter') && !how && s0 >= .42 && s0 <= .5 && l0 >= .44 && l0 <= .74) {
+        const inn = g.filter(o => o.cl && !o.cv && o.k === 'poly' && o.b[0] - b[0] >= .04 && o.b[0] - b[0] <= .11 && b[2] - o.b[2] >= .04 && b[2] - o.b[2] <= .11 && o.b[1] - b[1] >= .04 && o.b[1] - b[1] <= .11 && b[3] - o.b[3] >= .04 && b[3] - o.b[3] <= .11);
+        if (inn.length && inn.some(I => g.some(q => q.circ && Math.max(q.b[2] - q.b[0], q.b[3] - q.b[1]) <= .12 && (q.b[0] + q.b[2]) / 2 > I.b[0] && (q.b[0] + q.b[2]) / 2 < I.b[2] && (q.b[1] + q.b[3]) / 2 > I.b[1] && (q.b[1] + q.b[3]) / 2 < I.b[3]))) { t = 'slop'; how = 'sk'; }
+      }
       const diag = g.some(o => o.k === 'line' && !o.cv && Math.abs(o.pts[1][0] - o.pts[0][0]) > .1 && Math.abs(o.pts[1][1] - o.pts[0][1]) > .1 && Math.hypot(o.pts[1][0] - o.pts[0][0], o.pts[1][1] - o.pts[0][1]) >= .2) ? 1 : 0;
       return { b, cv, circ, w: b[2] - b[0], h: b[3] - b[1], t, n: g.length, ly: g[0].ly, bowl, det, jp, diag, how }; };
     const put = r => fx.push({ id: 'f' + (++n), b: r.b.map(v => Math.round(v * 1000) / 1000), t: r.t, ot: r.t, cv: r.cv, circ: r.circ, n: r.n, ly: r.ly, bw: r.bowl, det: r.det || 0, row: r.row || 0, jp: r.jp || 0, diag: r.diag || 0, how: r.how || '' });

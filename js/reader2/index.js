@@ -9,7 +9,7 @@
 import { analyze as analyzeFrame } from './frame.js';
 import { joinTexts, classify, equipment, titleInfo, sheetTitles, labelBoxes } from './text.js';
 
-export const VER = 5;   // 5：表題欄の枠が無い図面でも、見出しのかたまりから工事名称などを読む（現場トイレ）。   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
+export const VER = 6;   // 6：横に並んだ図（現況図｜改修プラン）も分ける（splitCols）。 5：表題欄の枠が無い図面でも、見出しのかたまりから工事名称などを読む（現場トイレ）。   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物
@@ -17,7 +17,7 @@ export const VER = 5;   // 5：表題欄の枠が無い図面でも、見出し�
  *   見出しが縦に2つ以上並ぶ（x が 1m 以内でそろい、y が 1m 以上離れる）時だけ分ける
  *   段の境目：上と下の見出しの間で、図の幅の6割以上ある横の長い線のうち一番上（段の見出しの帯の上の線）。無ければまん中
  *   出力：[{ box, title, kind, alt }]（alt：プラン③・A案のように、同じ所の案がいくつもある物） */
-const BAND_LABEL = /^(現況図?|既存図?|改修前図?|改修後図?|計画図?|改修図|プラン\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]*|[A-ZＡ-Ｚ]案|案\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]+)$/;
+const BAND_LABEL = /^(現況図?|既存図?|改修前図?|改修後図?|計画図?|改修図|改修プラン\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]*|改修案|プラン\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]*|[A-ZＡ-Ｚ]案|案\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]+)$/;
 export function splitBands(fb, texts = [], segs = [], skip = []) {
   const inBox = (x, y, b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
   const L = texts.map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
@@ -39,6 +39,54 @@ export function splitBands(fb, texts = [], segs = [], skip = []) {
   const kindOf = (t) => /現況|既存|改修前/.test(t) ? 'now' : 'plan';
   return col.map((t, k) => ({ box: [fb[0], k + 1 < col.length ? cuts[k] : fb[1], fb[2], k ? cuts[k - 1] : fb[3]], title: t.s, kind: kindOf(t.s), alt: /プラン\s*\S|案/.test(t.s) }));
 }
+/* 横に並んだ図（現況図｜改修プラン）を分ける（むぎの設計 docs/from-muse-2026-11-23.md の3・縦の段の鏡写し）。
+ * 見出し（上と同じ言葉）が図枠の中・表と表題欄の外に、同じ高さ（1m 以内）で横に2つ以上並ぶ時。
+ * 境目は、見出しの間の図枠の高さの6割以上の縦の長い線。無ければ、見出しの間で線がいちばん長く途切れる所のまん中。
+ * 分けた両側の線のかたまり（図枠の長さの9割以上の線は除く）の大きさが近い（縦・横とも3割以内）時だけ分ける（同じ建物の今と改修なので）。
+ * 縦の段（splitBands）で分けた図枠には使わない */
+export function splitCols(fb, texts = [], segs = [], skip = []) {
+  const inBox = (x, y, b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+  const L = texts.map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
+    .filter(t => inBox(t.x, t.y, fb) && !skip.some(b => inBox(t.x, t.y, b)) && BAND_LABEL.test(t.s));
+  if (L.length < 2) return null;
+  let row = [];
+  L.forEach(a => { const c = L.filter(b => Math.abs(b.y - a.y) <= 1); if (c.length > row.length) row = c; });
+  row = row.sort((p, q) => p.x - q.x).filter((t, k, A) => !k || t.x - A[k - 1].x >= 2);
+  if (row.length < 2) return null;
+  const w = fb[2] - fb[0], h = fb[3] - fb[1];
+  const frameLine = s => (Math.abs(s[1] - s[3]) < 0.01 && Math.abs(s[0] - s[2]) >= w * 0.9) || (Math.abs(s[0] - s[2]) < 0.01 && Math.abs(s[1] - s[3]) >= h * 0.9);
+  const inner = segs.filter(s => inBox(s[0], s[1], fb) && inBox(s[2], s[3], fb) && !frameLine(s) && !skip.some(b => inBox((s[0] + s[2]) / 2, (s[1] + s[3]) / 2, b)));
+  const longV = inner.filter(s => Math.abs(s[0] - s[2]) < 0.01 && Math.abs(s[1] - s[3]) >= h * 0.6);
+  const cuts = [];
+  for (let k = 0; k + 1 < row.length; k++) {
+    const lo = row[k].x, hi = row[k + 1].x;
+    const v = longV.map(s => s[0]).filter(x => x > lo + 0.05 && x < hi - 0.05);
+    if (v.length) { cuts.push(v.sort((p, q) => Math.abs(p - (lo + hi) / 2) - Math.abs(q - (lo + hi) / 2))[0]); continue; }
+    /* 線の無い縦の帯：見出しの間の x で、線の掛かる区間を並べて、いちばん長いすき間 */
+    const iv = inner.map(s => [Math.min(s[0], s[2]), Math.max(s[0], s[2])]).filter(q => q[1] > lo && q[0] < hi).sort((p, q) => p[0] - q[0]);
+    let best = null, cur = lo;
+    iv.forEach(q => { if (q[0] > cur && (!best || q[0] - cur > best[1] - best[0])) best = [cur, q[0]]; cur = Math.max(cur, q[1]); });
+    if (hi > cur && (!best || hi - cur > best[1] - best[0])) best = [cur, hi];
+    if (!best || best[1] - best[0] < 1) return null;
+    cuts.push((best[0] + best[1]) / 2);
+  }
+  const boxes = row.map((t, k) => [k ? cuts[k - 1] : fb[0], fb[1], k + 1 < row.length ? cuts[k] : fb[2], fb[3]]);
+  /* 各側の建物の大きさ：端が付き合う線のかたまり（3cm 以内）のうち、いちばん大きい物の箱（表題欄の罫線などの離れたかたまりは入れない） */
+  const ext = boxes.map(b => { const S = inner.filter(s => inBox((s[0] + s[2]) / 2, (s[1] + s[3]) / 2, b)); if (!S.length) return null;
+    const par = S.map((_, i) => i), f = i => par[i] === i ? i : (par[i] = f(par[i]));
+    const onSeg = (x, y, t) => { const dx = t[2] - t[0], dy = t[3] - t[1], L = dx * dx + dy * dy || 1, u = Math.max(0, Math.min(1, ((x - t[0]) * dx + (y - t[1]) * dy) / L)); return Math.hypot(t[0] + u * dx - x, t[1] + u * dy - y) <= 0.03; };
+    for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) { const A = S[i], B = S[j];
+      if (onSeg(A[0], A[1], B) || onSeg(A[2], A[3], B) || onSeg(B[0], B[1], A) || onSeg(B[2], B[3], A)) par[f(i)] = f(j); }
+    const G = {}; S.forEach((q, i) => { const r = f(i); (G[r] = G[r] || []).push(q); });
+    const bb = Object.values(G).map(Q => { const xs = Q.flatMap(q => [q[0], q[2]]), ys = Q.flatMap(q => [q[1], q[3]]); return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)]; });
+    return bb.sort((p, q) => q[0] * q[1] - p[0] * p[1])[0]; });
+  if (ext.some(e => !e || e[0] < 1 || e[1] < 1)) return null;
+  const near = (a, b) => Math.abs(a - b) <= Math.max(a, b) * 0.3;
+  if (!ext.every(e => near(e[0], ext[0][0]) && near(e[1], ext[0][1]))) return null;
+  const kindOf = (t) => /現況|既存|改修前/.test(t) ? 'now' : 'plan';
+  return row.map((t, k) => ({ box: boxes[k], title: t.s, kind: kindOf(t.s), alt: /プラン\s*\S|案/.test(t.s) && !/^改修プラン$/.test(t.s) }));
+}
+
 const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
 
 /* 探し直した区画（段階3）だけに使う印：外壁の外をぐるっと回る輪と、細い帯。どちらも決めきれない物として「保留」にする（部屋にもできる）
@@ -87,7 +135,7 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   const title = titleInfo(J.texts, tbx.length ? tbx : labelBoxes(J.texts));   // 表題欄の枠が見つからない時は、見出しのかたまりで
   const sheets0 = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
   const skipB = A.regions.filter(r => r.type === 'title' || r.type === 'table').map(r => r.box);
-  const sheets = sheets0.flatMap(x => (x.kind !== 'table' && splitBands(x.box, J.texts, segs, skipB)) || [x]);
+  const sheets = sheets0.flatMap(x => (x.kind !== 'table' && (splitBands(x.box, J.texts, segs, skipB) || splitCols(x.box, J.texts, segs, skipB))) || [x]);
   /* 図面の名前は、図枠ごとに読んだ物（sheetTitles）の方が確か（表題欄の見出しの右だけ見ると会社名などを拾う） */
   const st = [...new Set(sheets.map(x => x.title).filter(Boolean))];
   if (sheets.length >= 2 && st.length) title.sheet = st;
