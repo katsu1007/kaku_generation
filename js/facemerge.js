@@ -95,7 +95,7 @@ const inside = (f1, f2) => {
 
 /* faces・open：今の読み取りの区画と開口。v2faces・v2open：試しの区画と開口。
  * 返す物：{ faces, open, merged: [{ i, from: [元の区画の i] }], split: { 新しい i: { faces: [元の区画], open: { i: 開口 } } } } */
-export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [], segs = null, texts = [], why = null }) {
+export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [], segs = null, texts = [], why = null, minSum = 0.35 }) {
   const no = (f2, r) => { if (why) why.push({ i: f2.i, area: Math.round(f2.area * 10) / 10, r }); };
   const treads = segs ? treadRows(segs) : [];
   const stairTx = (texts || []).filter(t => t && STAIR.test(String(t.t || '').trim()));
@@ -112,7 +112,7 @@ export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, f
     const memS = new Set(mem.map(f => f.i));
     if (F.some(g => !memS.has(g.i) && g.area >= 1 && g.area < f2.area && (() => { const q = inPt(g.poly); return pip(q[0], q[1], f2.poly) && edgeD(q[0], q[1], f2.poly) > 0.2; })())) { no(f2, 'cover'); continue; }
     const sum = mem.reduce((s, f) => s + f.area, 0);
-    if (sum < f2.area * 0.35 || sum > f2.area * 1.05) { no(f2, 'sum ' + Math.round(sum / f2.area * 100)); continue; }
+    if (sum < f2.area * minSum || sum > f2.area * 1.05) { no(f2, 'sum ' + Math.round(sum / f2.area * 100)); continue; }
     const names = new Set(mem.map(f => String(f.name || '').trim()).filter(Boolean));
     if (names.size >= 2) { no(f2, 'names ' + [...names].join('/')); continue; }
     if (mem.filter(f => toilets.some(c => pip(c[0], c[1], f.poly))).length >= 2) { no(f2, 'booth'); continue; }

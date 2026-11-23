@@ -151,26 +151,31 @@ export async function readWithFixtures(file, opt = {}) {
         const E = W.document.getElementById('engineFrame').contentWindow;
         const raw = JSON.parse(E.eval(`(()=>{const M=rgM(),ix=new Map(RG.groups.map((g,i)=>[g.key,i])),q=v=>Math.round(v*1000)/1000;
           return JSON.stringify({groups:RG.groups.map(g=>({layer:g.layer,on:!!g.on})),segs:RG.segs.map(s=>{const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M),i=ix.get(gkey(s));return [q(a[0]),q(a[1]),q(b[0]),q(b[1]),i==null?-1:i]})})})()`));
-        const off = (opt.regroup(out, raw) || []).filter(i => raw.groups[i] && raw.groups[i].on);
-        /* 壁らしくない1本線（机・椅子・テーブル・器具など）も外す（rgSingleLines。2本線の壁の図面だけ）。外した本数は out.single に */
-        E.__kxOff = off;
-        const n1 = E.eval(`(()=>{const keep=RG.groups.map(g=>g.on);let n=0;try{window.__kxOff.forEach(i=>{RG.groups[i].on=false});
-          const so=(typeof rgSingleLines==='function')?rgSingleLines():new Set();n=so.size;
-          if(!window.__kxOff.length&&!n){window.__kxP2=null;return 0}
-          RG.segOff=so;rgCompute();window.__kxP2=KakuEngine.plan()}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]});if(n||window.__kxOff.length)rgCompute()}return n})()`);
-        out.single = +n1 || 0;
-        if (off.length || out.single) {
+        let rg = opt.regroup(out, raw) || [];
+        /* 返り値が { off, alt } の時は、alt（家具・通り芯など壁から離れたまとまりも外す選び方）でもう1回探して out.v2w に入れる */
+        const altOff = Array.isArray(rg) ? null : (rg.alt || null); if (!Array.isArray(rg)) rg = rg.off || [];
+        const runOff = (offIn) => {
+          const off = offIn.filter(i => raw.groups[i] && raw.groups[i].on);
+          /* 壁らしくない1本線（机・椅子・テーブル・器具など）も外す（rgSingleLines。2本線の壁の図面だけ）。外した本数は single に */
+          E.__kxOff = off;
+          const n1 = E.eval(`(()=>{const keep=RG.groups.map(g=>g.on);let n=0;try{window.__kxOff.forEach(i=>{RG.groups[i].on=false});
+            const so=(typeof rgSingleLines==='function')?rgSingleLines():new Set();n=so.size;
+            if(!window.__kxOff.length&&!n){window.__kxP2=null;return 0}
+            RG.segOff=so;rgCompute();window.__kxP2=KakuEngine.plan()}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]});if(n||window.__kxOff.length)rgCompute()}return n})()`);
+          const single = +n1 || 0;
+          if (!(off.length || single)) return { single };
           const P2 = E.__kxP2; E.__kxP2 = null;
-          if (P2 && P2.faces && P2.faces.length) {
-            W.__kxP2 = P2;
-            const R2 = JSON.parse(G(`(()=>{const keep=KAKU_plan,P=window.__kxP2,q=v=>Math.round(v*1000)/1000,open={};let O={};
-              try{KAKU_plan=P;O=(typeof KX_openScan==='function'&&KX_openScan())||{}}finally{KAKU_plan=keep}
-              Object.keys(O).forEach(k=>{open[k]=O[k].map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))});
-              return JSON.stringify({open,faces:P.faces.map(f=>({i:f.i,name:f.name||'',area:f.area,peri:f.peri,ch:f.ch||0,poly:f.poly.map(p=>[q(p[0]),q(p[1])])}))})})()`));
-            W.__kxP2 = null;
-            out.v2 = { faces: R2.faces, open: R2.open, off };
-          }
-        }
+          if (!(P2 && P2.faces && P2.faces.length)) return { single };
+          W.__kxP2 = P2;
+          const R2 = JSON.parse(G(`(()=>{const keep=KAKU_plan,P=window.__kxP2,q=v=>Math.round(v*1000)/1000,open={};let O={};
+            try{KAKU_plan=P;O=(typeof KX_openScan==='function'&&KX_openScan())||{}}finally{KAKU_plan=keep}
+            Object.keys(O).forEach(k=>{open[k]=O[k].map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))});
+            return JSON.stringify({open,faces:P.faces.map(f=>({i:f.i,name:f.name||'',area:f.area,peri:f.peri,ch:f.ch||0,poly:f.poly.map(p=>[q(p[0]),q(p[1])])}))})})()`));
+          W.__kxP2 = null;
+          return { single, v: { faces: R2.faces, open: R2.open, off } };
+        };
+        const r1 = runOff(rg); out.single = r1.single; if (r1.v) out.v2 = r1.v;
+        if (altOff && altOff.length && altOff.join() !== rg.join()) { try { const r2 = runOff(altOff); if (r2.v) out.v2w = r2.v; } catch (e2) { console.warn('壁だけの区画探しに失敗', e2); } }
       } catch (e) { console.warn('区画の探し直しに失敗', e); }
     }
     /* DXF の文字つなぎ：言葉を1文字ずつ描く DXF では、読み取りの文字がバラバラのまま渡ってくる

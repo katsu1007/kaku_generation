@@ -1487,15 +1487,19 @@ function stepRooms(ctx) {
           /* 新しい読み取り・段階3：壁ではなさそうな線のまとまり（細かい線・寸法・表や図枠）を外して、区画を探し直した結果も一緒にもらう（別に覚えるだけ） */
           res = await readWithFixtures(cad, { step: showStep, regroup: (out, raw) => {
             try { const A1 = analyzeFrame({ segs: out.longSegs && out.longSegs.length ? out.longSegs : out.plan.segs, faces: out.plan.faces, texts: out.texts || [], fixtures: out.fixtures || [], doors: out.doorList || [] });
-              const g = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions });
+              const g = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions, walls: false });
               out.roles = {}; Object.keys(g.off).forEach(i => { const r = g.off[i], o = g.stats.find(x => x.gi === +i); out.roles[r] = (out.roles[r] || 0) + (o ? o.n : 0); });
-              return Object.keys(g.off).map(Number);
+              /* 壁のまとまりにつながらない・近くにないまとまり（家具・通り芯など）も外した選び方（alt）。区画をまとめる時に先に使う */
+              let alt = null; try { const gw = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions }); alt = Object.keys(gw.off).map(Number); } catch (e3) { alt = null; }
+              return { off: Object.keys(g.off).map(Number), alt };
             } catch (e2) { console.warn('線の役割を見分けられませんでした', e2); return []; } } });
           /* 家具で割れた区画をまとめる：試しの区画（家具の線を外して壁の線だけで探した区画）1つの中に、今の区画が2つ以上入る所だけ置き換える（js/facemerge.js）。
            * 元の区画は plan.split に覚えるので「分ける」で戻せる */
-          if (res.v2 && res.v2.faces && res.v2.faces.length) { try {
-            const M = mergeSplitFaces({ faces: res.plan.faces, open: res.open || {}, v2faces: res.v2.faces, v2open: res.v2.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [], segs: res.allSegs || res.plan.segs || [], texts: res.texts || [] });
-            if (M.merged.length) { res.plan = { ...res.plan, faces: M.faces, split: M.split }; res.open = M.open; }
+          /* 先に壁のまとまりだけで探した区画（v2w。家具・通り芯のレイヤーごと外す）でまとめ、残りを試しの区画（v2）でまとめる */
+          for (const V of [res.v2w, res.v2]) { if (!(V && V.faces && V.faces.length)) continue; try {
+            /* 壁だけの区画は、レイヤーに混ざった間仕切りまで外して隣とつながる事があるので、中の今の区画の広さの合計が7割以上の所だけ */
+            const M = mergeSplitFaces({ minSum: V === res.v2w ? 0.7 : 0.35, faces: res.plan.faces, open: res.open || {}, v2faces: V.faces, v2open: V.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [], segs: res.allSegs || res.plan.segs || [], texts: res.texts || [] });
+            if (M.merged.length) { res.plan = { ...res.plan, faces: M.faces, split: { ...(res.plan.split || {}), ...M.split } }; res.open = M.open; }
           } catch (e2) { console.warn('家具で割れた区画をまとめられませんでした', e2); } }
           orderFacesOf(res.plan); res.plan.order = 2;
         } else res = await importDrawing(files);
