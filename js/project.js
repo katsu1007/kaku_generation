@@ -7,7 +7,7 @@ import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
-import { mergeSplitFaces, splitMerged } from './facemerge.js';
+import { mergeSplitFaces, splitMerged, absorbBoxes } from './facemerge.js';
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
 import { sheetsOf, fixturesInUse, fixturesInRegions } from './sheets.js';
 export { sheetsOf, fixturesInUse };
@@ -1497,6 +1497,10 @@ function stepRooms(ctx) {
             const M = mergeSplitFaces({ faces: res.plan.faces, open: res.open || {}, v2faces: res.v2.faces, v2open: res.v2.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [], segs: res.allSegs || res.plan.segs || [], texts: res.texts || [] });
             if (M.merged.length) { res.plan = { ...res.plan, faces: M.faces, split: M.split }; res.open = M.open; }
           } catch (e2) { console.warn('家具で割れた区画をまとめられませんでした', e2); } }
+          /* 部屋の中の小さい箱（ロッカー・自販機・棚など）は、まわりの部屋の区画に入れる（js/facemerge.js の absorbBoxes） */
+          try { const B = absorbBoxes({ faces: res.plan.faces, open: res.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [], segs: res.plan.segs || [] });
+            if (B.merged.length) { res.plan = { ...res.plan, faces: B.faces, split: { ...(res.plan.split || {}), ...B.split } }; res.open = B.open; }
+          } catch (e2) { console.warn('部屋の中の箱をまとめられませんでした', e2); }
           orderFacesOf(res.plan); res.plan.order = 2;
         } else res = await importDrawing(files);
         if (!res.plan || !res.plan.faces.length) { const msg = res.message || '部屋の区画が見つかりませんでした'; if (st) st.textContent = msg;

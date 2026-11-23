@@ -147,3 +147,57 @@ export function splitMerged(plan, open, i) {
   const split = { ...plan.split }; delete split[i];
   return { plan: { ...plan, faces, split }, open: op };
 }
+
+/* 部屋の中の小さい箱（ロッカー・自販機・棚・柱の囲みなど）を、まわりの部屋の区画に入れる（かつ「区画は壁で囲まれた大きな所」・2026-11-24）。
+ * 箱：広さ 2.5㎡ 以下・短い辺 75cm 以下（シャワー・便所のブースは 80cm 以上なので入れない）・中に×が無い（パイプスペース）・外の四角にほぼいっぱい（85%以上）・名前なし・中に便器なし・まわり 30cm にドアなし（ブースを守る）。
+ * 箱のふちの 15・30・45cm 外の点を見て（区画のふちは線から少し離れるので）、ほかの箱に当たった点は数えず、当たった区画のうちいちばん多い区画が 6割以上・2番目が 25%以下（壁の向こうに当たる点があるため）で、その区画が箱の4倍以上の広さ、当たった点が4割以上ならその区画に入れる。隣どうしの箱（自販機が2台並ぶ等）はどちらも同じ区画へ。
+ * 広さは足す・形と周りは入れる先のまま。元の区画は split に覚えるので「細かい区画に分ける」で戻せる */
+export function absorbBoxes({ faces, open = {}, fixtures = [], doors = [], segs = [], why = null }) {
+  const F = (faces || []).filter(f => f && f.poly && f.poly.length >= 3);
+  const bb = new Map(F.map(f => { let a = [1e9, 1e9, -1e9, -1e9]; f.poly.forEach(p => { a = [Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.max(a[2], p[0]), Math.max(a[3], p[1])]; }); return [f, a]; }));
+  const faceAt = (x, y, skip) => { let best = null; for (const f of F) { if (f === skip) continue; const b = bb.get(f); if (x < b[0] || x > b[2] || y < b[1] || y > b[3]) continue; if (pip(x, y, f.poly) && (!best || f.area < best.area)) best = f; } return best; };
+  const toilets = (fixtures || []).filter(x => x && x.b && (x.t === 'toilet' || x.t === 'urinal')).map(x => [(x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2]);
+  const dims = P => { let best = null; for (let i = 0; i < P.length; i++) { const a = P[i], b = P[(i + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-6) continue;
+    const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L; let u0 = 1e9, u1 = -1e9, v0 = 1e9, v1 = -1e9; P.forEach(p => { const u = p[0] * ux + p[1] * uy, v = -p[0] * uy + p[1] * ux; u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); });
+    const w = u1 - u0, h = v1 - v0; if (!best || w * h < best[0]) best = [w * h, Math.min(w, h), Math.max(w, h)]; } return best; };
+  const no = (f, r) => { if (why) why.push({ i: f.i, area: Math.round(f.area * 100) / 100, r }); };
+  const isBox = f => { if (!(f.area > 0.15 && f.area <= 2.5) || f.hand || String(f.name || '').trim()) return false; const d = dims(f.poly); return !!d && d[1] <= 0.75 && polyA(f.poly) / d[0] >= 0.85; };
+  /* 中に×（対角線が2本交わる）がある箱はパイプスペース・吹き抜けなので入れない */
+  const crossX = f => { const b = bb.get(f), dg = Math.hypot(b[2] - b[0], b[3] - b[1]), L = (segs || []).filter(q => Math.min(q[0], q[2]) >= b[0] - 0.05 && Math.max(q[0], q[2]) <= b[2] + 0.05 && Math.min(q[1], q[3]) >= b[1] - 0.05 && Math.max(q[1], q[3]) <= b[3] + 0.05 && Math.hypot(q[2] - q[0], q[3] - q[1]) >= dg * 0.6);
+    for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const a = L[i], c = L[j], d1 = (c[0] - a[0]) * (a[3] - a[1]) - (c[1] - a[1]) * (a[2] - a[0]), d2 = (c[2] - a[0]) * (a[3] - a[1]) - (c[3] - a[1]) * (a[2] - a[0]), d3 = (a[0] - c[0]) * (c[3] - c[1]) - (a[1] - c[1]) * (c[2] - c[0]), d4 = (a[2] - c[0]) * (c[3] - c[1]) - (a[3] - c[1]) * (c[2] - c[0]); if (d1 * d2 < 0 && d3 * d4 < 0) return true; } return false; };
+  const boxSet = new Set(F.filter(isBox));
+  /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）は入れる先にしない */
+  const pts = F.map(f => [f, inPt(f.poly)]);
+  const wraps = g => { let k = 0; for (const [f, q] of pts) { if (f === g || f.area >= g.area || f.area < 1 || boxSet.has(f)) continue; const b = bb.get(g); if (q[0] < b[0] || q[0] > b[2] || q[1] < b[1] || q[1] > b[3]) continue; if (pip(q[0], q[1], g.poly) && ++k >= 2) return true; } return false; };
+  const into = new Map();
+  for (const f of F) {
+    if (!boxSet.has(f)) continue;
+    if (toilets.some(c => pip(c[0], c[1], f.poly))) { no(f, 'toilet'); continue; }
+    if (crossX(f)) { no(f, 'x'); continue; }
+    if ((doors || []).some(o => o && o.c && (+o.r || 0) >= 0.5 && (pip(o.c[0], o.c[1], f.poly) || edgeD(o.c[0], o.c[1], f.poly) <= 0.3))) { no(f, 'door'); continue; }
+    const hits = new Map(); let n = 0, h = 0;
+    for (let i = 0, j = f.poly.length - 1; i < f.poly.length; j = i++) { const a = f.poly[j], b = f.poly[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.05) continue;
+      const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, k = Math.max(1, Math.round(L / 0.25));
+      for (let s = 0; s < k; s++) { const t = (s + 0.5) / k, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+        const sg = pip(x + nx * 0.05, y + ny * 0.05, f.poly) ? -1 : 1; let g = null;
+        for (const o of [0.15, 0.3, 0.45]) { g = faceAt(x + sg * nx * o, y + sg * ny * o, f); if (g) break; }
+        n++; if (g && !boxSet.has(g)) { h++; hits.set(g, (hits.get(g) || 0) + 1); } else if (g) n--; } }
+    if (!n || h < n * 0.4) { no(f, 'few ' + h + '/' + n); continue; }
+    let host = null, hc = 0; hits.forEach((c, g) => { if (c > hc) { hc = c; host = g; } });
+    /* 壁の向こうの区画に当たる点もあるので、いちばん多い区画が 6割以上で、2番目が 25%以下なら入れる */
+    const second = Math.max(0, ...[...hits].filter(([g]) => g !== host).map(([, c]) => c));
+    if (!host || hc < h * 0.6 || second > h * 0.25 || host.area < f.area * 4 || host.hand || wraps(host)) { no(f, "host"); continue; }
+    if (!into.has(host)) into.set(host, []); into.get(host).push(f);
+  }
+  if (!into.size) return { faces, open, merged: [], split: {} };
+  let next = Math.max(-1, ...(faces || []).map(f => +f.i || 0)) + 1;
+  const taken = new Set(), out = [], merged = [], split = {}, op = { ...open };
+  into.forEach((bx, host) => {
+    const mem = [host, ...bx], i = next++, keepOpen = {};
+    mem.forEach(f => { taken.add(f); const k = String(f.i); if (op[k]) { keepOpen[k] = op[k]; delete op[k]; } });
+    if (keepOpen[String(host.i)]) op[String(i)] = keepOpen[String(host.i)];
+    const nf = { ...host, i, area: Math.round((host.area + bx.reduce((s, f) => s + f.area, 0)) * 100) / 100, poly: host.poly.map(p => [p[0], p[1]]), merged: mem.map(f => f.i), boxes: bx.length };
+    out.push(nf); merged.push({ i, from: mem.map(f => f.i) }); split[i] = { faces: mem, open: keepOpen };
+  });
+  return { faces: (faces || []).filter(f => !taken.has(f)).concat(out), open: op, merged, split };
+}
