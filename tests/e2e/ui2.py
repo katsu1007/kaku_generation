@@ -21,7 +21,7 @@ async def main():
         for _,x,y,_a in polys: await pg.touchscreen.tap(x,y); await pg.wait_for_timeout(150)
         await pg.evaluate("window.scrollBy(0,-60)")
         await pg.screenshot(path='tests/e2e/shots/dwg_ip2.png')
-        await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(400)
+        await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(200); await pg.click('#toast button'); await pg.wait_for_timeout(400)
         await pg.evaluate("document.querySelector('.rooms').scrollIntoView({block:'start'})"); await pg.evaluate("window.scrollBy(0,-80)")
         await pg.screenshot(path='tests/e2e/shots/dwg_ip3.png')
         await b.close()

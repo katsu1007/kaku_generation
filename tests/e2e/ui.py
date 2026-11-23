@@ -19,7 +19,7 @@ async def main():
             # 区画ボタンで2つ選んで1部屋、ほかに1つを地図タップで
             await pg.click('#dwgFaces >> xpath=.. >> summary'); await pg.click('#dwgFaces button >> nth=0'); await pg.click('#dwgFaces button >> nth=1'); await pg.wait_for_timeout(200)
             await pg.screenshot(path=f'tests/e2e/shots/dwg_{name}_sel.png')
-            await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(400)
+            await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(200); await pg.click('#toast button'); await pg.wait_for_timeout(400)
             # 図面の上で区画をタップ
             await pg.evaluate("document.querySelector('#dwgView').scrollIntoView({block:'center'})"); await pg.wait_for_timeout(200)
             poly=await pg.query_selector('polygon[data-i]:not([fill-opacity="0.22"])')
@@ -28,7 +28,7 @@ async def main():
             else: await pg.mouse.click(bb['x']+bb['width']/2, bb['y']+bb['height']/2)
             await pg.wait_for_timeout(300)
             selN=await pg.evaluate("document.querySelectorAll('#dwgFaces button.on').length")
-            await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(400)
+            await pg.click('[data-act=mkOne]'); await pg.wait_for_timeout(200); await pg.click('#toast button'); await pg.wait_for_timeout(400)
             rooms=await pg.evaluate("async()=>{const a=await import('./js/app.js');const c=await import('./js/calc.js');const p=a.state.projects[0];return p.rooms.map(r=>[r.name,r.area,r.perim,r.h,(r.faces||[]).length,c.roomGeom(r).wall])}")
             print(name,'tap selected',selN,'rooms',rooms, errs or 'no errors')
             await pg.evaluate("window.scrollTo(0,0)")

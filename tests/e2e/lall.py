@@ -13,7 +13,7 @@ with sync_playwright() as p:
     pg.goto(f'http://localhost:8765/#/p/{pid}/2');pg.wait_for_timeout(300)
     pg.set_input_files('#dwgFile',REAL_TOILET);pg.wait_for_selector('#dwgFaces button',state='attached',timeout=60000);pg.wait_for_timeout(3000)
     pg.click('[data-mode=light]');pg.wait_for_timeout(200);pg.click('[data-act=lMakeAll]');pg.wait_for_timeout(600)
-    print('仕上げの画面:',pg.locator('.modal').count());pg.click('.modal [data-later]');pg.wait_for_timeout(300)
+    print('仕上げの画面（自動では開かない）:',pg.locator('.modal').count())
     print('今のモード:',pg.evaluate("document.querySelector('#dwgMode .on')?.textContent"))
     print('道具:',pg.evaluate("[...document.querySelectorAll('#lTool button')].map(b=>{const r=b.getBoundingClientRect();return [b.textContent,r.left>=0&&r.right<=innerWidth]})"))
     pg.click('[data-act=lAuto]');pg.wait_for_timeout(3000);pg.click('[data-act=oAuto]');pg.wait_for_timeout(400)

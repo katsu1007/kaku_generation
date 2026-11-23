@@ -13,7 +13,7 @@ with sync_playwright() as p:
     pg.goto(f'http://localhost:8765/#/p/{pid}/2');pg.wait_for_timeout(300)
     pg.set_input_files('#dwgFile',REAL_TOILET);pg.wait_for_selector('#dwgFaces button',state='attached',timeout=60000);pg.wait_for_timeout(3000)
     fb=lambda k: pg.evaluate(f"document.querySelectorAll('#dwgFaces button')[{k}].click()")
-    fb(0);fb(1);pg.click('[data-act=mkOne]');pg.wait_for_timeout(400);pg.click('.modal [data-later]');pg.wait_for_timeout(200)
+    fb(0);fb(1);pg.click('[data-act=mkOne]');pg.wait_for_timeout(200);pg.click('#toast button');pg.wait_for_timeout(400);pg.click('.modal [data-later]');pg.wait_for_timeout(200)
     print('前:',pg.evaluate("async()=>{const a=await import('./js/app.js');return a.state.projects[0].rooms.map(r=>[r.name,r.faces,r.area])}"))
     fb(1);pg.wait_for_timeout(200);pg.click('[data-act=unassign]');pg.wait_for_timeout(300)
     print('外した後:',pg.evaluate("async()=>{const a=await import('./js/app.js');return a.state.projects[0].rooms.map(r=>[r.name,r.faces,r.area])}"),[t.inner_text() for t in pg.locator('.toast').all()][-1:])
