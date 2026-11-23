@@ -31,3 +31,17 @@ test('違う部屋名が2つある・便器のある区画が2つある・中に
   assert.equal(mergeSplitFaces({ faces: booths, v2faces: v2, doors: door }).merged.length, 0);
   assert.equal(mergeSplitFaces({ faces: booths, v2faces: v2 }).merged.length, 1);
 });
+
+test('階段：名前が階段の区画・踏み面の列（両端がそろって等間隔に5本以上）が広い所に入る時はまとめない', async () => {
+  const { treadRows } = await import('../js/facemerge.js');
+  const tread = [0, 1, 2, 3, 4, 5].map(k => [1, 0.5 + k * 0.25, 2, 0.5 + k * 0.25]);
+  assert.equal(treadRows(tread).length, 1);
+  /* 端がばらばら（机の木目のような線）は列にしない */
+  const grain = [0, 1, 2, 3, 4, 5].map(k => [1 + (k % 2) * 0.3, 0.5 + k * 0.25, 2 + (k % 3) * 0.2, 0.5 + k * 0.25]);
+  assert.equal(treadRows(grain).length, 0);
+  const faces = [f(0, sq(0, 0, 2, 3)), f(1, sq(2, 0, 4, 3))];
+  assert.equal(mergeSplitFaces({ faces, v2faces: v2, segs: tread }).merged.length, 0);
+  assert.equal(mergeSplitFaces({ faces: [f(0, sq(0, 0, 2, 3), '階段'), f(1, sq(2, 0, 4, 3))], v2faces: v2 }).merged.length, 0);
+  assert.equal(mergeSplitFaces({ faces, v2faces: v2, texts: [{ t: 'UP', x: 1, y: 1 }] }).merged.length, 0);
+  assert.equal(mergeSplitFaces({ faces, v2faces: v2, segs: [] }).merged.length, 1);
+});

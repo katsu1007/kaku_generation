@@ -9,6 +9,7 @@
  *  - 中に入る今の区画に、違う部屋名が2つ以上ある
  *  - 中に入る今の区画の2つ以上に便器・小便器がある（トイレのブース）
  *  - 試しの区画の中に、幅 55cm 以上のドアがある（ちょうつがいが中ほど、または扉の開く所が両方とも中ほど＝中の間仕切りのドア）
+ *  - 階段（名前・中の文字が階段・上り・下り・UP・DN、または踏み面の列が広い所に飲み込まれる。むぎの設計）
  *  - 試しの区画の形が、中に入らないほかの区画（1㎡以上。階段・EV など）にかぶっている
  *  - 試しの区画が輪の形（外まわりの広さが区画の広さの 1.25 倍より大きい＝中に穴がある）
  *  - 中に入る今の区画の広さの合計が、試しの区画の半分に満たない・1.05 倍を超える
@@ -39,6 +40,47 @@ const innerDoor = (d, P, mem) => {
     return inn(x, y, 0.2) && mem.filter(f => edgeD(x, y, f.poly) <= 0.2).length >= 2; });
 };
 
+/* 階段の踏み面の列を探す（むぎの実測と設計・docs/from-muse-2026-11-23b.md）。
+ * 長さ 0.55〜1.8m の線で、向きがそろい（3.5°以内）、長さ方向に短い方の 70% 以上重なり、間隔 18〜33cm（ばらつき 3.5cm 以内）で5本以上並ぶ物（4本だと、窓ぎわの縦の線・棚の線で誤って見つけたため・くらちゃん。4本の階段は名前・文字で止める）。
+ * 重なりの条件が、机・棚の列（同じ間隔でも長さ方向にずれて並ぶ）と分ける決め手。さらに両端が 10cm 以内でそろうこと（机の木目で誤って見つけたため・くらちゃん）。返す物：[{ cx, cy, area（列の箱の広さ）, n }] */
+export function treadRows(segs) {
+  const C = [];
+  (segs || []).forEach(s => { if (!s || s.length < 4) return; const dx = s[2] - s[0], dy = s[3] - s[1], L = Math.hypot(dx, dy); if (L < 0.55 || L > 1.8) return;
+    let a = Math.atan2(dy, dx); if (a < 0) a += Math.PI; if (a >= Math.PI) a -= Math.PI;
+    C.push({ s, L, a }); });
+  if (C.length < 4) return [];
+  const B = new Map(), bw = 3.5 * Math.PI / 180, nb = Math.ceil(Math.PI / bw);
+  C.forEach((c, k) => { const b = Math.floor(c.a / bw) % nb; (B.get(b) || B.set(b, []).get(b)).push(k); });
+  const rows = [], used = new Set();
+  for (const [b, ks] of B) {
+    const pool = [...ks, ...(B.get((b + 1) % nb) || [])];
+    if (pool.length < 4) continue;
+    const a0 = C[ks[0]].a, ux = Math.cos(a0), uy = Math.sin(a0), nx = -uy, ny = ux;
+    const P = pool.filter(k => Math.abs(((C[k].a - a0 + Math.PI * 1.5) % Math.PI) - Math.PI / 2) <= bw).map(k => { const s = C[k].s, t1 = s[0] * ux + s[1] * uy, t2 = s[2] * ux + s[3] * uy;
+      return { k, p: ((s[0] + s[2]) / 2) * nx + ((s[1] + s[3]) / 2) * ny, t0: Math.min(t1, t2), t1: Math.max(t1, t2) }; }).sort((x, y) => x.p - y.p);
+    /* 踏み面は同じ幅の階段の中なので、両端がそろう（10cm 以内。机の木目・棚の線は端がばらばら） */
+    const ov = (x, y) => (Math.min(x.t1, y.t1) - Math.max(x.t0, y.t0)) >= 0.7 * Math.min(x.t1 - x.t0, y.t1 - y.t0) && Math.abs(x.t0 - y.t0) <= 0.1 && Math.abs(x.t1 - y.t1) <= 0.1;
+    for (let i = 0; i < P.length; i++) {
+      if (used.has(P[i].k)) continue;
+      const ch = [P[i]];
+      for (;;) { const last = ch[ch.length - 1]; let best = null;
+        for (let j = i + 1; j < P.length && P[j].p <= last.p + 0.33; j++) { const q = P[j]; if (q.p < last.p + 0.18 || used.has(q.k) || !ov(last, q)) continue;
+          const want = ch.length > 1 ? (ch[ch.length - 1].p - ch[0].p) / (ch.length - 1) : null;
+          if (want != null && Math.abs((q.p - last.p) - want) > 0.035) continue;
+          if (!best || Math.abs(q.p - last.p - (want || 0.25)) < Math.abs(best.p - last.p - (want || 0.25))) best = q; }
+        if (!best) break; ch.push(best); }
+      if (ch.length < 5) continue;
+      const gaps = ch.slice(1).map((q, m) => q.p - ch[m].p), g = gaps.reduce((t, v) => t + v, 0) / gaps.length;
+      if (Math.max(...gaps.map(v => Math.abs(v - g))) > 0.035) continue;
+      ch.forEach(q => used.add(q.k));
+      const t0 = Math.min(...ch.map(q => q.t0)), t1 = Math.max(...ch.map(q => q.t1)), pc = (ch[0].p + ch[ch.length - 1].p) / 2, tc = (t0 + t1) / 2;
+      rows.push({ cx: tc * ux + pc * nx, cy: tc * uy + pc * ny, area: (t1 - t0) * (ch[ch.length - 1].p - ch[0].p), n: ch.length });
+    }
+  }
+  return rows;
+}
+const STAIR = /階段|上り|下り|^UP$|^DN$/i;
+
 /* f1（今の区画）が f2（試しの区画）の中にすっぽり入るか */
 const inside = (f1, f2) => {
   if (!f1.poly || f1.poly.length < 3 || !(f1.area > 0) || f1.area > f2.area * 1.02) return false;
@@ -49,7 +91,9 @@ const inside = (f1, f2) => {
 
 /* faces・open：今の読み取りの区画と開口。v2faces・v2open：試しの区画と開口。
  * 返す物：{ faces, open, merged: [{ i, from: [元の区画の i] }], split: { 新しい i: { faces: [元の区画], open: { i: 開口 } } } } */
-export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [] }) {
+export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [], segs = null, texts = [] }) {
+  const treads = segs ? treadRows(segs) : [];
+  const stairTx = (texts || []).filter(t => t && STAIR.test(String(t.t || '').trim()));
   const F = (faces || []).filter(f => f && f.poly && f.poly.length >= 3);
   let next = Math.max(-1, ...(faces || []).map(f => +f.i || 0)) + 1;
   const taken = new Set(), out = [], merged = [], split = {}, op = { ...open };
@@ -68,6 +112,9 @@ export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, f
     if (names.size >= 2) continue;
     if (mem.filter(f => toilets.some(c => pip(c[0], c[1], f.poly))).length >= 2) continue;
     if ((doors || []).some(d => innerDoor(d, f2.poly, mem))) continue;
+    /* 階段：区画の名前・中の文字が「階段・上り・下り・UP・DN」、または踏み面の列が試しの区画の中にあって区画の4割未満（広い所に飲み込まれる）の時はまとめない */
+    if (mem.some(f => /階段/.test(String(f.name || ''))) || stairTx.some(t => pip(t.x, t.y, f2.poly))) continue;
+    if (treads.some(r => pip(r.cx, r.cy, f2.poly) && r.area < f2.area * 0.4)) continue;
     const i = next++, keepOpen = {};
     mem.forEach(f => { taken.add(f.i); const k = String(f.i); if (op[k]) { keepOpen[k] = op[k]; delete op[k]; } });
     const big = [...mem].sort((a, b) => b.area - a.area)[0];

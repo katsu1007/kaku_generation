@@ -1494,7 +1494,7 @@ function stepRooms(ctx) {
           /* 家具で割れた区画をまとめる：試しの区画（家具の線を外して壁の線だけで探した区画）1つの中に、今の区画が2つ以上入る所だけ置き換える（js/facemerge.js）。
            * 元の区画は plan.split に覚えるので「分ける」で戻せる */
           if (res.v2 && res.v2.faces && res.v2.faces.length) { try {
-            const M = mergeSplitFaces({ faces: res.plan.faces, open: res.open || {}, v2faces: res.v2.faces, v2open: res.v2.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [] });
+            const M = mergeSplitFaces({ faces: res.plan.faces, open: res.open || {}, v2faces: res.v2.faces, v2open: res.v2.open || {}, fixtures: res.fixtures || [], doors: res.doorList || [], segs: res.allSegs || res.plan.segs || [], texts: res.texts || [] });
             if (M.merged.length) { res.plan = { ...res.plan, faces: M.faces, split: M.split }; res.open = M.open; }
           } catch (e2) { console.warn('家具で割れた区画をまとめられませんでした', e2); } }
           orderFacesOf(res.plan); res.plan.order = 2;
@@ -1844,7 +1844,7 @@ function stepRooms(ctx) {
         const d = p.drawing, ids = [...sel].filter(i => (d.plan.split || {})[i]), own = owner();
         if (ids.some(i => own.has(i))) { toast('部屋に入っている区画です。先に「部屋から外す」をしてから分けてください', { bad: true, ms: 5000 }); return; }
         ids.forEach(i => { const r = splitMerged(d.plan, d.open, i); if (!r) return; d.plan = r.plan; d.open = r.open;
-          if (d.faceOff) delete d.faceOff[i]; if (d.faceJoin) { delete d.faceJoin[i]; Object.keys(d.faceJoin).forEach(k => { if (d.faceJoin[k] === i) delete d.faceJoin[k]; }); } });
+          if (d.faceOff) delete d.faceOff[i]; if (d.faceFix) { delete d.faceFix[i]; if (!Object.keys(d.faceFix).length) delete d.faceFix; } if (d.faceJoin) { delete d.faceJoin[i]; Object.keys(d.faceJoin).forEach(k => { if (d.faceJoin[k] === i) delete d.faceJoin[k]; }); } });
         sel.clear(); touch(p); resetUndo(p); draw();
         toast(`細かい区画に分けました。分ける前には「元に戻す」で戻せません`, { ms: 5000 });
         return;
