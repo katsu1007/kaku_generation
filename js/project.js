@@ -8,6 +8,8 @@ import { groupRoles, ROLE } from './reader2/lines.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { mergeSplitFaces, splitMerged, absorbBoxes } from './facemerge.js';
+/* 読み込んだ図面のファイル（開いている間だけ）。「線を外す」で区画を作り直す時に、もう一度選ばなくてよいように */
+const cadFiles = new Map();
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
 import { sheetsOf, fixturesInUse, fixturesInRegions } from './sheets.js';
 export { sheetsOf, fixturesInUse };
@@ -222,6 +224,7 @@ function roomCard(r, i, p) {
       <button class="iconbtn" data-act="delRoom" title="この部屋を消す">${icon('trash')}</button></div>
     ${finChips(p, r)}
     ${r.src === 'plan' && r.holes && r.holes.area > 0 ? `<div class="row small" style="margin-bottom:8px;gap:8px;flex-wrap:wrap;align-items:center"><span class="${r.noHoles ? 'muted' : ''}">机・棚などで囲まれた所 ${r.holes.area}㎡ を床に${r.noHoles ? '足していません' : '足しています（図面では部屋の色で塗っています）'}</span><button class="btn sm" data-act="holeToggle" style="min-height:36px">${r.noHoles ? '床に足す' : '足さない'}</button></div>` : ''}
+    ${r.src === 'plan' && r.out ? `<div class="small" style="margin-bottom:8px;color:var(--warn)">工事対象外の範囲：床・天井から ${r.out.area}㎡、壁・巾木から 長さ ${r.out.perim}m を引いています（図面の「線を外す・対象外」で直せます）</div>` : ''}
     <div class="row" style="margin-bottom:10px"><span class="small muted">形</span><div class="seg"><button data-shape="rect" class="${free ? '' : 'on'}">四角（幅×奥行）</button><button data-shape="free" class="${free ? 'on' : ''}">面積で入れる（L字など）</button></div></div>
     <div class="rfields">
       ${free ? num('area', '床の面積', '㎡') + num('perim', '周りの長さ', 'm') : num('w', '幅', 'm', '例 3.64') + num('d', '奥行', 'm')}
@@ -279,7 +282,7 @@ function drawingCard(p) {
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div id="dwgEdit" class="${dwgFs ? 'dwg-fs' : ''}"><div class="dwg-fs-head"><b class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name || '図面')}</b><button class="btn sm" data-act="dwgFs">${icon('shrink')}全画面をやめる</button></div>
-    <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button></div>
+    <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button><button data-mode="lineoff">線を外す・対象外</button></div>
     ${oldReadRow(d)}${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div></div>
     <div id="dwgDemo"></div>
@@ -881,6 +884,7 @@ function stepRooms(ctx) {
   let sheetZoom = '';   // 大きく出している図（図枠・段の位置のキー）。'' は全体
   const lset = state.lightSet || (state.lightSet = { room: 'all', use: '', item: 'e-dl100', lm: 800 });
   const wsel = new Set(), wpts = []; let wway = 'seg';
+  let loway = 'line', loSel = -1, outA = null;   // 線を外す・工事対象外：選んだ線（plan.segs の番号）・範囲の1つ目の角
   const pset = state.placeSet || (state.placeSet = { item: 'e-hwh', where: 'pt', how: 'grid', cols: 2, rows: 2, gap: 1800, edge: '', n: 2 });
   const pfaces = new Set(), psegs = new Set(); let psel = null;
   const placeColor = id => { const ids = [...new Set((p.drawing.places || []).map(x => x.item))]; const k = ids.indexOf(id); return COLORS[(k < 0 ? ids.length : k) % COLORS.length]; };
@@ -959,9 +963,22 @@ function stepRooms(ctx) {
   /* 区画のまとまりの広さ・周り。まとまりの中の穴（机などで切れてどの区画にも入らなかった所）も床の広さに足す（drawing.js の roomHoles） */
   const geoOf = (ids) => { const plan = p.drawing.plan, S = new Set(ids), F = ids.map(i => plan.faces.find(f => f.i === i)).filter(Boolean), g = groupGeom(F);
     let h = { area: 0, runs: [] }; try { h = roomHoles(F, plan.faces.filter(f => !S.has(f.i)), plan.segs || [], fxList()); } catch (e) { console.warn('穴を数えられませんでした', e); }
-    return { area: Math.round((g.area + h.area) * 100) / 100, perim: g.perim, holes: h.area > 0 ? { area: h.area, cs: h.cs, runs: h.runs } : null }; };
-  const setGeo = (r) => { const g = geoOf(r.faces); r.area = r.noHoles && g.holes ? Math.round((g.area - g.holes.area) * 100) / 100 : g.area; r.perim = g.perim; if (g.holes) r.holes = g.holes; else delete r.holes; };
+    const o = outOf(F);
+    return { area: Math.round((g.area + h.area - o.area) * 100) / 100, perim: Math.round((g.perim - o.perim) * 100) / 100, holes: h.area > 0 ? { area: h.area, cs: h.cs, runs: h.runs } : null, out: o.area > 0 || o.perim > 0 ? o : null }; };
+  /* 工事対象外の範囲（drawing.outZones）：部屋の区画と重なる広さ（床・天井から引く）と、部屋のまわりの線のうち範囲の中にある長さ（壁・巾木から引く）。
+   * 10cm のマスと 5cm ごとの点で数える。区画どうしが接する所（両側とも部屋の区画）は、まわりに数えない（かつ・2026-11-24） */
+  const outOf = (F) => { const Z = (p.drawing && p.drawing.outZones) || [], r = { area: 0, perim: 0 }; if (!Z.length || !F.length) return r;
+    const inF = (x, y) => F.some(f => f.poly && pip(x, y, f.poly)), inZ = (x, y) => Z.some(z => pip(x, y, z.poly));
+    Z.forEach(z => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; z.poly.forEach(q => { x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); });
+      const st = 0.1; for (let y = y0 + st / 2; y < y1; y += st) for (let x = x0 + st / 2; x < x1; x += st) if (pip(x, y, z.poly) && inF(x, y)) r.area += st * st; });
+    F.forEach(f => { const P = f.poly || []; for (let k = 0; k < P.length; k++) { const a = P[k], b = P[(k + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 1e-6) continue;
+      const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, n = Math.max(1, Math.round(L / 0.05));
+      for (let j = 0; j < n; j++) { const t = (j + 0.5) / n, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t; if (!inZ(x, y)) continue;
+        if (inF(x + nx * 0.15, y + ny * 0.15) && inF(x - nx * 0.15, y - ny * 0.15)) continue; r.perim += L / n; } } });
+    r.area = Math.round(r.area * 100) / 100; r.perim = Math.round(r.perim * 100) / 100; return r; };
+  const setGeo = (r) => { const g = geoOf(r.faces); r.area = r.noHoles && g.holes ? Math.round((g.area - g.holes.area) * 100) / 100 : g.area; r.perim = g.perim; if (g.holes) r.holes = g.holes; else delete r.holes; if (g.out) r.out = g.out; else delete r.out; };
   const regeo = (r) => { const plan = p.drawing.plan; setGeo(r); if (p.drawing.open) r.openRuns = roomOpenRuns(r.faces, plan, p.drawing.open); };
+  const outRegeo = () => { p.rooms.forEach(r => { if (r.src === 'plan' && r.faces && r.faces.length) setGeo(r); }); };
   /* ある区画の隣の区画（接している長さがいちばん長い物）。辺の両側 20cm の点を調べる */
   /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）。まとめ先にしない */
   const wrapsF = (f, F) => { if (!f.poly || f.poly.length < 3) return false; let k = 0; for (const o of F) { if (o !== f && o.area < f.area && pip(o.cx, o.cy, f.poly) && ++k >= 2) return true; } return false; };
@@ -988,6 +1005,23 @@ function stepRooms(ctx) {
     /* 隣にまとめた区画は、まとめ先の部屋の色で出す */
     Object.entries((p.drawing && p.drawing.faceJoin) || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); });
     return m; };
+  /* 線を外す：選んだ線と同じ種類の線（橙）、外すことにした線（赤の点線）、もう外した線（灰の点線）。工事対象外の範囲（斜線） */
+  const loOverlay = () => {
+    const d = p.drawing; if (!d || !d.plan) return '';
+    const lw = view ? view.lw : 0.02, ln = (q, c, w, dash) => `<line x1="${q[0]}" y1="${-q[1]}" x2="${q[2]}" y2="${-q[3]}" stroke="${c}" stroke-width="${w}" vector-effect="non-scaling-stroke" ${dash ? 'stroke-dasharray="6 4"' : ''} stroke-linecap="round"/>`;
+    let h = '';
+    if (mode === 'lineoff') {
+      (d.plan.offSegs || []).forEach(q => { h += ln(q, '#9aa0a6', 1.5, true); });
+      const LO = d.lineOff || {}, K = new Set(LO.keys || []);
+      if (K.size && d.plan.gk && d.plan.sg) d.plan.segs.forEach((q, i) => { if (K.has(d.plan.gk[d.plan.sg[i]])) h += ln(q, '#d93025', 2.5, true); });
+      (LO.segs || []).forEach(q => { h += ln(q, '#d93025', 3, true); });
+      if (loSel >= 0 && d.plan.segs[loSel]) { const k = d.plan.sg ? d.plan.sg[loSel] : -1; if (k >= 0) d.plan.segs.forEach((q, i) => { if (d.plan.sg[i] === k && i !== loSel) h += ln(q, '#f29900', 2.5); }); h += ln(d.plan.segs[loSel], '#e8710a', 5); }
+      if (outA) h += `<circle cx="${outA[0]}" cy="${-outA[1]}" r="${lw * 6}" fill="#d93025"/>`;
+    }
+    (d.outZones || []).forEach((z, k) => { const pts = z.poly.map(q => `${q[0]},${-q[1]}`).join(' '); let x0 = Infinity, y1 = -Infinity, x1 = -Infinity; z.poly.forEach(q => { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); });
+      h += `<polygon points="${pts}" fill="url(#outHatch)" stroke="#d93025" stroke-width="2" vector-effect="non-scaling-stroke" stroke-dasharray="8 4"/><text x="${x0 + 0.15}" y="${-y1 + Math.min(0.5, (x1 - x0) / 8) + 0.1}" font-size="${Math.min(0.5, Math.max(0.15, (x1 - x0) / 10))}" fill="#d93025">工事対象外 ${k + 1}</text>`; });
+    return h ? `<defs><pattern id="outHatch" width="0.3" height="0.3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="0.3" stroke="#d93025" stroke-width="0.03" opacity="0.5"/></pattern></defs>` + h : '';
+  };
   const demoOverlay = () => {
     const lw = symLw(), plan = p.drawing.plan, d = p.drawing;
     let h = '';
@@ -1058,7 +1092,7 @@ function stepRooms(ctx) {
     if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(','); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
       if (selGeo && selGeo.holes && holesOn) { const cs = selGeo.holes.cs; selHoles = `<path d="${selGeo.holes.runs.map(q => `M${q[0]} ${-(q[2] + cs)}H${q[1]}V${-q[2]}H${q[0]}Z`).join('')}" fill="var(--accent)" fill-opacity=".35" stroke="none" pointer-events="none"/>`; } }
     else { selGeoKey = ''; selGeo = null; }
-    if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw, allTexts()) + demoOverlay() + placeOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
+    if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw, allTexts()) + demoOverlay() + placeOverlay() + loOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
     const demoBox = body.querySelector('#dwgDemo'); if (demoBox) demoBox.innerHTML = demoList();
     const fxBox = body.querySelector('#dwgFix'); if (fxBox) fxBox.innerHTML = fixSummary(p.drawing);
     const symBox = body.querySelector('#dwgSym'); if (symBox) symBox.innerHTML = symSummary(p.drawing, symSel);
@@ -1141,6 +1175,20 @@ function stepRooms(ctx) {
             <div class="row" style="margin-top:6px;gap:8px"><label class="f" style="min-width:220px">品目を変える${itemSel('pSelItem', x.item)}</label><button class="btn sm" data-act="pRot">向きを変える（90°）</button><button class="btn sm danger" data-act="pDelOne">${icon('trash')}この1個を消す</button><button class="btn sm ghost" data-act="pSelNone">閉じる</button></div></div>` : ''}
           ${list ? `<div style="width:100%;display:grid;gap:6px;padding-top:8px;border-top:1px solid var(--line)"><b class="small">置いた品目</b>${list}</div>` : ''}
           <div class="small muted" style="width:100%">電気・設備・建築付属の品目を図面に置けます。置いた数は③工事の明細に入ります（取付の手間も付きます）。</div>`;
+        return;
+      }
+      if (mode === 'lineoff') {
+        const d = p.drawing, LO = d.lineOff || { keys: [], segs: [] }, nOff = (LO.keys || []).length + (LO.segs || []).length, Z = d.outZones || [];
+        const tabs = `<div class="seg" style="width:100%">${[['line', '線を外す'], ['out', '工事対象外の範囲']].map(t => `<button data-loway="${t[0]}" class="${loway === t[0] ? 'on' : ''}">${t[1]}</button>`).join('')}</div>`;
+        if (loway === 'line') {
+          const plan = d.plan, k = loSel >= 0 && plan.sg ? plan.sg[loSel] : -1, same = k >= 0 ? plan.sg.filter(v => v === k).length : 0;
+          bar.innerHTML = tabs + `<div class="small" style="width:100%">${loSel >= 0 ? `<b>選んだ線</b>：長さ ${segLen(plan.segs[loSel]).toFixed(2)}m${same ? `・同じ種類（同じレイヤー・色・線種）の線 ${same}本を橙で出しています` : ''}` : '寸法線・ビニールカーテンなど、部屋の区切りではない線をタップしてください。'}</div>
+            ${loSel >= 0 ? `<button class="btn" data-act="loOne">この線だけ外す</button>${same > 1 ? `<button class="btn" data-act="loKind">同じ種類を全部外す（${same}本）</button>` : ''}<button class="btn sm ghost" data-act="loCancel">選ぶのをやめる</button>` : ''}
+            ${nOff ? `<div class="small" style="width:100%">外す線：種類 ${(LO.keys || []).length}・1本ずつ ${(LO.segs || []).length}${d.lineOffDirty ? '（まだ区画に効いていません）' : ''}</div><button class="btn primary" data-act="loApply" ${d.lineOffDirty ? '' : 'disabled'}>外した線で区画を作り直す</button><button class="btn sm ghost" data-act="loClear">外した線を全部戻す</button>` : ''}`;
+        } else {
+          bar.innerHTML = tabs + `<div class="small" style="width:100%">${outA ? 'もう1つの角をタップしてください。' : '工事しない範囲（ビニールカーテンの中など）の、四角の角を2か所タップしてください。部屋の床・天井からその広さを、壁・巾木から範囲の中の壁の長さを引きます。'}</div>
+            ${outA ? '<button class="btn sm ghost" data-act="outCancel">やめる</button>' : ''}${Z.length ? `<div class="small" style="width:100%">工事対象外の範囲 ${Z.length}か所</div>${Z.map((z, i) => `<button class="btn sm" data-outdel="${z.id}">範囲${i + 1}を消す</button>`).join('')}` : ''}`;
+        }
         return;
       }
       if (mode === 'cut') {
@@ -1310,7 +1358,7 @@ function stepRooms(ctx) {
       const chs = F.map(f => +f.ch || 0).filter(v => v > 0);
       const runs = p.drawing.open ? roomOpenRuns(g, plan, p.drawing.open) : [];
       p.rooms.push({ id: uid('r'), name: zn || names.join('・') || `区画 ${F.map(f => f.no).join('・')}`, shape: 'free', area: geo.area, perim: geo.perim,
-        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs, ...(geo.holes ? { holes: geo.holes, ...(holesOn ? {} : { noHoles: true }) } : {}) });
+        h: chs.length ? Math.max(...chs) : (defCH || ''), qty: 1, doors: 0, winCount: 0, windows: [], faces: g, src: 'plan', color: nextColor(), openRuns: runs, ...(geo.holes ? { holes: geo.holes, ...(holesOn ? {} : { noHoles: true }) } : {}), ...(geo.out ? { out: geo.out } : {}) });
       if (geo.holes && !holesOn) p.rooms[p.rooms.length - 1].area = Math.round((geo.area - geo.holes.area) * 100) / 100;
     });
     /* 区画を外した部屋の開口も決め直す */
@@ -1356,7 +1404,7 @@ function stepRooms(ctx) {
           if (sel.has(i)) sel.delete(i); else { sel.add(i); const fm = faceMarks(), m = fm && (fm[i] || fm[String(i)]); if (m) toast((m.type === 'off' || m.type === 'join') ? m.why : (m.s === 'out' ? '部屋ではないと見ている区画です：' : '決めきれない区画です：') + m.why + '。部屋にする時は、このまま選んで進められます', { ms: 7000 }); } paintSel(); },
         onDragStart: (x, y, sc) => dragStart(x, y, sc),
         /* 虫めがねの吸い付き：測る・カッター・壁の範囲・照明の置き場所で、線の端や線の上に吸い付く */
-        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || mode === 'zsplit' || (mode === 'wall' && wway === 'range')) ? snapPt(p.drawing.plan, x, y, sc * 40) : [x, y],
+        snap: (x, y, sc) => (mode === 'meas' || mode === 'cut' || mode === 'zsplit' || (mode === 'wall' && wway === 'range') || (mode === 'lineoff' && loway === 'out')) ? snapPt(p.drawing.plan, x, y, sc * 40) : [x, y],
         onPoint: (x, y, sc, lp) => {
           const snapAt = (t) => lp ? [x, y] : snapPt(p.drawing.plan, x, y, t);
           if (mode === 'fix') {
@@ -1441,6 +1489,18 @@ function stepRooms(ctx) {
             toast(itemName(np.item) + ' を置きました', { action: '元に戻す', onAction: () => { d.places = d.places.filter(q => q !== np); syncDemoLines(p); touch(p); paintSel(); } });
             return;
           }
+          if (mode === 'lineoff') {
+            const d = p.drawing;
+            if (loway === 'line') { const i = nearestSeg(d.plan, x, y, sc * 18); loSel = i >= 0 && i !== loSel ? i : -1; paintSel(); return; }
+            const q = snapAt(sc * 44);
+            if (!outA) { outA = q; paintSel(); return; }
+            const R = [Math.min(outA[0], q[0]), Math.min(outA[1], q[1]), Math.max(outA[0], q[0]), Math.max(outA[1], q[1])].map(r3); outA = null;
+            if (R[2] - R[0] < 0.1 || R[3] - R[1] < 0.1) { toast('範囲が小さすぎます。もう一度、四角の角を2か所タップしてください', { bad: true }); paintSel(); return; }
+            const z = { id: uid('o'), poly: [[R[0], R[1]], [R[2], R[1]], [R[2], R[3]], [R[0], R[3]]] };
+            d.outZones = [...(d.outZones || []), z]; outRegeo(); touch(p); paintSel();
+            toast('工事対象外の範囲を入れました。部屋の床・天井・壁から引いています', { action: '元に戻す', onAction: () => { d.outZones = (d.outZones || []).filter(o => o !== z); outRegeo(); touch(p); paintSel(); } });
+            return;
+          }
           if (mode === 'wall' && wway === 'range') { wpts.push(snapAt(sc * 44)); paintSel(); return; }
           if (mode === 'wall') {
             const i = nearestSeg(p.drawing.plan, x, y, sc * 18);
@@ -1473,6 +1533,9 @@ function stepRooms(ctx) {
     const fi = body.querySelector('#dwgFile');
     if (fi) fi.onchange = async e => {
       const files = [...e.target.files]; if (!files.length) return;
+      const cad0 = files.find(f => /\.(jww|jwc|dxf)$/i.test(f.name)); if (cad0) cadFiles.set(p.id, files);
+      /* 同じ図面を読み直す時は、外した線・工事対象外の範囲を引き継ぐ */
+      const sameFile = !!(cad0 && p.drawing && p.drawing.fileName === cad0.name), keepLO = sameFile ? (p.drawing.lineOff || null) : null, keepOut = sameFile ? (p.drawing.outZones || null) : null;
       if (p.drawing && p.rooms.some(r => r.src === 'plan') && !(await ask('図面を読み直しますか？', '今の図面から作った部屋は残りますが、図面とのつながりは外れます。', { ok: '読み直す' }))) { e.target.value = ''; return; }
       const st = body.querySelector('#dwgStatus');
       /* 読み込み中の表示：くるくる（計算で画面が止まっていても回る）と、今どの段階か */
@@ -1486,7 +1549,7 @@ function stepRooms(ctx) {
         if (pic) { if (st) st.textContent = ''; openSk(pic); e.target.value = ''; return; }
         if (cad) {
           /* 新しい読み取り・段階3：壁ではなさそうな線のまとまり（細かい線・寸法・表や図枠）を外して、区画を探し直した結果も一緒にもらう（別に覚えるだけ） */
-          res = await readWithFixtures(cad, { step: showStep, regroup: (out, raw) => {
+          res = await readWithFixtures(cad, { step: showStep, lineOff: keepLO, regroup: (out, raw) => {
             try { const A1 = analyzeFrame({ segs: out.longSegs && out.longSegs.length ? out.longSegs : out.plan.segs, faces: out.plan.faces, texts: out.texts || [], fixtures: out.fixtures || [], doors: out.doorList || [] });
               const g = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions });
               out.roles = {}; Object.keys(g.off).forEach(i => { const r = g.off[i], o = g.stats.find(x => x.gi === +i); out.roles[r] = (out.roles[r] || 0) + (o ? o.n : 0); });
@@ -1515,7 +1578,8 @@ function stepRooms(ctx) {
         let dimCheck = null;
         if (dims.length) { try { dimCheck = checkDimensions(dims); } catch (e2) { console.warn('寸法の答え合わせに失敗', e2); } }
         p.rooms.forEach(r => { if (r.src === 'plan') { r.src = 'plan-old'; delete r.faces; } });
-        p.drawing = { fileName: (cad ? [cad] : files).map(f => f.name).join('、'), at: Date.now(), plan: res.plan, fixtures: cad ? res.fixtures : null, open: cad ? res.open : null, doors: cad ? (res.doorList || []) : [], fixG: cad ? res.fixG : '', fixGd: cad ? res.fixGd : '', dims, dimCheck };
+        p.drawing = { fileName: (cad ? [cad] : files).map(f => f.name).join('、'), at: Date.now(), plan: res.plan, fixtures: cad ? res.fixtures : null, open: cad ? res.open : null, doors: cad ? (res.doorList || []) : [], fixG: cad ? res.fixG : '', fixGd: cad ? res.fixGd : '', dims, dimCheck,
+          ...(keepLO && ((keepLO.keys || []).length || (keepLO.segs || []).length) ? { lineOff: keepLO } : {}), ...(keepOut && keepOut.length ? { outZones: keepOut } : {}) };
         /* 器具の救済：壁も器具も同じレイヤーに描く図面では、読み取りが壁のレイヤーごと外して器具が消える。
          * 読み取りには触らず、ここでだけ救済分（src:'rescue'）を足す。読み取りが拾った器具と重なる物は出さない（そちらが優先） */
         let allFixtures = res.fixtures || [];
@@ -1698,11 +1762,15 @@ function stepRooms(ctx) {
     const mb = e.target.closest('[data-mode]');
     const ww = e.target.closest('[data-wway]');
     if (ww) { wway = ww.dataset.wway; wsel.clear(); wpts.length = 0; paintSel(); return; }
+    const lw2 = e.target.closest('[data-loway]');
+    if (lw2) { loway = lw2.dataset.loway; loSel = -1; outA = null; paintSel(); return; }
+    const od = e.target.closest('[data-outdel]');
+    if (od) { const d = p.drawing, was = d.outZones || []; d.outZones = was.filter(z => z.id !== od.dataset.outdel); outRegeo(); touch(p); paintSel(); toast('範囲を消しました', { action: '元に戻す', onAction: () => { d.outZones = was; outRegeo(); touch(p); paintSel(); } }); return; }
     const lt = e.target.closest('[data-ltool]');
     if (lt) { ltool = lt.dataset.ltool; linkSel = null; paintSel(); return; }
     const pw = e.target.closest('[data-pwhere]');
     if (pw) { pset.where = pw.dataset.pwhere; pfaces.clear(); psegs.clear(); psel = null; paintSel(); return; }
-    if (mb) { mode = mb.dataset.mode; psel = null; pfaces.clear(); psegs.clear(); fsel = -1; addAt = null; cutA = null; linkSel = null; zsplit = null; wsel.clear(); wpts.length = 0; if (mode !== 'meas') { meas.pts = []; meas.redo = []; } paintSel(); return; }
+    if (mb) { mode = mb.dataset.mode; loSel = -1; outA = null; psel = null; pfaces.clear(); psegs.clear(); fsel = -1; addAt = null; cutA = null; linkSel = null; zsplit = null; wsel.clear(); wpts.length = 0; if (mode !== 'meas') { meas.pts = []; meas.redo = []; } paintSel(); return; }
     const fb = e.target.closest('[data-face]');
     if (fb) { const i = +fb.dataset.face; if (sel.has(i)) sel.delete(i); else sel.add(i); paintSel(); return; }
     const da = e.target.closest('[data-act]');
@@ -1800,6 +1868,20 @@ function stepRooms(ctx) {
         return;
       }
       if (a === 'cutCancel') { cutA = null; paintSel(); return; }
+      if (a === 'outCancel') { outA = null; paintSel(); return; }
+      if (a === 'loCancel') { loSel = -1; paintSel(); return; }
+      if (a === 'loOne' || a === 'loKind') {
+        const d = p.drawing, plan = d.plan, LO = d.lineOff = d.lineOff || { keys: [], segs: [] };
+        if (a === 'loKind' && plan.gk && plan.sg) { const key = plan.gk[plan.sg[loSel]]; if (key && !LO.keys.includes(key)) LO.keys.push(key); }
+        else { const sg = plan.segs[loSel]; if (sg) LO.segs.push(sg.slice(0, 4)); }
+        d.lineOffDirty = true; loSel = -1; touch(p); paintSel(); return;
+      }
+      if (a === 'loClear') { const d = p.drawing; d.lineOff = { keys: [], segs: [] }; d.lineOffDirty = true; touch(p); paintSel(); return; }
+      if (a === 'loApply') {
+        const files = cadFiles.get(p.id), inp = body.querySelector('#dwgFile');
+        if (files && inp && inp.onchange) { inp.onchange({ target: { files, value: '' } }); return; }
+        toast('図面のファイルをもう一度選んでください（外した線を除いて、区画を作り直します）', { ms: 6000 }); if (inp) inp.click(); return;
+      }
       if (a === 'zsplitGo') {
         const d = p.drawing, Z = d.zones || [];
         const z = Z.find(q => q.id === (zsplit && zsplit.id));

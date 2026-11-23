@@ -1511,7 +1511,7 @@ function rgM(){return rgUnitF()*(+RG.scale||1)}
    2本線の壁が少ない図面（1本線で壁を描く図面）では何もしない。返すのは RG.segs の番号の集まり。今の読み取りは変えない */
 function rgSingleLines(){
   const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key)),ids=[];
-  RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;ids.push(i)});
+  RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;if(RG.userOff&&RG.userOff.has(i))return;ids.push(i)});
   const N=ids.length;if(N<20)return new Set();
   const X1=new Float64Array(N),Y1=new Float64Array(N),X2=new Float64Array(N),Y2=new Float64Array(N),L=new Float64Array(N),UX=new Float64Array(N),UY=new Float64Array(N);
   for(let k=0;k<N;k++){const s=RG.segs[ids[k]];X1[k]=s[1]*M;Y1[k]=s[2]*M;X2[k]=s[3]*M;Y2[k]=s[4]*M;const l=Math.hypot(X2[k]-X1[k],Y2[k]-Y1[k]);L[k]=l;UX[k]=l?(X2[k]-X1[k])/l:0;UY[k]=l?(Y2[k]-Y1[k])/l:0}
@@ -1749,7 +1749,7 @@ function rgCompute(){rgCompute0(null);
 function rgCompute0(X){
   const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key));
   const doors=RG.autoDoor?findDoors(RG.segs,RG.arcs,M):new Set();
-  const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;if(RG.segOff&&RG.segOff.has(i))return;segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
+  const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;if(RG.segOff&&RG.segOff.has(i))return;if(RG.userOff&&RG.userOff.has(i))return;   /* かつが「線を外す」で外した線（kaku_generation） */segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
   if(RG.segOff&&RG.segOff.extra)RG.segOff.extra.forEach(e=>segs.push(e.slice()));   // 新しい読み取り（試し）：吹き抜けの線の無い辺に足す見えない線
   RG.used=segs.length;RG.nHatch=RG.autoHatch?RG.hatch.size:0;RG.nDoor=doors.size;
   /* 出入口をふさぐ：壁の端（線が途切れた所、または壁の厚み分の短い線＝小口のある角）どうしを、

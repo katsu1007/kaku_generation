@@ -47,10 +47,23 @@ export async function readWithFixtures(file, opt = {}) {
     dt.items.add(new W.File([await file.arrayBuffer()], file.name, { type: file.type || 'application/octet-stream' }));
     W.document.getElementById('file').files = dt.files;
     await step('線を読んで、部屋の区画を探しています');
+    try { const E0 = W.document.getElementById('engineFrame').contentWindow; E0.eval('try{if(typeof RG!=="undefined"&&RG)delete RG.userOff}catch(e){}'); } catch (e) { /* 前の図面の「外した線」を持ち越さない */ }
     G('KAKU_plan=null;KAKU_fix=null;runDrawingImport()');
     const ok = await wait(() => G('KAKU_plan'), 90000);
     if (!ok) throw new Error('図面を読めませんでした（時間切れ）');
     await wait(() => G('KAKU_fix'), 8000);
+    /* かつが「線を外す」で外した線（opt.lineOff：keys＝同じ種類の線〈レイヤー｜色｜線種〉、segs＝その線だけ〈図面の座標〉）。
+     * 外してから区画を探し直し、前のKAKUの図面（KAKU_plan）もそれに入れ替える。後の新しい読み取り（試し）の探し直しにも効く */
+    const LO = opt.lineOff || null;
+    if (LO && ((LO.keys || []).length || (LO.segs || []).length)) { try {
+      await step('外した線を除いて、区画を探し直しています');
+      const E = W.document.getElementById('engineFrame').contentWindow; E.__kxUO = { keys: LO.keys || [], segs: LO.segs || [] };
+      E.eval(`(()=>{const U=window.__kxUO,M=rgM(),q=v=>Math.round(v*1000)/1000,K=new Set(U.keys),k2=(a,b)=>{const x=q(a[0])+','+q(a[1]),y=q(b[0])+','+q(b[1]);return x<y?x+';'+y:y+';'+x};
+        RG.groups.forEach(g=>{if(K.has(g.key))g.on=false});const want=new Set(U.segs.map(s=>k2([s[0],s[1]],[s[2],s[3]]))),so=new Set();
+        if(want.size)RG.segs.forEach((s,i)=>{if(want.has(k2(KAKU_rerot([s[1]*M,s[2]*M],M),KAKU_rerot([s[3]*M,s[4]*M],M))))so.add(i)});
+        RG.userOff=so;rgCompute()})()`);
+      const eng = await W.eval('waitEngine()'); const P = eng.plan && eng.plan(); if (P && P.faces) W.KAKU_preparePlan(P);
+    } catch (e) { console.warn('外した線で区画を探し直せませんでした', e); } }
     await step('器具・ドア・開口を調べています');
     const R = G(`(()=>{const P=KAKU_plan,F=KAKU_fix,q=v=>Math.round(v*1000)/1000;
       const plan={segs:P.segs.map(s=>s.map(q)),dsegs:(P.dsegs||[]).map(s=>s.map(q)),gsegs:(P.gsegs||[]).map(s=>s.map(q)),
@@ -66,9 +79,17 @@ export async function readWithFixtures(file, opt = {}) {
     try {
       const E = W.document.getElementById('engineFrame').contentWindow;
       const all = JSON.parse(E.eval(`(()=>{if(!RG||!RG.faces||!RG.faces.length)return'null';const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key)),q=v=>Math.round(v*1000)/1000,o=[];
-        RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);o.push([q(a[0]),q(a[1]),q(b[0]),q(b[1])])});
+        RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;if(RG.userOff&&RG.userOff.has(i))return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);o.push([q(a[0]),q(a[1]),q(b[0]),q(b[1])])});
         return JSON.stringify(o)})()`));
       if (Array.isArray(all) && all.length > out.plan.segs.length) { out.plan.segsThin = out.plan.segs.length; out.plan.segs = all; }
+      /* 線ごとの種類（レイヤー｜色｜線種。「線を外す」で同じ種類の線をまとめて外すのに使う）と、外した線（薄く出す） */
+      const GK = JSON.parse(E.eval(`(()=>{const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key)),q=v=>Math.round(v*1000)/1000,k=[],ix=new Map(),sg=[],off=[],U=window.__kxUO&&new Set(window.__kxUO.keys||[]);
+        RG.segs.forEach((s,i)=>{const g=gkey(s);if(RG.autoHatch&&RG.hatch&&RG.hatch.has(i))return;const user=(RG.userOff&&RG.userOff.has(i))||(U&&U.has(g));
+          if(!on.has(g)&&!user)return;const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M);if(user){if(off.length<20000)off.push([q(a[0]),q(a[1]),q(b[0]),q(b[1])]);return}
+          if(!ix.has(g)){ix.set(g,k.length);k.push(g)}sg.push(ix.get(g))});return JSON.stringify({k,sg,off})})()`));
+      if (GK && Array.isArray(GK.sg) && GK.sg.length === out.plan.segs.length) { out.plan.gk = GK.k; out.plan.sg = GK.sg; }
+      if (GK && GK.off && GK.off.length) out.plan.offSegs = GK.off;
+      try { E.eval('delete window.__kxUO'); } catch (e2) { /* 次の読み込みに持ち越さない */ }
     } catch (e) { console.warn('図面の線を全部もらえませんでした（間引いた線で続けます）', e); }
     /* 図面の文字（新しい読み取り js/reader2 が使う）。読み取りの部品の中身を「読むだけ」で、今の読み取りの結果は変えない。取れなくても読み込みは続ける */
     try {
@@ -157,7 +178,7 @@ export async function readWithFixtures(file, opt = {}) {
         const n1 = E.eval(`(()=>{const keep=RG.groups.map(g=>g.on);let n=0;try{window.__kxOff.forEach(i=>{RG.groups[i].on=false});
           const so=(typeof rgSingleLines==='function')?rgSingleLines():new Set();n=so.size;
           if(!window.__kxOff.length&&!n){window.__kxP2=null;return 0}
-          RG.segOff=so;rgCompute();window.__kxP2=KakuEngine.plan()}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]});if(n||window.__kxOff.length)rgCompute()}return n})()`);
+          if(RG.userOff)RG.userOff.forEach(i=>so.add(i));RG.segOff=so;rgCompute();window.__kxP2=KakuEngine.plan()}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]});if(n||window.__kxOff.length)rgCompute()}return n})()`);
         out.single = +n1 || 0;
         if (off.length || out.single) {
           const P2 = E.__kxP2; E.__kxP2 = null;
