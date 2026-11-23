@@ -3,7 +3,7 @@
 #   （sh tests/e2e/srv.sh でポート 8765 を先に動かす）
 #   --key：レイヤ名に「正解」が無い時、正解の線のまとまり（"レイヤ|色|太さ"）を正規表現で選ぶ（例 '^0-3\|5\|'）
 #   --shift dx,dy：正解の図面と元の図面で座標がずれている時（DXF を JW_CAD で開き直して保存した時など）、正解の部屋をずらしてから比べる
-#   --diff：--base の図面に無い線（かつが足した線）を正解の線にする（色やレイヤを決めなくてよい）
+#   --diff：--base の図面に無い線（同じ所に重ねて引いた線も数で見て取る）（かつが足した線）を正解の線にする（色やレイヤを決めなくてよい）
 #   --base：正解の線を足した図面ではなく、元の図面の読み取りと比べる（正解の線を壁と読まないように）
 # 正解の部屋は .real/answers/<図面名>.rooms.json にも書き出す（お客さんの図面の中身なのでリポジトリには入れない）
 import sys, json, os
@@ -21,10 +21,10 @@ JS = r"""async([pid,key,rooms0])=>{
   const a=await import('./js/app.js'),L=await import('./js/legacy.js'),C=await import('./js/answercmp.js');
   const p=a.state.projects.find(x=>x.id===pid),d=p.drawing;
   const W=await L.getReader(),E=W.document.getElementById('engineFrame').contentWindow;
-  const dk=key&&typeof key==='object'?key.diff:null;if(dk)window.__dk=new Set(dk);
+  const dk=key&&typeof key==='object'?key.diff:null;if(dk){const m=new Map();dk.forEach(k=>m.set(k,(m.get(k)||0)+1));window.__dk=m}
   const got=JSON.parse(E.eval(`(()=>{const M=rgM(),q=v=>Math.round(v*1000)/1000,re=new RegExp(${JSON.stringify(dk?'':(key||''))}||'正解|ANSWER','i'),o=[];const lys=[...new Set(RG.segs.map(s=>s[0]))];
     const dk=${dk?'parent.parent.__dk':'null'},sk=s=>{const a=[q(s[1]),q(s[2])].join(','),b=[q(s[3]),q(s[4])].join(',');return a<b?a+';'+b:b+';'+a};
-    RG.segs.forEach(s=>{if(dk?dk.has(sk(s)):!re.test(${key&&!dk?'gkey(s)':'String(s[0])'}))return;const A=KAKU_rerot([s[1]*M,s[2]*M],M),B=KAKU_rerot([s[3]*M,s[4]*M],M);o.push([q(A[0]),q(A[1]),q(B[0]),q(B[1])])});
+    RG.segs.forEach(s=>{if(dk?(()=>{const k=sk(s),n=dk.get(k)||0;if(n>0){dk.set(k,n-1);return true}return false})():!re.test(${key&&!dk?'gkey(s)':'String(s[0])'}))return;const A=KAKU_rerot([s[1]*M,s[2]*M],M),B=KAKU_rerot([s[3]*M,s[4]*M],M);o.push([q(A[0]),q(A[1]),q(B[0]),q(B[1])])});
     return JSON.stringify({segs:o,layers:lys.slice(0,80)})})()`));
   const texts=(d.src2&&d.src2.texts)||[];
   let rooms=rooms0;
