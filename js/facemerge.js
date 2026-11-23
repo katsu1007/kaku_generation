@@ -12,7 +12,7 @@
  *  - 階段（名前・中の文字が階段・上り・下り・UP・DN、または踏み面の列が広い所に飲み込まれる。むぎの設計）
  *  - 試しの区画の形が、中に入らないほかの区画（1㎡以上。階段・EV など）にかぶっている
  *  - 試しの区画が輪の形（外まわりの広さが区画の広さの 1.25 倍より大きい＝中に穴がある）
- *  - 中に入る今の区画の広さの合計が、試しの区画の半分に満たない・1.05 倍を超える
+ *  - 中に入る今の区画の広さの合計が、試しの区画の35%に満たない・1.05 倍を超える（机の多い事務所は、今の区画が机の下を抜くので半分くらいになる・大天）
  * まとめた区画は split に元の区画と開口を覚えるので、「分ける」で元に戻せる */
 
 const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
@@ -29,14 +29,18 @@ export const inPt = (P) => { let ya = Infinity, yb = -Infinity; P.forEach(q => {
  * そうでない時は、円弧のまん中 m から両端（90°の扉なら ±45°）を出し、ちょうつがいと端の中点（扉の開く所か、開いた扉の所）のどちらかが、
  * 区画のふちから 20cm より内にあって、しかも中に入る今の区画の2つのふち（壁の両側）から 20cm 以内なら中のドア。
  * 幅 55cm 未満の円弧（椅子など）は見ない */
-const innerDoor = (d, P, mem) => {
+const innerDoor = (d, P, mem, segs) => {
   if (!d || !d.c || !((+d.r || 0) >= 0.55)) return false;
   const c = d.c, inn = (x, y, g) => pip(x, y, P) && edgeD(x, y, P) > g;
   if (inn(c[0], c[1], 0.3)) return true;
   if (!d.m) return false;
   const vx = d.m[0] - c[0], vy = d.m[1] - c[1], k = Math.SQRT1_2;
   const e1 = [c[0] + (vx * k - vy * k), c[1] + (vx * k + vy * k)], e2 = [c[0] + (vx * k + vy * k), c[1] + (-vx * k + vy * k)];
-  return [e1, e2].some(e => { const x = (c[0] + e[0]) / 2, y = (c[1] + e[1]) / 2;
+  /* 扉の板の線（ちょうつがいから円弧の端までの線）がある方は開いた扉の所。もう片方が壁の開口（扉の開く所）なので、そちらだけ見る（大天の会議室：部屋の外まわりの壁の両開きの扉で、開いた板の所を中の間仕切りと見ていた） */
+  const leaf = e => (segs || []).some(q => { const a = [q[0], q[1]], b = [q[2], q[3]], dd = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]);
+    return (dd(a, c) <= 0.05 && dd(b, e) <= 0.1) || (dd(b, c) <= 0.05 && dd(a, e) <= 0.1); });
+  let E = [e1, e2]; if (segs) { const l1 = leaf(e1), l2 = leaf(e2); if (l1 !== l2) E = [l1 ? e2 : e1]; }
+  return E.some(e => { const x = (c[0] + e[0]) / 2, y = (c[1] + e[1]) / 2;
     return inn(x, y, 0.2) && mem.filter(f => edgeD(x, y, f.poly) <= 0.2).length >= 2; });
 };
 
@@ -91,7 +95,8 @@ const inside = (f1, f2) => {
 
 /* faces・open：今の読み取りの区画と開口。v2faces・v2open：試しの区画と開口。
  * 返す物：{ faces, open, merged: [{ i, from: [元の区画の i] }], split: { 新しい i: { faces: [元の区画], open: { i: 開口 } } } } */
-export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [], segs = null, texts = [] }) {
+export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, fixtures = [], doors = [], segs = null, texts = [], why = null }) {
+  const no = (f2, r) => { if (why) why.push({ i: f2.i, area: Math.round(f2.area * 10) / 10, r }); };
   const treads = segs ? treadRows(segs) : [];
   const stairTx = (texts || []).filter(t => t && STAIR.test(String(t.t || '').trim()));
   const F = (faces || []).filter(f => f && f.poly && f.poly.length >= 3);
@@ -100,25 +105,26 @@ export function mergeSplitFaces({ faces, open = {}, v2faces = [], v2open = {}, f
   const toilets = (fixtures || []).filter(x => x && x.b && (x.t === 'toilet' || x.t === 'urinal')).map(x => [(x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2]);
   const sorted = [...(v2faces || [])].filter(f => f && f.poly && f.poly.length >= 3 && f.area > 0).sort((a, b) => b.area - a.area);
   for (const f2 of sorted) {
-    if (polyA(f2.poly) > f2.area * 1.25) continue;
+    if (polyA(f2.poly) > f2.area * 1.25) { no(f2, 'ring'); continue; }
     const mem = F.filter(f1 => !taken.has(f1.i) && !f1.hand && inside(f1, f2));
-    if (mem.length < 2) continue;
+    if (mem.length < 2) { if (mem.length) no(f2, 'one'); continue; }
     /* 試しの区画の形が、中に入らないほかの区画（階段・EV など）までかぶっている時はまとめない */
     const memS = new Set(mem.map(f => f.i));
-    if (F.some(g => !memS.has(g.i) && g.area >= 1 && g.area < f2.area && (() => { const q = inPt(g.poly); return pip(q[0], q[1], f2.poly) && edgeD(q[0], q[1], f2.poly) > 0.2; })())) continue;
+    if (F.some(g => !memS.has(g.i) && g.area >= 1 && g.area < f2.area && (() => { const q = inPt(g.poly); return pip(q[0], q[1], f2.poly) && edgeD(q[0], q[1], f2.poly) > 0.2; })())) { no(f2, 'cover'); continue; }
     const sum = mem.reduce((s, f) => s + f.area, 0);
-    if (sum < f2.area * 0.5 || sum > f2.area * 1.05) continue;
+    if (sum < f2.area * 0.35 || sum > f2.area * 1.05) { no(f2, 'sum ' + Math.round(sum / f2.area * 100)); continue; }
     const names = new Set(mem.map(f => String(f.name || '').trim()).filter(Boolean));
-    if (names.size >= 2) continue;
-    if (mem.filter(f => toilets.some(c => pip(c[0], c[1], f.poly))).length >= 2) continue;
-    if ((doors || []).some(d => innerDoor(d, f2.poly, mem))) continue;
+    if (names.size >= 2) { no(f2, 'names ' + [...names].join('/')); continue; }
+    if (mem.filter(f => toilets.some(c => pip(c[0], c[1], f.poly))).length >= 2) { no(f2, 'booth'); continue; }
+    if ((doors || []).some(d => innerDoor(d, f2.poly, mem, segs))) { no(f2, 'door'); continue; }
     /* 階段：区画の名前・中の文字が「階段・上り・下り・UP・DN」、または踏み面の列が試しの区画の中にあって区画の4割未満（広い所に飲み込まれる）の時はまとめない */
-    if (mem.some(f => /階段/.test(String(f.name || ''))) || stairTx.some(t => pip(t.x, t.y, f2.poly))) continue;
-    if (treads.some(r => pip(r.cx, r.cy, f2.poly) && r.area < f2.area * 0.4)) continue;
+    if (mem.some(f => /階段/.test(String(f.name || ''))) || stairTx.some(t => pip(t.x, t.y, f2.poly))) { no(f2, 'stairtext'); continue; }
+    if (treads.some(r => pip(r.cx, r.cy, f2.poly) && r.area < f2.area * 0.4)) { no(f2, 'tread'); continue; }
     const i = next++, keepOpen = {};
     mem.forEach(f => { taken.add(f.i); const k = String(f.i); if (op[k]) { keepOpen[k] = op[k]; delete op[k]; } });
     const big = [...mem].sort((a, b) => b.area - a.area)[0];
-    const nf = { i, name: [...names][0] || f2.name || '', area: f2.area, peri: f2.peri, ch: Math.max(...mem.map(f => +f.ch || 0), +f2.ch || 0), poly: f2.poly.map(p => [p[0], p[1]]), merged: mem.map(f => f.i) };
+    const area = f2.area;
+    const nf = { i, name: [...names][0] || f2.name || '', area, peri: f2.peri, ch: Math.max(...mem.map(f => +f.ch || 0), +f2.ch || 0), poly: f2.poly.map(p => [p[0], p[1]]), merged: mem.map(f => f.i) };
     if (big && big.name && !nf.name) nf.name = big.name;
     /* 開口：試しの開口（扉の無い開口が周りの3割以上なら、ドアだけ。形が壁に沿っていない時に引きすぎないため） */
     const r2 = (v2open || {})[String(f2.i)] || [], g = r2.filter(r => r.ty !== 'd').reduce((t, r) => t + (+r.len || 0), 0);

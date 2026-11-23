@@ -11,7 +11,7 @@ const pip = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < 
 export function answerRooms(segs, texts = []) {
   const F = polygonizeFaces(segs || [], { snap: 0.02 }).filter(f => f.area >= 0.3);
   return F.map((f, k) => {
-    const name = (texts || []).filter(t => t && pip(t.x, t.y, f.poly)).map(t => String(t.t).trim()).filter(Boolean).join('・');
+    const name = (texts || []).filter(t => t && pip(t.x, t.y, f.poly)).map(t => String(t.t).trim()).filter(t => t && !/^[\d.,:＝=\s]+$/.test(t) && !/^(CH|ＣＨ)/i.test(t)).slice(0, 3).join('・');
     return { id: 'a' + (k + 1), name, area: Math.round(f.area * 100) / 100, poly: f.poly };
   });
 }
