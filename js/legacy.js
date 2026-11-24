@@ -74,7 +74,7 @@ export async function readWithFixtures(file, opt = {}) {
       let fixtures=[],open={};
       if(F&&F.fx){fixtures=F.fx.map(x=>{let o=null;try{o=KF_OUT[x.t]?KF_outPt(x):null}catch(e){}return{t:x.t,b:KF_gbox(x.b).map(q),back:KF_gback(x.back)||'',out:o?o.map(q):null}});
         const O=(typeof KX_openScan==='function'&&KX_openScan())||{};
-        Object.keys(O).forEach(k=>{open[k]=O[k].map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))})}
+        Object.keys(O).forEach(k=>{open[k]=O[k].filter(r=>!(r.ty==='g'&&r.len<0.6)).map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))})}
       return JSON.stringify({plan,fixtures,open,doors:F&&F.doors?F.doors.length:0,doorList:(F&&F.doors||[]).filter(d=>d&&d.c).map(d=>({c:d.c.map(q),m:(d.m||d.c).map(q),r:+d.r||0.8})),fixG:F&&F.g||'',fixGd:F&&F.gd||''})})()`);
     const out = JSON.parse(R);
     /* 画面に出す線：読み取りの部品は線が9,000本を超えると「何本かおきに1本」に間引いて渡してくる（壁が途切れて見える・タップできない）。
@@ -193,7 +193,7 @@ export async function readWithFixtures(file, opt = {}) {
             W.__kxP2 = P2;
             const R2 = JSON.parse(G(`(()=>{const keep=KAKU_plan,P=window.__kxP2,q=v=>Math.round(v*1000)/1000,open={};let O={};
               try{KAKU_plan=P;O=(typeof KX_openScan==='function'&&KX_openScan())||{}}finally{KAKU_plan=keep}
-              Object.keys(O).forEach(k=>{open[k]=O[k].map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))});
+              Object.keys(O).forEach(k=>{open[k]=O[k].filter(r=>!(r.ty==='g'&&r.len<0.6)).map(r=>({ty:r.ty,len:Math.round(r.len*100)/100,a:r.a.map(q),b:r.b.map(q),n:r.n.map(q)}))});
               return JSON.stringify({open,faces:P.faces.map(f=>({i:f.i,name:f.name||'',area:f.area,peri:f.peri,ch:f.ch||0,poly:f.poly.map(p=>[q(p[0]),q(p[1])])}))})})()`));
             W.__kxP2 = null;
             out.v2 = { faces: R2.faces, open: R2.open, off };
@@ -235,10 +235,13 @@ export const FIX_WORDS = { toilet: ['便器', 'トイレ'], urinal: ['小便器'
 
 /* 部屋（区画の組み合わせ）の、壁から引く開口。前のKAKUと同じ決め方：
  * 部屋の中の境目（となりの区画も同じ部屋）は数えない。ドアは幅×高さ（2.0m、天井が低い時は天井高−5cm）、扉の無い開口は幅×天井高 */
+/* 扉の無い開口（ty 'g'）は 0.6m 以上だけを開口とする（kaku_generation・2026-11-24。前のKAKUの開口探しは 30cm から拾うので、
+ * 机・椅子の間・ドアの枠の横の壁の中・窓まわりのすき間まで開口になって、壁の㎡が少なく出ていた。読み込む時の open にも同じ決まり） */
 export function roomOpenRuns(faceIds, plan, open) {
   const pip = (x, y, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
   const out = [];
   faceIds.forEach(i => (open[i] || []).forEach(run => {
+    if (run.ty === 'g' && run.len < 0.6) return;   /* 0.6m 未満の扉の無い開口は人が通れない＝机・椅子の間・壁の中・窓まわりのすき間（前に読み込んだ図面の分もここで外す） */
     const mx = (run.a[0] + run.b[0]) / 2, my = (run.a[1] + run.b[1]) / 2;
     const inner = [0.1, 0.2, 0.35].some(o => { const x = mx + run.n[0] * o, y = my + run.n[1] * o; return faceIds.some(j => { if (j === i) return false; const f = plan.faces.find(z => z.i === j); return f && pip(x, y, f.poly); }); });
     if (!inner) out.push({ ty: run.ty, len: run.len });
