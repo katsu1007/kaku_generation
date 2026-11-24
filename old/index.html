@@ -3824,8 +3824,11 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
       M.mk=kc;if(capA)M.quad(Q(a,b.oB,z0),Q(a,b.oA,z0),Q(a,b.oA,z1),Q(a,b.oB,z1),W1c);if(capC)M.quad(Q(c,b.oA,z0),Q(c,b.oB,z0),Q(c,b.oB,z1),Q(c,b.oA,z1),W1c);M.mk='solid'};
     /* 部材と同じ向きで、ずらした位置に小さい箱を置く（巾木・ドア枠・サッシなど） */
     var bar=function(b,a,c,oA,oB,z0,z1,col,kind){box({u:b.u,n:b.n,oA:Math.min(oA,oB),oB:Math.max(oA,oB)},a,c,z0,z1,col,col,true,true,{A:kind,B:kind,T:kind,C:kind,topCol:col,capCol:col})};
+    /* 家具・什器（机・ロッカー・棚など。新しい画面の辞書で「家具」と分かった線のかたまり＝P.furn）の線は壁にしない。
+       天井まで立ち上がらないように、下でそれぞれの高さの箱として描く（かつ「什器とかロッカーも天井まで伸びちゃう」・2026-11-24） */
+    var FU=(P.furn||[]).filter(function(f){return f&&f.b&&f.h>0}),inFu=function(s){for(var k=0;k<FU.length;k++){var q=FU[k].b,e=.03;if(Math.min(s[0],s[2])>=q[0]-e&&Math.max(s[0],s[2])<=q[2]+e&&Math.min(s[1],s[3])>=q[1]-e&&Math.max(s[1],s[3])<=q[3]+e)return true}return false};
     if(S.show.wall){
-      P.segs.forEach(function(s0){if(isDoorLine(s0)||arcish(s0))return;cutDoor(s0).forEach(function(s){var dx=s[2]-s[0],dy=s[3]-s[1],L=Math.hypot(dx,dy);if(L<.04||arcish(s))return;var u=[dx/L,dy/L];if(u[0]<-1e-9||(Math.abs(u[0])<1e-9&&u[1]<0))u=[-u[0],-u[1]];
+      P.segs.forEach(function(s0){if(isDoorLine(s0)||arcish(s0)||inFu(s0))return;cutDoor(s0).forEach(function(s){var dx=s[2]-s[0],dy=s[3]-s[1],L=Math.hypot(dx,dy);if(L<.04||arcish(s))return;var u=[dx/L,dy/L];if(u[0]<-1e-9||(Math.abs(u[0])<1e-9&&u[1]<0))u=[-u[0],-u[1]];
         var n=[-u[1],u[0]],sa=dot([s[0],s[1]],u),sb=dot([s[2],s[3]],u);WS.push({u:u,n:n,o:dot([s[0],s[1]],n),s0:Math.min(sa,sb),s1:Math.max(sa,sb),free:[[Math.min(sa,sb),Math.max(sa,sb)]]})})});
       if(WS.length<=4000){var PR=[];for(var i=0;i<WS.length;i++)for(var j=i+1;j<WS.length;j++){var A=WS[i],B=WS[j];if(Math.abs(A.u[0]*B.u[1]-A.u[1]*B.u[0])>.02)continue;
           var d=dot(wpt(B,(B.s0+B.s1)/2),A.n)-A.o,ad=Math.abs(d);if(ad<.02||ad>.4)continue;var b0=dot(wpt(B,B.s0),A.u),sh=b0-B.s0,lo=Math.max(A.s0,B.s0+sh),hi=Math.min(A.s1,B.s1+sh);if(hi-lo<.05)continue;
@@ -3893,6 +3896,10 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
         part({type:'wall',attr:{length:r,thickness:wt||null,height:h-dh},title:'垂れ壁（ドアの上）',rows:[['幅',Math.round(r*1000)+' mm'],['高さ',Math.round((h-dh)*1000)+' mm'],['厚み',wt?Math.round(wt*1000)+' mm':'—']],note:'ドアの高さを 2.0m と仮に決めて、その上を壁にしています。'});
         box(hb,Math.min(sa,sb),Math.max(sa,sb),dh,h,RL?W1:WALL,RL?W1:WALL,true,true)}});
     /* 器具 */
+    /* 家具・什器の箱：図面の外形（縦横の四角）を、種類ごとの高さで描く。見積もりの数量には入れない */
+    M.cur=-1;if(S.show.fix)FU.forEach(function(f){var q=f.b,cx=(q[0]+q[2])/2,cy=(q[1]+q[3])/2,xf=faceAt(cx,cy);if(xf&&!fvis(xf.i))return;var top=Math.min(f.h,(xf?fH[xf.i]:H0)-.05);if(top<.05)return;
+      part({type:'furn',key:xf?rk(xf.i):'',title:f.name||'家具・什器',rows:[['大きさ（図面から）',Math.round((q[2]-q[0])*1000)+' × '+Math.round((q[3]-q[1])*1000)+' mm'],['高さ（目安）',Math.round(top*1000)+' mm'],['ある所',xf?rname(xf.i):'—']],note:'図面の線から家具・什器と見た物です。高さは種類ごとの目安で、見積もりの数量には入っていません。'});
+      M.mk='solid';M.prism([[q[0],q[1]],[q[2],q[1]],[q[2],q[3]],[q[0],q[3]]],0,top,(f.col||[.74,.70,.62]).concat(1),{edge:[.45,.45,.45,1]})});
     M.cur=-1;if(S.show.fix)((fx&&fx.fx)||[]).forEach(function(x){if(!x.b||x.t==='other')return;var b=x.b,cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2,W=b[2]-b[0],D=b[3]-b[1];
       var gc=G([cx,cy]),xf=faceAt(gc[0],gc[1]);if(xf&&!fvis(xf.i))return;
       part({type:'fix',key:xf?rk(xf.i):'',title:(typeof KF_T!=='undefined'&&KF_T[x.t])||'器具',rows:[['大きさ（図面から）',Math.round(Math.max(W,D)*1000)+' × '+Math.round(Math.min(W,D)*1000)+' mm'],['ある所',xf?rname(xf.i):'—']],note:'図面に描いてある器具です。形は目安で、見積もりの数量には入っていません（コンセントの位置決めに使っています）。'});
