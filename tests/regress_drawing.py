@@ -4,7 +4,9 @@ import os,sys,json,glob
 from playwright.sync_api import sync_playwright
 H0=os.environ.get('KAKU_TESTS','../gaisan/kaku-tests')  # 非公開の gaisan リポジトリの kaku-tests（図面と正解はここには入れない）
 URL=os.environ.get('KAKU_URL','http://localhost:8765/')  # 新しいKAKUを置いたローカルのサーバー
-base=json.load(open(H0+'/baseline.json'))
+# 基準は kaku_generation 用の baseline-generation.json（KAKU 本体の regress.py が使う baseline.json とは分けた。2026-11-24）。無ければ共通の物
+BF=H0+'/baseline-generation.json' if os.path.exists(H0+'/baseline-generation.json') else H0+'/baseline.json'
+base=json.load(open(BF))
 JWW=sys.argv[1] if len(sys.argv)>1 else None
 errs=[];res={}
 with sync_playwright() as p:

@@ -294,6 +294,7 @@
 - 画面のテスト：`tests/e2e/README.md` を見る（Playwright + Chrome、`sh tests/e2e/srv.sh` でポート 8765）
 - 読み取りの回帰テスト：`KAKU_TESTS=../gaisan/kaku-tests python3 tests/regress_drawing.py`
   - 図面と正解は **katsu1007/gaisan リポジトリの `kaku-tests/`**（このリポジトリには入れない）
+  - 基準は `kaku-tests/baseline-generation.json`（kaku_generation 用。本体の `baseline.json` とは分けた・2026-11-24）。直して結果が良くなった時は、点数を下げない形でこちらを更新する
 
 ### テストの方針（かつと決めたこと）
 
