@@ -11,7 +11,7 @@ import { mergeSplitFaces, splitMerged, absorbBoxes } from './facemerge.js';
 /* 読み込んだ図面のファイル（開いている間だけ）。「線を外す」で区画を作り直す時に、もう一度選ばなくてよいように */
 const cadFiles = new Map();
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
-import { sheetsOf, fixturesInUse, fixturesInRegions } from './sheets.js';
+import { sheetsOf, fixturesInUse, fixturesInRegions, wrapsMany } from './sheets.js';
 export { sheetsOf, fixturesInUse };
 import { readWithFixtures, oldFaceLights, roomOpenRuns, FIX_NAMES, FIX_ITEMS, FIX_WORDS } from './legacy.js';
 import { planView, roomColor } from './planview.js';
@@ -2108,7 +2108,7 @@ function stepRooms(ctx) {
       if (a === 'mkOne') return makeRooms(false);
       if (a === 'mkEach') return makeRooms(true);
       if (a === 'selClear') { sel.clear(); paintSel(); return; }
-      if (a === 'lMakeAll') { const own = owner(), mk = faceMarks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); return makeRooms(true); }
+      if (a === 'lMakeAll') { const own = owner(), mk = faceMarks() || {}, F = p.drawing.plan.faces, wr = F.filter(f => !own.has(f.i) && !mk[f.i] && wrapsMany(f, F)); F.forEach(f => { if (!own.has(f.i) && !mk[f.i] && !wr.includes(f)) sel.add(f.i); }); if (wr.length) toast(`ほかの区画をいくつも囲んでいる区画（図枠の内側・建物の外まわり）${wr.length} 個は入れていません。部屋にする時はタップで選んでください`, { ms: 7000 }); return makeRooms(true); }
       if (a === 'selSame') {
         /* 選んだ区画と同じ大きさ（面積も周りの長さも 2% 以内か 0.02 以内）の、まだ部屋にしていない区画を足す。トイレのブースなどをまとめて選ぶ */
         const own = owner(), F = p.drawing.plan.faces, base = [...sel].map(i => F.find(f => f.i === i)).filter(Boolean);
@@ -2116,7 +2116,7 @@ function stepRooms(ctx) {
         let k = 0; F.forEach(f => { if (sel.has(f.i) || own.has(f.i)) return; if (base.some(b => near(f.area, b.area) && near(f.peri, b.peri))) { sel.add(f.i); k++; } });
         paintSel(); toast(k ? `同じ大きさの区画を ${k} 個足しました（全部で ${sel.size} 区画）` : '同じ大きさで、まだ部屋にしていない区画はありませんでした'); return;
       }
-      if (a === 'selRest') { const own = owner(), mk = faceMarks() || {}; p.drawing.plan.faces.forEach(f => { if (!own.has(f.i) && !mk[f.i]) sel.add(f.i); }); paintSel(); return; }
+      if (a === 'selRest') { const own = owner(), mk = faceMarks() || {}, F = p.drawing.plan.faces, wr = F.filter(f => !own.has(f.i) && !mk[f.i] && wrapsMany(f, F)); F.forEach(f => { if (!own.has(f.i) && !mk[f.i] && !wr.includes(f)) sel.add(f.i); }); if (wr.length) toast(`ほかの区画をいくつも囲んでいる区画（図枠の内側・建物の外まわり）${wr.length} 個は選んでいません。部屋にする時はタップで選んでください`, { ms: 7000 }); paintSel(); return; }
       if (a === 'dwgClear') {
         if (!(await ask('図面を消しますか？', '図面から作った部屋は残ります（図面とのつながりだけ外れます）。', { ok: '消す', danger: true }))) return;
         const old = p.drawing; p.drawing = null; p.rooms.forEach(r => { if (r.src === 'plan') r.src = 'plan-old'; });

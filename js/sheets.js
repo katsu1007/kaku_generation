@@ -28,3 +28,13 @@ export function fixturesInRegions(d) {
   const reg = ((d && d.analysis && d.analysis.regions) || []).filter(r => r.box && (r.type === 'table' || r.type === 'title')).map(r => r.box);
   return fx.map(x => { if (!x || !x.b || x.edited || !reg.length) return false; const cx = (x.b[0] + x.b[2]) / 2, cy = (x.b[1] + x.b[3]) / 2; return reg.some(b => cx >= b[0] && cx <= b[2] && cy >= b[1] && cy <= b[3]); });
 }
+
+/* ほかの区画をいくつも中に含む区画（図枠の内側・建物の外まわり）。中に4つ以上、または2つ以上で中の広さが半分以上。
+ * 「まだ部屋にしていない区画を全部選ぶ」・3D で使う（前は全部選ぶで図枠の内側まで部屋になり、床が 1,000㎡ 以上増えていた） */
+const pipS = (x, y, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+export function wrapsMany(f, F) {
+  if (!f.poly || f.poly.length < 3) return false;
+  let n = 0, a = 0; const cOf = o => Number.isFinite(o.cx) ? [o.cx, o.cy] : [o.poly.reduce((t, q) => t + q[0], 0) / o.poly.length, o.poly.reduce((t, q) => t + q[1], 0) / o.poly.length];
+  for (const o of F) { if (o === f || !o.poly || !(o.area < f.area)) continue; const c = cOf(o); if (pipS(c[0], c[1], f.poly)) { n++; a += Number(o.area) || 0; } }
+  return n >= 4 || (n >= 2 && a >= (Number(f.area) || 0) * 0.5);
+}

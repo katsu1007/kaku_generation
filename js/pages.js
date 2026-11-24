@@ -164,7 +164,7 @@ registerView('settings', async el => {
     <div class="card"><h2>バックアップ</h2><div class="sub">案件・単価・設定をまとめて1つのファイルにします。機種変更の時や、念のため週に1回くらい書き出してください。${s.lastBackup ? `前回：${new Date(s.lastBackup).toLocaleDateString('ja-JP')}` : 'まだ書き出していません。'}</div>
       <div class="row"><button class="btn primary" id="bexp">${icon('down')}バックアップを書き出す</button>
       <label class="btn" style="cursor:pointer">${icon('up')}バックアップから戻す<input type="file" id="bimp" accept=".json,application/json" hidden></label></div>
-      <p class="small muted" style="margin-bottom:0">前のKAKUで書き出したバックアップも読み込めます。保存の状態：${state.persisted ? '<span class="pill ok">端末に消されにくい保存</span>' : '<span class="pill warn">ブラウザが容量不足の時に消すことがあります。バックアップを取ってください</span>'}</p></div>
+      <p class="small muted" style="margin-bottom:0">前のKAKUで書き出したバックアップも読み込めます。保存の状態：${state.persisted ? '<span class="pill ok">端末に消されにくい保存</span>' : '<span class="pill warn" style="white-space:normal">ブラウザが容量不足の時に消すことがあります。バックアップを取ってください</span>'}</p></div>
     <div class="card" id="syncCard"><h2>保存先フォルダ（会社の OneDrive・Googleドライブなど）</h2>${syncCardHtml()}</div>
     <div class="card"><h2>そのほか</h2>
       <div class="row"><button class="btn" id="intro">${icon('help')}最初の案内をもう一度見る</button><button class="btn" id="sample">${icon('spark')}見本の案件を入れる</button><a class="btn" href="./old/index.html">${icon('layers')}前のKAKUを開く</a><button class="btn" id="reold">${icon('up')}前のKAKUの案件を取り込み直す</button></div>

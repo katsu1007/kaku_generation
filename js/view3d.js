@@ -7,7 +7,7 @@ import { oldType } from './legacy.js';
 import { planCH } from './drawing.js';
 import { lightWires, symList, typeFixMap, shownFixType } from './project.js';
 import { pip } from './lighting.js';
-import { fixturesInRegions } from './sheets.js';
+import { fixturesInRegions, sheetsOf, wrapsMany } from './sheets.js';
 
 const clone = o => JSON.parse(JSON.stringify(o));
 const DEMO = /解体|撤去|はがし|剥がし|斫り|はつり/;
@@ -77,12 +77,65 @@ function backOf(x, longSegs) {
   return best;
 }
 
+const bbOf = P => { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; P.forEach(([x, y]) => { if (x < a) a = x; if (x > c) c = x; if (y < b) b = y; if (y > d) d = y; }); return [a, b, c, d]; };
+/* 形の中の点：真ん中の高さで横に切って、いちばん広い区間のまん中（L字・コの字で重心が外に出るため） */
+export function innerPt(P) {
+  const b = bbOf(P), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+  if (pip(cx, cy, P)) return [cx, cy];
+  let best = null;
+  [0.5, 0.35, 0.65, 0.2, 0.8].forEach(t => { if (best) return; const y = b[1] + (b[3] - b[1]) * t, xs = [];
+    P.forEach((a, k) => { const q = P[(k + 1) % P.length]; if ((a[1] > y) !== (q[1] > y)) xs.push(a[0] + (y - a[1]) * (q[0] - a[0]) / (q[1] - a[1])); });
+    xs.sort((m, n) => m - n); for (let k = 0; k + 1 < xs.length; k += 2) if (!best || xs[k + 1] - xs[k] > best[2]) best = [(xs[k] + xs[k + 1]) / 2, y, xs[k + 1] - xs[k]]; });
+  return best ? [best[0], best[1]] : [cx, cy];
+}
+/* 3Dに出す区画：表・表題欄・「区画ではない」・使わない図の区画と、ほかの区画をいくつも中に含む区画（図枠の内側・建物の外まわり）は出さない。
+ * 前は全部の区画を床にしていたので、図枠の内側が紙いっぱいの床になっていた（かつ「おかしいところばかり」・2026-11-24） */
+function shownFaces(d, sheetOff = true) {
+  const F = (d.plan.faces || []).filter(f => f.poly && f.poly.length > 2), M = (d.analysis && d.analysis.marks) || {}, off = d.faceOff || {};
+  /* 表の図（仕上表など）の中の区画は出さない。今の図・改修の図はどちらも出す（「全部」は全部の図、図を選んだ時はその図だけ） */
+  let TB = []; if (sheetOff) { try { TB = sheetsOf(d).filter(x => x.kind === 'table' && x.box); } catch (e) { TB = []; } }
+  const SM = {}; F.forEach(f => { const c = Number.isFinite(f.cx) ? [f.cx, f.cy] : f.poly[0]; if (TB.some(x => c[0] >= x.box[0] && c[0] <= x.box[2] && c[1] >= x.box[1] && c[1] <= x.box[3])) SM[f.i] = 1; });
+  return F.filter(f => { const m = M[f.i] || M[String(f.i)]; if (m && m.s === 'out' && (m.type === 'title' || m.type === 'table')) return false;
+    if (off[f.i] || SM[f.i]) return false; return !wrapsMany(f, F); });
+}
+/* 3Dに立ち上げる線：出す区画のふちの近く（60cm 以内）を通る線だけ。図の区切り・表・寸法・図枠の線は部屋から離れているので壁にしない。
+ * 部屋の中に浮いている線（ふちから 15cm 以上内側。机・椅子・テーブル・棚など）も壁にしない（かつ「机と椅子は無視して良い。知りたいのは壁と床」） */
+export function wallSegs(segs, faces) {
+  const C = 1, E = new Map(), key = (x, y) => x + ',' + y;
+  faces.forEach((f, fi) => f.poly.forEach((a, k) => { const b = f.poly[(k + 1) % f.poly.length];
+    const x0 = Math.floor((Math.min(a[0], b[0]) - 0.6) / C), x1 = Math.floor((Math.max(a[0], b[0]) + 0.6) / C), y0 = Math.floor((Math.min(a[1], b[1]) - 0.6) / C), y1 = Math.floor((Math.max(a[1], b[1]) + 0.6) / C);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) { const K = key(x, y); if (!E.has(K)) E.set(K, []); E.get(K).push([a, b, fi]); } }));
+  const dEdge = (x, y) => { const L = E.get(key(Math.floor(x / C), Math.floor(y / C))); if (!L) return Infinity; let m = Infinity;
+    for (const [a, b] of L) { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2)) : 0; const v = Math.hypot(a[0] + dx * t - x, a[1] + dy * t - y); if (v < m) m = v; } return m; };
+  const BB = faces.map(f => { const xs = f.poly.map(q => q[0]), ys = f.poly.map(q => q[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; });
+  const inside = (x, y) => faces.some((f, k) => { const b = BB[k]; return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3] && pip(x, y, f.poly); });
+  return segs.filter(s => { const L = Math.hypot(s[2] - s[0], s[3] - s[1]), n = Math.max(2, Math.min(40, Math.ceil(L / 0.4)));
+    let near = 0, deep = 0;
+    for (let k = 0; k <= n; k++) { const t = k / n, x = s[0] + (s[2] - s[0]) * t, y = s[1] + (s[3] - s[1]) * t, de = dEdge(x, y);
+      if (de <= 0.6) near++; if (de > 0.15 && inside(x, y)) deep++; }
+    if (near < (n + 1) * 0.6) return false;      // 部屋から離れた線（図の区切り・表・寸法・図枠）
+    return deep < n + 1;                          // 全部が部屋の中に浮いている線（家具）
+  });
+}
+
 export function toOld(p) {
   const d = p.drawing, plan = d.plan, ch0 = planCH(plan) || opts().ceilH;
-  const P = { segs: plan.segs, dsegs: plan.dsegs || [], titles: plan.titles || [], furn: furnBoxes(d),
-    faces: plan.faces.map((f, k) => ({ i: f.i, no: k + 1, name: f.name || '', area: f.area, peri: f.peri, ch: f.ch || 0, poly: f.poly })) };
-  const rooms = p.rooms.filter(r => r.src === 'plan').map((r, k) => ({
-    id: r.id, name: r.name, plan: true, faces: r.faces || [], ch: Number(r.h) > 0 ? Number(r.h) : ch0,
+  const SF = shownFaces(d, !p.__sheet), ids = new Set(SF.map(f => f.i));
+  /* 家具の箱も、出す区画の中（ふちから 30cm 外まで）にある物だけ（表題欄・凡例の中の形を家具と見た物が建物の外に浮いていた） */
+  const inSF = (x, y) => SF.some(f => pip(x, y, f.poly) || f.poly.some((A, i) => { const B = f.poly[(i + 1) % f.poly.length], dx = B[0] - A[0], dy = B[1] - A[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - A[0]) * dx + (y - A[1]) * dy) / L)) : 0; return Math.hypot(x - A[0] - dx * t, y - A[1] - dy * t) < 0.3; }));
+  const FB = furnBoxes(d).filter(o => !SF.length || inSF((o.b[0] + o.b[2]) / 2, (o.b[1] + o.b[3]) / 2));
+  const P = { segs: SF.length ? wallSegs(plan.segs || [], SF) : (plan.segs || []), dsegs: plan.dsegs || [], titles: plan.titles || [], furn: FB,
+    faces: plan.faces.filter(f => ids.has(f.i)).map((f, k) => ({ i: f.i, no: (f.no || k + 1), name: f.name || '', area: f.area, peri: f.peri, ch: f.ch || 0, poly: f.poly, bb: bbOf(f.poly) })) };
+  /* 部屋の名前の札：前は区画の外の四角（bb）が渡っていなかったので、全部の札が座標の 0,0 に重なっていた（「受 事 区画90 イレ 袋」のように重なって読めない）。
+   * 区画の中の点に置き、いくつかの区画をまとめた部屋は、いちばん広い区画に1つだけ出す */
+  /* トイレのブース：3.5㎡ 以下で、中に便器がある区画（3Dで仕切りを 2.0m にする） */
+  { let TF0 = []; try { TF0 = typeFixMap(d) || []; } catch (e) { TF0 = []; }
+    const toilets = (d.fixtures || []).map((x, k) => x.b && shownFixType(TF0, x, k) === 'toilet' ? [(x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2] : null).filter(Boolean);
+    P.booths = P.faces.filter(f => f.area <= 3.5 && toilets.some(c => pip(c[0], c[1], f.poly))).map(f => f.i); }
+  const big = {}; p.rooms.forEach(r => { if (r.src !== 'plan') return; let b = null; (r.faces || []).forEach(i => { const f = P.faces.find(o => o.i === i); if (f && (!b || f.area > b.area)) b = f; }); (r.faces || []).forEach(i => { big[i] = b ? b.i : i; }); });
+  P.labels = P.faces.map(f => big[f.i] != null && big[f.i] !== f.i ? { skip: true } : (() => { const q = innerPt(f.poly); return { x: q[0], y: q[1] }; })());
+  const rooms = p.rooms.filter(r => r.src === 'plan' && (r.faces || []).some(i => ids.has(i))).map((r, k) => ({
+    id: r.id, name: r.name, plan: true, faces: (r.faces || []).filter(i => ids.has(i)), ch: Number(r.h) > 0 ? Number(r.h) : ch0,
     color: Number.isFinite(r.color) ? r.color : k, area: Number(r.area) || 0, openW: 0, ...finishes(p, r)
   }));
   const places = (d.lights || []).map(x => ({ id: x.id, item: x.item, where: 'pt', p: [x.x, x.y], count: 1 }));
@@ -99,7 +152,7 @@ export function toOld(p) {
   let TF = []; try { TF = typeFixMap(d) || []; } catch (e) { TF = []; }
   /* どの区画にも入らない器具（建物の外・図枠の余白・凡例など）は3Dに出さない（かつ「外に洗面台とか」・2026-11-24）。
    * 器具の四角の真ん中・少し内側の4隅・4辺の30cm外のどれかが区画の中にあれば出す（壁ぎわの器具は区画の形から欠けていることがあるため） */
-  const FP = (plan.faces || []).filter(f => f.poly && f.poly.length > 2);
+  const FP = SF.length ? SF : (plan.faces || []).filter(f => f.poly && f.poly.length > 2);
   const inAnyFace = b => { const x0 = Math.min(b[0], b[2]), x1 = Math.max(b[0], b[2]), y0 = Math.min(b[1], b[3]), y1 = Math.max(b[1], b[3]), ix = (x1 - x0) * .2, iy = (y1 - y0) * .2;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, o = 0.3;   /* 区画の形は器具の所が欠けていることがあるので、器具の4辺の 30cm 外も見る（器具の前の床） */
     const pts = [[cx, cy], [x0 + ix, y0 + iy], [x1 - ix, y0 + iy], [x1 - ix, y1 - iy], [x0 + ix, y1 - iy], [cx, y0 - o], [cx, y1 + o], [x0 - o, cy], [x1 + o, cy]];
@@ -135,7 +188,7 @@ export function sheetProject(p, sh) {
     panels: (d.panels || (d.panel ? [{ id: 'P1', x: d.panel[0], y: d.panel[1] }] : [])).filter(ptIn), panel: undefined,
     places: (d.places || []).map(x => x.where === 'pt' ? (x.p && inB(x.p[0], x.p[1]) ? x : null) : { ...x, pts: (x.pts || []).filter(q => q && inB(q[0], q[1])) }).filter(x => x && (x.where === 'pt' || x.pts.length)) };
   const rooms = p.rooms.map(r => r.src === 'plan' ? { ...r, faces: (r.faces || []).filter(i => ids.has(i)) } : r).filter(r => r.src !== 'plan' || r.faces.length);
-  return { ...p, name: [p.name, sh.title].filter(Boolean).join(' '), drawing: d2, rooms };
+  return { ...p, __sheet: true, name: [p.name, sh.title].filter(Boolean).join(' '), drawing: d2, rooms };
 }
 
 let layer = null;

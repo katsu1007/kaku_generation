@@ -57,7 +57,7 @@ a { color: var(--info); }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
 .card h2 { font-size: 15px; margin: 0 0 4px; }
 .card .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
-.grid { display: grid; gap: 14px; }
+.grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }   /* 列を画面の幅に収める（スマホの設定の画面が横にはみ出していた） */
 .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -164,8 +164,9 @@ table.list td.r, table.list th.r { text-align: right; }
 
 .rooms, .lines { display: flex; flex-direction: column; gap: 12px; }
 .roomc { background: var(--panel); border: 1px solid var(--line); border-radius: 15px; padding: 14px; }
-.roomc .head { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
-.roomc .head .in { font-weight: 700; }
+.roomc .head { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+/* スマホで部屋の名前が「区画 :」のように切れていた。名前の欄は 8 字ぶん取り、入らない時はボタンを次の行へ */
+.roomc .head .in { font-weight: 700; min-width: 8em; }
 .rfields { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: end; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
 .chip { font-size: 12.5px; padding: 5px 10px; border-radius: 9px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); }
@@ -214,7 +215,8 @@ details.more[open] > summary::before { content: "－ "; }
 .modal { background: var(--panel); border: 1px solid var(--line2); border-radius: 18px; width: min(760px, 100%); max-height: min(86vh, 900px); display: flex; flex-direction: column; box-shadow: var(--shadow); }
 .modal .mh { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .modal .mh h3 { margin: 0; font-size: 17px; flex: 1; }
-.modal .mb { padding: 16px 18px; overflow: auto; }
+.modal .mb { padding: 16px 18px; overflow: auto; min-width: 0; }
+.modal { min-width: 0; max-width: 100%; }   /* スマホで最初の案内が画面より広くなっていた */
 .modal .mf { padding: 14px 18px; border-top: 1px solid var(--line); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 .catchips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; margin: 10px 0; scrollbar-width: none; }
 .catchips button { border: 1px solid var(--line2); background: var(--panel2); color: var(--muted); border-radius: 99px; padding: 7px 13px; font-size: 13px; white-space: nowrap; }
@@ -234,7 +236,7 @@ details.more[open] > summary::before { content: "－ "; }
 .errbar button { margin-left: auto; background: #fff3; border: 0; color: #fff; border-radius: 8px; padding: 6px 12px; }
 
 /* ---------- 初めての案内 ---------- */
-.intro { display: grid; gap: 12px; }
+.intro { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 .intro .st { display: flex; gap: 14px; align-items: flex-start; padding: 14px; border-radius: 14px; background: var(--panel2); border: 1px solid var(--line); }
 .intro .st .n { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-weight: 800; display: grid; place-items: center; flex: none; }
 .intro .st b { display: block; font-size: 15.5px; }
