@@ -5,6 +5,7 @@ import { workChecks } from './workcheck.js';
 import { makerLinks } from './makers.js';
 import { analyzeAll as analyzeFrame, VER as R2VER } from './reader2/index.js';
 import { groupRoles, ROLE } from './reader2/lines.js';
+import { furnitureLines } from './lineroles.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
 import { mergeSplitFaces, splitMerged, absorbBoxes } from './facemerge.js';
@@ -1620,7 +1621,11 @@ function stepRooms(ctx) {
             try { const A1 = analyzeFrame({ segs: out.longSegs && out.longSegs.length ? out.longSegs : out.plan.segs, faces: out.plan.faces, texts: out.texts || [], fixtures: out.fixtures || [], doors: out.doorList || [] });
               const g = groupRoles({ segs: raw.segs, groups: raw.groups, texts: out.texts || [], regions: A1.regions });
               out.roles = {}; Object.keys(g.off).forEach(i => { const r = g.off[i], o = g.stats.find(x => x.gi === +i); out.roles[r] = (out.roles[r] || 0) + (o ? o.n : 0); });
-              return Object.keys(g.off).map(Number);
+              const offG = new Set(Object.keys(g.off).map(Number));
+              /* 線の役割を自動で決める（家具の線を外す。js/lineroles.js）。使っているまとまりの線だけ見る。水まわりの器具のそばは外さない */
+              let furn = []; try { furn = furnitureLines(raw.segs, i => { const gi = raw.segs[i][4]; return gi >= 0 && raw.groups[gi] && raw.groups[gi].on && !offG.has(gi); }, { keepBoxes: (out.fixtures || []).filter(x => x && x.b && x.t !== 'other').map(x => [Math.min(x.b[0], x.b[2]), Math.min(x.b[1], x.b[3]), Math.max(x.b[0], x.b[2]), Math.max(x.b[1], x.b[3])]) }); } catch (e3) { console.warn('家具の線を見分けられませんでした', e3); }
+              out.furnLines = furn.length;
+              return { groups: [...offG], segs: furn };
             } catch (e2) { console.warn('線の役割を見分けられませんでした', e2); return []; } } });
           /* 家具で割れた区画をまとめる：試しの区画（家具の線を外して壁の線だけで探した区画）1つの中に、今の区画が2つ以上入る所だけ置き換える（js/facemerge.js）。
            * 元の区画は plan.split に覚えるので「分ける」で戻せる */

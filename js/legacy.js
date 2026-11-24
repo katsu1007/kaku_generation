@@ -175,11 +175,15 @@ export async function readWithFixtures(file, opt = {}) {
         const E = W.document.getElementById('engineFrame').contentWindow;
         const raw = JSON.parse(E.eval(`(()=>{const M=rgM(),ix=new Map(RG.groups.map((g,i)=>[g.key,i])),q=v=>Math.round(v*1000)/1000;
           return JSON.stringify({groups:RG.groups.map(g=>({layer:g.layer,on:!!g.on})),segs:RG.segs.map(s=>{const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M),i=ix.get(gkey(s));return [q(a[0]),q(a[1]),q(b[0]),q(b[1]),i==null?-1:i]})})})()`));
-        const off = (opt.regroup(out, raw) || []).filter(i => raw.groups[i] && raw.groups[i].on);
+        const rg = opt.regroup(out, raw) || [];
+        /* 返す物：外すまとまりの番号の配列、または { groups：外すまとまり, segs：外す線の番号（家具と見た線・js/lineroles.js） } */
+        const off = (Array.isArray(rg) ? rg : (rg.groups || [])).filter(i => raw.groups[i] && raw.groups[i].on);
+        E.__kxFurn = Array.isArray(rg) ? [] : (rg.segs || []);
         /* 壁らしくない1本線（机・椅子・テーブル・器具など）も外す（rgSingleLines。2本線の壁の図面だけ）。外した本数は out.single に */
         E.__kxOff = off;
         const n1 = E.eval(`(()=>{const keep=RG.groups.map(g=>g.on);let n=0;try{window.__kxOff.forEach(i=>{RG.groups[i].on=false});
           const so=(typeof rgSingleLines==='function')?rgSingleLines():new Set();n=so.size;
+          (window.__kxFurn||[]).forEach(i=>so.add(i));n=so.size;
           if(!window.__kxOff.length&&!n){window.__kxP2=null;return 0}
           if(RG.userOff)RG.userOff.forEach(i=>so.add(i));RG.segOff=so;rgCompute();window.__kxP2=KakuEngine.plan()}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]});if(n||window.__kxOff.length)rgCompute()}return n})()`);
         out.single = +n1 || 0;
