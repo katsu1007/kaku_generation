@@ -128,10 +128,6 @@ export function toOld(p) {
     faces: plan.faces.filter(f => ids.has(f.i)).map((f, k) => ({ i: f.i, no: (f.no || k + 1), name: f.name || '', area: f.area, peri: f.peri, ch: f.ch || 0, poly: f.poly, bb: bbOf(f.poly) })) };
   /* 部屋の名前の札：前は区画の外の四角（bb）が渡っていなかったので、全部の札が座標の 0,0 に重なっていた（「受 事 区画90 イレ 袋」のように重なって読めない）。
    * 区画の中の点に置き、いくつかの区画をまとめた部屋は、いちばん広い区画に1つだけ出す */
-  /* トイレのブース：3.5㎡ 以下で、中に便器がある区画（3Dで仕切りを 2.0m にする） */
-  { let TF0 = []; try { TF0 = typeFixMap(d) || []; } catch (e) { TF0 = []; }
-    const toilets = (d.fixtures || []).map((x, k) => x.b && shownFixType(TF0, x, k) === 'toilet' ? [(x.b[0] + x.b[2]) / 2, (x.b[1] + x.b[3]) / 2] : null).filter(Boolean);
-    P.booths = P.faces.filter(f => f.area <= 3.5 && toilets.some(c => pip(c[0], c[1], f.poly))).map(f => f.i); }
   const big = {}; p.rooms.forEach(r => { if (r.src !== 'plan') return; let b = null; (r.faces || []).forEach(i => { const f = P.faces.find(o => o.i === i); if (f && (!b || f.area > b.area)) b = f; }); (r.faces || []).forEach(i => { big[i] = b ? b.i : i; }); });
   P.labels = P.faces.map(f => big[f.i] != null && big[f.i] !== f.i ? { skip: true } : (() => { const q = innerPt(f.poly); return { x: q[0], y: q[1] }; })());
   const rooms = p.rooms.filter(r => r.src === 'plan' && (r.faces || []).some(i => ids.has(i))).map((r, k) => ({
