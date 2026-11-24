@@ -1,5 +1,5 @@
 /* ⑤ 書類：見積書・請求書・内訳書（印刷してPDF保存）、Excel・CSV、見積もりの履歴と比較 */
-import { state, touch, opts, go, masterItems } from './app.js';
+import { state, touch, opts, go, masterItems, flush } from './app.js';
 import { totals, check, compare, roomGeom, KINDS, specOf } from './calc.js';
 import { projectXlsx, projectCsv } from './export.js';
 import { boardHtml } from './board.js';
@@ -27,6 +27,7 @@ export function docsStep({ p, body, refresh }) {
         <button class="docbtn" data-doc="survey">${icon('checkc')}<div><b>現場調査のチェックリスト</b><span>印刷して現場に持って行く紙。部屋ごとの確かめる欄つき</span></div></button>
         <button class="docbtn" data-doc="xlsx">${icon('excel')}<div><b>Excel で書き出す</b><span>金額は Excel の式なので、Excel でも検算できます</span></div></button>
         <button class="docbtn" data-doc="csv">${icon('down')}<div><b>CSV で書き出す</b><span>ほかのソフトに取り込む時に</span></div></button>
+        <button class="docbtn" data-doc="kaku">${icon('up')}<div><b>この案件をファイルで渡す</b><span>KAKU のファイル（.kaku.json）を共有メニューで送ります。受け取った人はホームの「ファイルから案件を開く」で開けます</span></div></button>
         <a class="docbtn" href="#/settings">${icon('user')}<div><b>会社情報・振込先</b><span>${state.company.name ? esc(state.company.name) : 'まだ入っていません'}</span></div></a>
       </div>
       ${floorCard(p)}
@@ -58,6 +59,7 @@ export function docsStep({ p, body, refresh }) {
       if (k === 'survey') return printDoc(surveyHtml(p));
       if (k === 'xlsx') { await share(projectXlsx(p, opts()), fileBase(p) + '.xlsx'); toast('Excel を書き出しました'); return; }
       if (k === 'csv') { await share(projectCsv(p, opts()), fileBase(p) + '.csv'); toast('CSV を書き出しました'); return; }
+      if (k === 'kaku') { try { const sy = await import('./sync.js'); await flush(); await sy.shareProject(p); toast('案件のファイルを渡しました'); } catch (er) { if (er && er.name === 'AbortError') return; toast('渡せませんでした：' + (er.message || er), { bad: true }); } return; }
     }
     const c = e.target.closest('[data-cmp]');
     if (c) return showCompare(p, +c.dataset.cmp);

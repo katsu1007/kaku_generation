@@ -1,5 +1,5 @@
 /* ホームと案件一覧 */
-import { state, registerView, setTop, go, newProject, opts, render, touch, removeProject, restoreProject } from './app.js';
+import { state, registerView, setTop, go, newProject, opts, render, touch, removeProject, restoreProject, reload } from './app.js';
 import { duplicate } from './project.js';
 import { totals, check } from './calc.js';
 import { icon, esc, yen, pct, when, toast, modal, $ } from './ui.js';
@@ -99,6 +99,7 @@ registerView('home', async el => {
       <button class="btn primary big" id="newBtn">${icon('plus')}新しい見積もり</button>
     </div>
     ${ps.length ? bkLine() : ''}
+    <div class="row" style="justify-content:flex-end;margin:-4px 0 8px"><label class="btn sm ghost" style="cursor:pointer">${icon('down')}ファイルから案件を開く<input type="file" id="openKaku" hidden></label></div>
     <div class="eyebrow">何をしますか？</div>
     <div class="actions">
       <button class="action" id="aNew"><div class="ic">${icon('plus')}</div><b>見積もりを作る</b><span>現場の情報と部屋の寸法を入れると、数量が自動で出ます</span></button>
@@ -138,6 +139,13 @@ registerView('home', async el => {
   });
   if (last) $('#aLast').onclick = () => go('#/p/' + encodeURIComponent(last.id) + '/1');
   const sb = $('#sampleBtn'); if (sb) sb.onclick = async () => { const { addSample } = await import('./pages.js'); addSample(); };
+  const ok = $('#openKaku'); if (ok) ok.onchange = async e => {
+    const files = await Promise.all([...e.target.files].map(async f => ({ name: f.name, text: await f.text() }))); e.target.value = '';
+    try { const sy = await import('./sync.js'); const got = await sy.openProjectFiles(files);
+      if (!got.length) { toast('KAKU の案件のファイル（.kaku.json）ではありませんでした', { bad: true }); return; }
+      await reload(); toast(`${got.length} 件の案件を開きました`); if (got.length === 1) go('#/p/' + encodeURIComponent(got[0].id) + '/1'); else render();
+    } catch (er) { toast('開けませんでした：' + (er.message || er), { bad: true }); }
+  };
   bindOpen(el);
   if (!state.settings.noticeSeen) showNotice(() => { if (!state.settings.introSeen) showIntro(); });
   else if (!state.settings.introSeen) showIntro();

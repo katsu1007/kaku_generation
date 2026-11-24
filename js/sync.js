@@ -147,3 +147,24 @@ export async function shareFiles(list, opt) {
   for (const f of files) { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); await new Promise(r => setTimeout(r, 300)); }
   return files.length;
 }
+
+/* 案件1つを、ほかの人に渡す（grok の意見 1・かつ「1は入れようか」・2026-11-24）。KAKU が読む「.kaku.json」を共有メニューで渡す。
+ * 受け取った人はホームの「ファイルから案件を開く」で開く。保存先フォルダの同期とは別（同期の記録は変えない） */
+export async function shareProject(p) {
+  const { share } = await import('./ui.js');
+  await share(new Blob([projectJson(p)], { type: 'application/json' }), projectFile(p));
+}
+/* 受け取った .kaku.json を開く。同じ案件がもうある時は、上書きするか別の案件として入れるかを聞く。入れた案件を返す */
+export async function openProjectFiles(files) {
+  const R = parse(files), out = [];
+  for (const r of R.projects) {
+    const have = await store.getProject(r.id);
+    let p = r;
+    if (have) {
+      const over = await ask(`「${r.name || '案件'}」はもうあります`, `この端末の案件：${when(have.updatedAt)}\n受け取った案件：${when(r.updatedAt)}\n上書きすると、この端末で直した所は消えます。`, { ok: '上書きする', cancel: '別の案件として入れる' });
+      if (!over) p = { ...r, id: store.uid('p'), name: (r.name || '案件') + '（受け取り）' };
+    }
+    await store.putProject({ ...p, updatedAt: Date.now() }); out.push(p);
+  }
+  return out;
+}
