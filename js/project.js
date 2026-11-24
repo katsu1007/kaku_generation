@@ -24,7 +24,7 @@ import { judgeRooms, ROOM_JUDGE } from './roomjudge.js';
 import { computeZones, splitFacesByLine, detectTableAreas } from './zones.js';
 import { supplementFaces, polygonizeFaces } from './polygonize.js';
 import { extractDxfDims, checkDimensions, dimCheckFor } from './dxf-dims.js';
-import { estimateSymScale, symScaleFor } from './symscale.js';
+import { estimateSymScale, symScaleFor, scaleCheck, scaleTargetFor, userCoef, scaleGeomBy } from './symscale.js';
 import { correctFixtureTypes } from './typefix.js';
 import { USES, DEF_LM, needCount, pitchFor, luxOf, wirePlan, cableQty, pip, polyD } from './lighting.js';
 /* iPhone・iPad では、選べるファイルの種類を絞ると .jww・.jwc・.dxf が灰色になって選べない（iPhone がこの拡張子を知らないため）。
@@ -633,12 +633,40 @@ const fmtFactor = v => String(Number(v.toPrecision(3)));
 function symScaleLine(d) {
   const ss = symScaleFor(d);
   if (!ss || !(ss.factor > 0) || Math.abs(ss.factor - 1) <= 0.01) return '';
-  const basis = ss.source === 'dims' ? `寸法${ss.n}件で照合` : `便器${ss.n}件の大きさから推定`;
-  return `<div class="small" style="margin-top:6px">シンボルの大きさを自動補正 ×${fmtFactor(1 / ss.factor)}（${basis}）</div>`;
+  const basis = ss.source === 'dims' ? `寸法${ss.n}件で照合` : ss.source === 'user' ? '手入力' : `便器${ss.n}件の大きさから推定`;
+  return `<div class="small" style="margin-top:6px">シンボルの大きさを${ss.source === 'user' ? '' : '自動'}補正 ×${fmtFactor(1 / ss.factor)}（${basis}）</div>`;
 }
+/* 縮尺・換算係数の検証（js/symscale.js の scaleCheck）の表示と、要確認リスト。
+ * 寸法の答え合わせの行（dimSummary の check）と二重に出さないよう、寸法で状態が
+ * 出ている時（寸法で確認済み・寸法との比率のずれ）はここでは状態の行を出さない。
+ * 未検証の値は赤で出す。値そのものはタップできない（誤タップ防止・2026-11-24）：
+ * 直す入口は要確認リストだけで、タップすると図面の場所へ飛んでから編集が開く */
+function scaleBlock(d) {
+  if (!d || !d.plan) return '';
+  const sc = scaleCheck(d);
+  let line = '';
+  if (sc.state === 'unverified') {
+    line = `<div class="small" style="margin-top:6px">換算係数 <b style="color:var(--bad)">×${fmtFactor(sc.coef)}（未検証）</b></div><div class="small muted" style="margin-top:2px">${esc(sc.why)}。係数 1（実寸どおり）とみなしています。違う時は、下の要確認リストから直してください</div>`;
+  } else if (sc.state === 'manual') {
+    line = `<div class="small" style="margin-top:6px">換算係数 <b>×${fmtFactor(sc.coef)}</b> <span class="pill">手入力</span></div><div class="small muted" style="margin-top:2px">シンボルの大きさの判定と、区画から作る部屋の広さ・周りに使います${sc.autoCoef !== null ? `。自動の値は ×${fmtFactor(sc.autoCoef)} でした` : ''}</div>`;
+  } else if (sc.state === 'verified' && sc.source === 'symbols') {
+    line = `<div class="small muted" style="margin-top:6px">便器の大きさから縮尺を確認済み（${sc.n}件で照合）</div>`;
+  }
+  let list = '';
+  if (sc.state === 'unverified' || sc.state === 'mismatch' || sc.state === 'manual') {
+    const val = sc.state === 'manual' ? `<b>×${fmtFactor(sc.coef)}</b><span class="pill">手入力</span>`
+      : `<b style="color:var(--bad)">×${fmtFactor(sc.coef)}${sc.state === 'mismatch' ? '（寸法との比率）' : '（未検証）'}</b>`;
+    const why = sc.state === 'mismatch' ? '寸法と図形の比率が 1 から 1% を超えてずれています' : sc.state === 'manual' ? '手入力で決めた係数です。確かめる・自動に戻す時はタップ' : esc(sc.why);
+    list = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><div class="row"><b class="small">要確認</b><span class="small muted">タップすると、図面の場所へ飛んで直せます</span></div>
+    <button class="btn sm" data-scalecheck="1" style="justify-content:flex-start;gap:8px;min-height:40px;width:100%;text-align:left;margin-top:6px"><span>縮尺・換算係数</span>${val}<span class="muted" style="flex:1">${why}</span></button></div>`;
+  }
+  return line + list;
+}
+
 function dimSummary(d) {
   const dims = (d && d.dims) || [];
-  if (!dims.length) return '';
+  const scale = scaleBlock(d);
+  if (!dims.length) return scale;
   const chips = dims.slice(0, 60).map(x => `<span class="pill">${esc(x.text)}</span>`).join('');
   /* 寸法の答え合わせ（読み込み時に集計した d.dimCheck。表示だけで、縮尺を自動で直すことはしない。
    * dimCheck が無い保存でも、寸法に定義点が残っていれば dimCheckFor がその場で作り直す。
@@ -648,7 +676,7 @@ function dimSummary(d) {
   if (chk && chk.n >= 1 && typeof chk.median === 'number') {
     const outliers = chk.outliers || [], edited = chk.edited || [];
     if (Math.abs(chk.median - 1) > 0.01) {
-      check += `<div class="small" style="margin-top:6px;color:var(--warn)">寸法と図形の比率が約${fmtFactor(chk.median)}倍です。用紙mmの図面かもしれません（自動では直しません）</div>`;
+      check += `<div class="small" style="margin-top:6px;color:var(--bad)">寸法と図形の比率が約${fmtFactor(chk.median)}倍です。用紙mmの図面かもしれません（自動では直しません）</div>`;
     } else if (!outliers.length) {
       check += `<div class="small muted" style="margin-top:6px">寸法で縮尺を確認済み（${chk.n}件で照合）</div>`;
     }
@@ -661,7 +689,7 @@ function dimSummary(d) {
   return `<div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><b class="small">寸法</b>
     <span class="pill info">${dims.length}件</span>
     <span class="small muted">図面に書かれていた寸法です（mm）。見積には入りません</span></div>${check}${symScaleLine(d)}
-    <div class="row" style="gap:6px;margin-top:8px">${chips}${dims.length > 60 ? `<span class="small muted">ほか ${dims.length - 60} 件</span>` : ''}</div>`;
+    <div class="row" style="gap:6px;margin-top:8px">${chips}${dims.length > 60 ? `<span class="small muted">ほか ${dims.length - 60} 件</span>` : ''}</div>${scale}`;
 }
 
 /* ゾーンの名前を付ける・直す */
@@ -677,6 +705,39 @@ function openZoneEditor(zone, onDone) {
     m.close(); onDone && onDone();
   };
   setTimeout(() => { try { input.focus(); } catch (e) { /* そのまま */ } }, 60);
+}
+
+/* 換算係数を人が決める（要確認リストから開く）。自動の値と根拠を見せてから決める。
+ * 決めた値は drawing.scaleUser に覚える（出どころは手入力）。効くのは symScaleFor
+ * （辞書の寸法判定）と geoOf（区画から作る部屋の広さ・周り）。「自動の値に戻す」で
+ * scaleUser を消すと、自動の推定に戻る。図面の線そのものは変えない */
+function openScaleEditor(p, onDone) {
+  const d = p.drawing, sc = scaleCheck(d);
+  const autoTxt = sc.autoCoef === null ? '自動では決められていません（証拠が足りません）'
+    : `×${fmtFactor(sc.autoCoef)}（${sc.autoSource === 'dims' ? `寸法${sc.n}件で照合` : sc.autoSource === 'symbols' ? `便器${sc.n}件の大きさから推定` : '自動'}）`;
+  const m = modal({ title: '換算係数を決める', body: `
+    <p class="small muted" style="margin-top:0">図面で測った長さに、この係数を掛けると実寸になります（面積は係数の2乗で直ります）。決めた係数は、シンボルの大きさの判定と、これから区画から作る部屋の広さ・周りに使います。すでに作った部屋と、図面の線そのものは変えません。</p>
+    <div class="small" style="margin-bottom:8px">今の値：<b>×${fmtFactor(sc.coef)}</b>${sc.state === 'manual' ? ' <span class="pill">手入力</span>' : sc.state === 'unverified' ? ' <span style="color:var(--bad)">（未検証）</span>' : ''}<br>自動の値：${autoTxt}</div>
+    <label class="f">換算係数<input class="in num" id="scaleCoef" type="number" inputmode="decimal" step="any" min="0" value="${sc.coef}"></label>
+    <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn sm" data-k="1">実寸のまま ×1</button>
+      <button class="btn sm" data-k="10">cmで書かれた図面 ×10</button>
+      <button class="btn sm" data-k="50">用紙mm・1/50 ×50</button>
+      <button class="btn sm" data-k="100">用紙mm・1/100 ×100</button>
+    </div>`,
+    foot: `${userCoef(d) !== null ? '<button class="btn ghost" data-auto>自動の値に戻す</button>' : ''}<button class="btn" data-close>やめる</button><button class="btn primary" data-save>決める</button>` });
+  const input = m.el.querySelector('#scaleCoef');
+  m.el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { input.value = b.dataset.k; input.focus(); });
+  const autoBtn = m.el.querySelector('[data-auto]');
+  if (autoBtn) autoBtn.onclick = () => { delete d.scaleUser; delete d.symScale; touch(p); m.close(); onDone && onDone(); toast('換算係数を自動の値に戻しました'); };
+  m.el.querySelector('[data-save]').onclick = () => {
+    const v = parseFloat(input.value);
+    if (!(Number.isFinite(v) && v > 0 && v <= 100000)) { toast('係数は 0 より大きい数字で入れてください', { bad: true }); return; }
+    d.scaleUser = v; delete d.symScale;
+    touch(p); m.close(); onDone && onDone();
+    toast(`換算係数を ×${fmtFactor(v)} にしました（手入力）`);
+  };
+  setTimeout(() => { try { input.focus(); input.select(); } catch (e) { /* そのまま */ } }, 60);
 }
 
 function fixLinesDialog(p, after) {
@@ -965,7 +1026,11 @@ function stepRooms(ctx) {
   const geoOf = (ids) => { const plan = p.drawing.plan, S = new Set(ids), F = ids.map(i => plan.faces.find(f => f.i === i)).filter(Boolean), g = groupGeom(F);
     let h = { area: 0, runs: [] }; try { h = roomHoles(F, plan.faces.filter(f => !S.has(f.i)), plan.segs || [], fxList()); } catch (e) { console.warn('穴を数えられませんでした', e); }
     const o = outOf(F);
-    return { area: Math.round((g.area + h.area - o.area) * 100) / 100, perim: Math.round((g.perim - o.perim) * 100) / 100, holes: h.area > 0 ? { area: h.area, cs: h.cs, runs: h.runs } : null, out: o.area > 0 || o.perim > 0 ? o : null }; };
+    const out = { area: Math.round((g.area + h.area - o.area) * 100) / 100, perim: Math.round((g.perim - o.perim) * 100) / 100, holes: h.area > 0 ? { area: h.area, cs: h.cs, runs: h.runs } : null, out: o.area > 0 || o.perim > 0 ? o : null };
+    /* 手入力の換算係数がある時だけ、広さ・周り（工事対象外の分も）を実寸に直す（自動の値では直さない。
+     * 座標（holes.runs）は絵の位置なので変えない。むぎの sw.56 と工事対象外の範囲を合わせた） */
+    const k = userCoef(p.drawing);
+    if (!k) return out; const sg = scaleGeomBy(out, k); if (sg.out) sg.out = { ...sg.out, area: Math.round(sg.out.area * k * k * 100) / 100, perim: Math.round(sg.out.perim * k * 100) / 100 }; return sg; };
   /* 工事対象外の範囲（drawing.outZones）：部屋の区画と重なる広さ（床・天井から引く）と、部屋のまわりの線のうち範囲の中にある長さ（壁・巾木から引く）。
    * 10cm のマスと 5cm ごとの点で数える。区画どうしが接する所（両側とも部屋の区画）は、まわりに数えない（かつ・2026-11-24） */
   const outOf = (F) => { const Z = (p.drawing && p.drawing.outZones) || [], r = { area: 0, perim: 0 }; if (!Z.length || !F.length) return r;
@@ -1091,7 +1156,7 @@ function stepRooms(ctx) {
     if (dwgFs) { const on = body.querySelector('#dwgMode button.on'), st = body.querySelector('#dwgMode'); if (on && st && (on.offsetLeft < st.scrollLeft || on.offsetLeft + on.offsetWidth > st.scrollLeft + st.clientWidth)) { const ex = st.querySelector('.fs-exit'); st.scrollLeft = on.offsetLeft - (ex ? ex.offsetWidth + 8 : 0); } }
     /* 部屋を作るで区画を選んでいる間は、選んだ区画の中の「囲まれた所」（机・棚など）を先に見せる（部屋にした後で分かるのではなく、決める前に） */
     let selHoles = '';
-    if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(','); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
+    if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(',') + '|' + (userCoef(p.drawing) || ''); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
       if (selGeo && selGeo.holes && holesOn) { const cs = selGeo.holes.cs; selHoles = `<path d="${selGeo.holes.runs.map(q => `M${q[0]} ${-(q[2] + cs)}H${q[1]}V${-q[2]}H${q[0]}Z`).join('')}" fill="var(--accent)" fill-opacity=".35" stroke="none" pointer-events="none"/>`; } }
     else { selGeoKey = ''; selGeo = null; }
     if (view) { view.paint(); view.overlay(selHoles + sheetOverlay(p.drawing, view.lw, allTexts()) + demoOverlay() + placeOverlay() + loOverlay() + (mode === 'meas' || addAt ? measOverlay() : '')); }
@@ -1580,8 +1645,11 @@ function stepRooms(ctx) {
         let dimCheck = null;
         if (dims.length) { try { dimCheck = checkDimensions(dims); } catch (e2) { console.warn('寸法の答え合わせに失敗', e2); } }
         p.rooms.forEach(r => { if (r.src === 'plan') { r.src = 'plan-old'; delete r.faces; } });
+        /* 手入力の換算係数は、同じ名前の図面を読み直した時だけ引き継ぐ（別の図面には持ち込まない） */
+        const prevScaleUser = (p.drawing && p.drawing.fileName === (cad ? [cad] : files).map(f => f.name).join('、')) ? userCoef(p.drawing) : null;
         p.drawing = { fileName: (cad ? [cad] : files).map(f => f.name).join('、'), at: Date.now(), plan: res.plan, fixtures: cad ? res.fixtures : null, open: cad ? res.open : null, doors: cad ? (res.doorList || []) : [], fixG: cad ? res.fixG : '', fixGd: cad ? res.fixGd : '', dims, dimCheck,
           ...(keepLO && ((keepLO.keys || []).length || (keepLO.segs || []).length) ? { lineOff: keepLO } : {}), ...(keepOut && keepOut.length ? { outZones: keepOut } : {}) };
+        if (prevScaleUser !== null) p.drawing.scaleUser = prevScaleUser;
         /* 器具の救済：壁も器具も同じレイヤーに描く図面では、読み取りが壁のレイヤーごと外して器具が消える。
          * 読み取りには触らず、ここでだけ救済分（src:'rescue'）を足す。読み取りが拾った器具と重なる物は出さない（そちらが優先） */
         let allFixtures = res.fixtures || [];
@@ -1724,6 +1792,12 @@ function stepRooms(ctx) {
       symSel = symSel === k ? -1 : k;
       if (s && view) { view.symShow(); view.paint(); if (symSel >= 0) { const pd = 0.6; view.zoomTo([s.b[0] - pd, s.b[1] - pd, s.b[2] + pd, s.b[3] + pd]); } }
       const symBox = body.querySelector('#dwgSym'); if (symBox) symBox.innerHTML = symSummary(p.drawing, symSel); return; }
+    const scb = e.target.closest('[data-scalecheck]');
+    if (scb) { const tg = scaleTargetFor(p.drawing);
+      if (view && tg) { window.scrollTo({ top: 0, behavior: 'smooth' }); view.zoomTo(tg); }
+      const done = () => { const dimBox = body.querySelector('#dwgDim'); if (dimBox) dimBox.innerHTML = dimSummary(p.drawing); const symBox = body.querySelector('#dwgSym'); if (symBox) symBox.innerHTML = symSummary(p.drawing, symSel); paintSel(); };
+      setTimeout(() => openScaleEditor(p, done), view && tg ? 350 : 0);
+      return; }
     const sreg = e.target.closest('[data-symreg]');
     if (sreg) { const s = symList(p.drawing).find(q => q.k === +sreg.dataset.symreg);
       if (s) openSymEditor({ name: s.mine ? s.category : '', short: Math.round(s.short), long: Math.round(s.long), feat: s.learnFeat || null }, () => { symSel = s.k; paintSel(); }); return; }
