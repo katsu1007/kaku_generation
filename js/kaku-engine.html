@@ -1858,13 +1858,16 @@ function rgCompute0(X){
   const cellsOf=l=>{const o=4*l,out=[];if(lbb[o+2]<0)return out;for(let y=lbb[o+1];y<=lbb[o+3];y++)for(let x=lbb[o];x<=lbb[o+2];x++){const i=y*W+x;if(lab[i]===l)out.push(i)}return out};
   const named=new Uint8Array(nl+1);
   (RG.texts||[]).forEach(t=>{const n=norm(t.t).replace(/\s+/g,"");if(n.length>14||!ROOM_RE.test(n))return;const gx=Math.floor((t.x*M-ox)/c),gy=Math.floor((t.y*M-oy)/c);if(gx<0||gy<0||gx>=W||gy>=H)return;const m=lab[gy*W+gx];if(m>0)named[m]=1});
+  const walled=new Set();
   for(let l=1;l<=nl;l++){if(isOut(l)||root(l)!==l)continue;const a=cnt[l]*c*c;if(a>8||touches(l)||!pocketOK(l)||hasDoor[l]||named[l])continue;
     // まわりの線の向こう側にある区画を数える
-    const votes=new Map();const cells=cellsOf(l);
+    const votes=new Map();const cells=cellsOf(l);const kk=[];
     cells.forEach(i=>{const x=i%W,y=(i/W)|0;[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{let xx=x,yy=y;for(let k=0;k<14;k++){xx+=dx;yy+=dy;if(xx<0||yy<0||xx>=W||yy>=H)break;const m=lab[yy*W+xx];if(m===-2)continue;
         /* 浴槽のふちのような細い輪（幅25cm未満・2㎡以下）は通り抜けて、その向こうの区画を見る */
         if(m>0&&m!==l&&root(m)===m&&!isOut(m)&&thick(m)*c<0.25&&cnt[m]*c*c<=2&&k<13)continue;
-        if(k>=6&&!(m>0))break;if(m!==l&&m>0&&!isOut(m)){const rm=root(m);if(rm!==l&&(thick(rm)*c>=0.25||rm!==m))votes.set(rm,(votes.get(rm)||0)+1)}break}})});
+        if(k>=6&&!(m>0))break;if(m!==l&&m>0&&!isOut(m)){const rm=root(m);if(rm!==l&&(thick(rm)*c>=0.25||rm!==m)){votes.set(rm,(votes.get(rm)||0)+1);kk.push(k)}}break}})});
+    /* 壁で囲まれた小部屋（パイプスペース・物入れ）は入れない：まわりの区画との境目が、ほとんどの所で壁の厚み（8cm以上）ある。機器は1本線で囲まれている（kaku_generation・2026-11-24） */
+    if(kk.length){kk.sort((a,b)=>a-b);if(kk[Math.floor(kk.length*0.25)]*c>=0.08&&cnt[l]*c*c>=1){walled.add(l);continue}}
     let tot=0,bm=0,bk=0;votes.forEach((v,k)=>{tot+=v;if(v>bm){bm=v;bk=k}});if(bk&&bm>=tot*0.5)parent[l]=bk}
   /* 機器の中の細い輪（浴槽のふちなど）：中身が部屋に入った後、輪のまわりが全部同じ部屋で、外（建物の外）に面していなければ、その部屋に入れる */
   for(let l=1;l<=nl;l++){if(isOut(l)||root(l)!==l)continue;const a=cnt[l]*c*c;if(a>2||thick(l)*c>=0.25||named[l]||hasDoor[l])continue;
@@ -1877,6 +1880,9 @@ function rgCompute0(X){
     X2.forEach(i=>{const x=i%W,y=(i/W)|0;if(x<bx0)bx0=x;if(x>bx1)bx1=x;if(y<by0)by0=y;if(y>by1)by1=y});
     bx0=Math.max(0,bx0-1);by0=Math.max(0,by0-1);bx1=Math.min(W-1,bx1+1);by1=Math.min(H-1,by1+1);const bw=bx1-bx0+1,bh=by1-by0+1;
     const ext=new Uint8Array(bw*bh);const qq=[];const inR=(x,y)=>{const i=y*W+x;return S2.has(lab[i])||X2.has(i)};
+    /* 壁で囲まれた小部屋（walled）は穴として床に入れない：そのマスも外と同じに扱う */
+    if(walled.size)walled.forEach(l=>{if(S2.has(l))return;const o=4*l;if(lbb[o+2]<0||lbb[o+2]<bx0||lbb[o]>bx1||lbb[o+3]<by0||lbb[o+1]>by1)return;
+      for(let y=Math.max(by0,lbb[o+1]);y<=Math.min(by1,lbb[o+3]);y++)for(let x=Math.max(bx0,lbb[o]);x<=Math.min(bx1,lbb[o+2]);x++){if(lab[y*W+x]!==l)continue;const k=(y-by0)*bw+(x-bx0);if(!ext[k]){ext[k]=1;qq.push(k)}}});
     for(let x=0;x<bw;x++)for(const y of [0,bh-1]){const k=y*bw+x;if(!ext[k]&&!inR(bx0+x,by0+y)){ext[k]=1;qq.push(k)}}
     for(let y=0;y<bh;y++)for(const x of [0,bw-1]){const k=y*bw+x;if(!ext[k]&&!inR(bx0+x,by0+y)){ext[k]=1;qq.push(k)}}
     // 外側：区画のマスを通らずに、枠から行ける所（線は通らない＝区画の外の線で止まる…ではなく、線の上も外扱い）
@@ -1895,7 +1901,7 @@ function rgCompute0(X){
     const okR=new Set(),drop=new Set();
     agg.forEach((g2,r)=>{const big=g2.parts.reduce((m,l)=>cnt[l]>cnt[m]?l:m,g2.parts[0]);if((thick(big)*c<0.25&&g2.parts.length===1)||g2.cells*c*c<0.4)drop.add(r);else okR.add(r)});
     /* 3㎡未満で、名前もドアも無い小さい区画（机の仕切りなど）も、まわりが1つの部屋だけなら入れる。便所のブースなどドアのある所は入れない */
-    agg.forEach((g2,r)=>{if(!okR.has(r)||g2.cells*c*c>=3)return;if(g2.parts.some(l=>named[l]||hasDoor[l]))return;okR.delete(r);drop.add(r)});
+    agg.forEach((g2,r)=>{if(!okR.has(r)||g2.cells*c*c>=3)return;if(g2.parts.some(l=>named[l]||hasDoor[l]||walled.has(l)))return;okR.delete(r);drop.add(r)});   /* 壁で囲まれた小部屋も入れない */
     const alias=new Map(),res=x=>{while(alias.has(x))x=alias.get(x);return x};
     for(let it=0;it<6&&drop.size;it++){let ch=false;
       drop.forEach(r=>{const g2=agg.get(r);const votes=new Map();let nOut=0,nIn=0;
