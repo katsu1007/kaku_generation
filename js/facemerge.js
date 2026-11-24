@@ -169,26 +169,33 @@ export function absorbBoxes({ faces, open = {}, fixtures = [], doors = [], segs 
   /* ほかの区画を2つ以上中に含む区画（図枠の内側・建物の外まわり）は入れる先にしない */
   const pts = F.map(f => [f, inPt(f.poly)]);
   const wraps = g => { let k = 0; for (const [f, q] of pts) { if (f === g || f.area >= g.area || f.area < 1 || boxSet.has(f)) continue; const b = bb.get(g); if (q[0] < b[0] || q[0] > b[2] || q[1] < b[1] || q[1] > b[3]) continue; if (pip(q[0], q[1], g.poly) && ++k >= 2) return true; } return false; };
-  const into = new Map();
+  const into = new Map(), hostOf = new Map(), later = [];
   for (const f of F) {
     if (!boxSet.has(f)) continue;
     if (toilets.some(c => pip(c[0], c[1], f.poly))) { no(f, 'toilet'); continue; }
     if (crossX(f)) { no(f, 'x'); continue; }
     if ((doors || []).some(o => o && o.c && (+o.r || 0) >= 0.5 && (pip(o.c[0], o.c[1], f.poly) || edgeD(o.c[0], o.c[1], f.poly) <= 0.3))) { no(f, 'door'); continue; }
-    const hits = new Map(); let n = 0, h = 0;
+    const hits = new Map(), sides = new Map(), nbBox = new Set(); let n = 0, h = 0, ei = 0;
     for (let i = 0, j = f.poly.length - 1; i < f.poly.length; j = i++) { const a = f.poly[j], b = f.poly[i], L = Math.hypot(b[0] - a[0], b[1] - a[1]); if (L < 0.05) continue;
-      const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, k = Math.max(1, Math.round(L / 0.25));
+      const nx = -(b[1] - a[1]) / L, ny = (b[0] - a[0]) / L, k = Math.max(1, Math.round(L / 0.25)); ei++;
       for (let s = 0; s < k; s++) { const t = (s + 0.5) / k, x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
         const sg = pip(x + nx * 0.05, y + ny * 0.05, f.poly) ? -1 : 1; let g = null;
         for (const o of [0.15, 0.3, 0.45]) { g = faceAt(x + sg * nx * o, y + sg * ny * o, f); if (g) break; }
-        n++; if (g && !boxSet.has(g)) { h++; hits.set(g, (hits.get(g) || 0) + 1); } else if (g) n--; } }
+        /* となりの箱・小さい区画（並んだ自販機など）に当たる点は数えない */
+        n++; if (g && !boxSet.has(g) && g.area >= 2.5) { h++; hits.set(g, (hits.get(g) || 0) + 1); if (!sides.has(g)) sides.set(g, new Set()); sides.get(g).add(ei); } else if (g) { n--; if (boxSet.has(g)) nbBox.add(g); } } }
     if (!n || h < n * 0.4) { no(f, 'few ' + h + '/' + n); continue; }
-    let host = null, hc = 0; hits.forEach((c, g) => { if (c > hc) { hc = c; host = g; } });
-    /* 壁の向こうの区画に当たる点もあるので、いちばん多い区画が 6割以上で、2番目が 25%以下なら入れる */
-    const second = Math.max(0, ...[...hits].filter(([g]) => g !== host).map(([, c]) => c));
-    if (!host || hc < h * 0.6 || second > h * 0.25 || host.area < f.area * 4 || host.hand || wraps(host)) { no(f, "host"); continue; }
-    if (!into.has(host)) into.set(host, []); into.get(host).push(f);
+    /* 壁にぴったり付いた箱は、壁の向こうの部屋にも1辺だけ当たる。2辺以上から当たる区画があれば、1辺だけの区画は数えない */
+    const multi = [...hits].filter(([g]) => sides.get(g).size >= 2), use = multi.length ? multi : [...hits], hu = use.reduce((a, [, c]) => a + c, 0);
+    let host = null, hc = 0; use.forEach(([g, c]) => { if (c > hc) { hc = c; host = g; } });
+    /* いちばん多い区画が 6割以上で、2番目が 25%以下なら入れる */
+    const second = Math.max(0, ...use.filter(([g]) => g !== host).map(([, c]) => c));
+    if (!host || hc < hu * 0.6 || second > hu * 0.25 || host.area < f.area * 4 || host.hand || wraps(host)) { later.push([f, hits, nbBox]); no(f, "host"); continue; }
+    if (!into.has(host)) into.set(host, []); into.get(host).push(f); hostOf.set(f, host);
   }
+  /* 決まらなかった箱：となりの箱が入った区画が、この箱にも当たっていれば、同じ区画に入れる（並んだ自販機の端の1台など） */
+  for (let it = 0; it < 3; it++) { let ch = false;
+    later.forEach(e => { const [f, hits, nbBox] = e; if (hostOf.has(f)) return; for (const b of nbBox) { const H = hostOf.get(b); if (H && hits.has(H)) { into.get(H).push(f); hostOf.set(f, H); ch = true; break; } } });
+    if (!ch) break; }
   if (!into.size) return { faces, open, merged: [], split: {} };
   let next = Math.max(-1, ...(faces || []).map(f => +f.i || 0)) + 1;
   const taken = new Set(), out = [], merged = [], split = {}, op = { ...open };

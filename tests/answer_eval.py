@@ -19,5 +19,7 @@ with sync_playwright() as p:
     pg.wait_for_function("()=>document.querySelector('#dwgFaces button')",timeout=600000,polling=300);pg.wait_for_timeout(800)
     r=json.loads(pg.evaluate(JS,[pid,rooms]));r['rooms']=rooms;R[n]=r;s=r['cmp']['sum'];v=r['v2sum']
     print(f"{n:12} 部屋{s['rooms']:3} 合う{s['ok']:3} 分かれ{s['split']:3}(区画{s['facesInRooms']}) 足りない{s['short']:3} 広さ違い{s['diff']:3} 無し{s['none']:3} またぐ{s['extra']:3} | 試し 合う{v and v['ok']} 分かれ{v and v['split']} 無し{v and v['none']}",flush=True)
+    sumok=lambda R:sum(1 for x in R if x['st'] in('ok','split') and abs(x['err'])<=5 and x['cover']>=80)  # 何区画に分かれていても、足すと広さが合う（±5%）部屋
+    print(f"{n:12} 足すと合う {sumok(r['cmp']['rooms'])}・試し {sumok(r['v2rooms'] or [])}")
   b.close()
 json.dump(R,open(sys.argv[1],'w'))
