@@ -3,7 +3,6 @@
  * 新しい画面の案件（図面・部屋・器具・照明・分電盤）を前のKAKUの形に直して渡し、全画面の層に出す。
  * 前のKAKUの保存（案件一覧）には何も足さない。閉じたら層ごと消す。 */
 import { opts } from './app.js';
-import { oldType } from './legacy.js';
 import { planCH } from './drawing.js';
 import { lightWires, symList, typeFixMap, shownFixType } from './project.js';
 import { pip } from './lighting.js';
@@ -157,7 +156,7 @@ export function toOld(p) {
     const near = (px, py) => FP.some(f => f.poly.some((A, i) => { const B = f.poly[(i + 1) % f.poly.length], dx = B[0] - A[0], dy = B[1] - A[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((px - A[0]) * dx + (py - A[1]) * dy) / L)) : 0; return Math.hypot(px - A[0] - dx * t, py - A[1] - dy * t) < 1; }));
     return near(cx, cy); };
   const longSegs = (plan.segs || []).filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) >= 0.5);
-  const fix = { fx: (d.fixtures || []).map((x, k) => ({ id: 'f' + k, t: oldType(shownFixType(TF, x, k)), b: x.b, back: x.back || backOf(x, longSegs) })).filter((x, k) => !inReg[k] && x.t !== 'unknown' && x.t !== 'other' && inAnyFace(x.b)), doors: (d.doors || []).map(x => ({ c: x.c, m: x.m, r: x.r })) };
+  const fix = { fx: (d.fixtures || []).map((x, k) => ({ id: 'f' + k, t: shownFixType(TF, x, k), b: x.b, back: x.back || backOf(x, longSegs) })).filter((x, k) => !inReg[k] && x.t !== 'unknown' && x.t !== 'other' && inAnyFace(x.b)), doors: (d.doors || []).map(x => ({ c: x.c, m: x.m, r: x.r })) };
   const cur = { id: '__k3d', name: p.name || '', rooms, places, win: {}, win3d: clone(d.win3d || []), openAuto: true,
     wire: { on: (d.lights || []).length > 0 || (d.outlets || []).length > 0, sw: 'e-sw1', cL: 'e-v16-2', cO: 'e-v20-2', extra: d.wireExtra ?? 10, out: (d.outlets || []).length > 0, link } };
   /* 配線の線と長さは新しい画面の計算（ブースは外の部屋のスイッチ、置いたスイッチ・つなぎ替え込み）をそのまま見せる */

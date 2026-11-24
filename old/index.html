@@ -3902,12 +3902,12 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
       M.mk='solid';M.prism([[q[0],q[1]],[q[2],q[1]],[q[2],q[3]],[q[0],q[3]]],0,top,(f.col||[.74,.70,.62]).concat(1),{edge:[.45,.45,.45,1]})});
     M.cur=-1;if(S.show.fix)((fx&&fx.fx)||[]).forEach(function(x){if(!x.b||x.t==='other')return;var b=x.b,cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2,W=b[2]-b[0],D=b[3]-b[1];
       var gc=G([cx,cy]),xf=faceAt(gc[0],gc[1]);if(xf&&!fvis(xf.i))return;
-      part({type:'fix',key:xf?rk(xf.i):'',title:(typeof KF_T!=='undefined'&&KF_T[x.t])||'器具',rows:[['大きさ（図面から）',Math.round(Math.max(W,D)*1000)+' × '+Math.round(Math.min(W,D)*1000)+' mm'],['ある所',xf?rname(xf.i):'—']],note:'図面に描いてある器具です。形は目安で、見積もりの数量には入っていません（コンセントの位置決めに使っています）。'});
+      part({type:'fix',key:xf?rk(xf.i):'',title:(typeof KF_T!=='undefined'&&KF_T[x.t])||(x.t==='trough'?'ステンレス流し':'器具'),rows:[['大きさ（図面から）',Math.round(Math.max(W,D)*1000)+' × '+Math.round(Math.min(W,D)*1000)+' mm'],['ある所',xf?rname(xf.i):'—']],note:'図面に描いてある器具です。形は目安で、見積もりの数量には入っていません（コンセントの位置決めに使っています）。'});
       var sd=x.back&&KF_SIDES[x.back]?KF_SIDES[x.back]:(W>=D?[0,1]:[1,0]),B=sd,Lt=[-B[1],B[0]],wl=Math.abs(Lt[0])>.5?W:D,dp=Math.abs(B[0])>.5?W:D;
       /* 横 u・奥 v（＋が壁側）の四角を、元の図面の向きの点に */
       var pt=function(u,v){return G([cx+Lt[0]*u+B[0]*v,cy+Lt[1]*u+B[1]*v])},rect=function(u0,u1,v0,v1){return[pt(u0,v0),pt(u1,v0),pt(u1,v1),pt(u0,v1)]};
       var el=function(u,v,ru,rv,n){var o=[];n=n||22;for(var i=0;i<n;i++){var a=i/n*Math.PI*2;o.push(pt(u+Math.cos(a)*ru,v+Math.sin(a)*rv))}return o};
-      var hw=wl/2,hd=dp/2,C=function(c){return c.concat(1)};M.mk=RL&&/toilet|urinal|sink|slop|bath/.test(x.t)?'ceramic':'solid';
+      var hw=wl/2,hd=dp/2,C=function(c){return c.concat(1)};M.mk=RL&&/toilet|urinal|sink|slop|bath/.test(x.t)?'ceramic':RL&&x.t==='trough'?'metal':'solid';
       switch(x.t){
         case'toilet':{var tk=Math.min(.22,dp*.3);M.prism(rect(-hw*.9,hw*.9,hd-tk,hd),0,.82,C(CERAMIC),{edge:[.6,.6,.6,1]});
           var bl=dp-tk;M.prism(el(0,hd-tk-bl*.48,hw*.78,bl*.5),0,.40,C(CERAMIC));M.flat(el(0,hd-tk-bl*.45,hw*.5,bl*.34),.402,C([.86,.88,.9]));break}
@@ -3919,6 +3919,12 @@ html[data-theme=dark] #k3d,html[data-sk=dark] #k3d{background:#1c1f1a}
         case'counter':{M.prism(rect(-hw,hw,-hd,hd),0,.76,C(WOOD));M.prism(rect(-hw,hw,-hd,hd),.76,.80,C(STONE),{edge:[.5,.5,.5,1]});
           var nb=Math.max(1,+x.bw||1);for(var i=0;i<nb;i++){var u=-hw+wl*(i+.5)/nb;M.flat(el(u,-hd*.1,Math.min(.22,wl/nb*.36),Math.min(.17,dp*.32)),.803,C([.80,.82,.84]));
             /* 水栓（鉢の奥） */var fv=Math.min(hd-.05,-hd*.1+Math.min(.17,dp*.32)+.06);M.prism(el(u,fv,.02,.02,10),.80,.98,C(STEEL));M.prism(rect(u-.012,u+.012,fv-.13,fv),.95,.975,C(STEEL))}break}
+        case'trough':{/* ステンレス流し（長い手洗い）：下は引き戸の収納、上は長い槽、奥の立ち上がりから水栓が並ぶ */
+          var SS=[.80,.82,.84];M.prism(rect(-hw,hw,-hd+.05,hd),0,.08,C(DARK));M.prism(rect(-hw,hw,-hd,hd),.08,.80,C(SS),{edge:[.5,.5,.5,1]});
+          var nd=Math.max(2,Math.round(wl/.9));for(var i=1;i<nd;i++){var u=-hw+wl*i/nd;M.prism(rect(u-.006,u+.006,-hd-.008,-hd),.12,.76,C(DARK))}
+          M.prism(rect(-hw,hw,-hd,hd),.80,.83,C(STEEL),{edge:[.45,.45,.45,1]});M.flat(rect(-hw+.06,hw-.06,-hd+.07,hd-.10),.833,C([.62,.65,.68]));
+          M.prism(rect(-hw,hw,hd-.03,hd),.83,1.0,C(STEEL));
+          var nf=Math.max(1,Math.floor(wl/.35));for(var i=0;i<nf;i++){var u=-hw+wl*(i+.5)/nf;M.prism(rect(u-.011,u+.011,hd-.16,hd-.03),.95,.975,C(STEEL));M.prism(el(u,hd-.15,.013,.013,8),.90,.975,C(STEEL))}break}
         case'sink':{M.prism(rect(-hw,hw,-hd,hd),.70,.80,C(CERAMIC),{edge:[.6,.6,.6,1]});M.flat(el(0,0,hw*.65,hd*.6),.803,C([.82,.85,.88]));
           var fv2=Math.max(hd*.6,hd-.05);M.prism(el(0,fv2,.018,.018,10),.80,.95,C(STEEL));M.prism(rect(-.011,.011,fv2-.11,fv2),.925,.95,C(STEEL));break}
         case'slop':{/* SK（掃除用の流し）：床置きの低い深い流し。前の縁が低く、奥に立ち上がり、上の壁から水栓（浴槽と見分けが付くように） */
