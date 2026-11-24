@@ -9,7 +9,7 @@
 import { analyze as analyzeFrame } from './frame.js';
 import { joinTexts, classify, equipment, titleInfo, sheetTitles, labelBoxes } from './text.js';
 
-export const VER = 6;   // 6：横に並んだ図（現況図｜改修プラン）も分ける（splitCols）。 5：表題欄の枠が無い図面でも、見出しのかたまりから工事名称などを読む（現場トイレ）。   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
+export const VER = 7;   // 7：「＜A案＞」のように括弧で囲んだ案の見出しも読む・図枠の中に案の見出しが1つなら名前に付けて案（alt）にする（江南）。   // 6：横に並んだ図（現況図｜改修プラン）も分ける（splitCols）。 5：表題欄の枠が無い図面でも、見出しのかたまりから工事名称などを読む（現場トイレ）。   // 4：左右の縦線が無い図枠（上下の横線だけ。0530）も図枠と見る。3：図の分け方（sheets）・工事名称のつなぎ方を足した。古い解析は開いた時に作り直す
 
 /* 1つの図枠の中に、今の図と改修の案が段になって並ぶ図面（三井屋：左の縦の文字「現況図」「プラン③」「プラン⑤」）を段ごとの図に分ける。
  *   見出し：図枠の中（表・表題欄の外）の短い文字で、現況図・既存図・改修前／後・計画図・プラン○・○案 の形の物
@@ -18,9 +18,11 @@ export const VER = 6;   // 6：横に並んだ図（現況図｜改修プラン�
  *   段の境目：上と下の見出しの間で、図の幅の6割以上ある横の長い線のうち一番上（段の見出しの帯の上の線）。無ければまん中
  *   出力：[{ box, title, kind, alt }]（alt：プラン③・A案のように、同じ所の案がいくつもある物） */
 const BAND_LABEL = /^(現況図?|既存図?|改修前図?|改修後図?|計画図?|改修図|改修プラン\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]*|改修案|プラン\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]*|[A-ZＡ-Ｚ]案|案\s*[①-⑳0-9０-９A-Za-zＡ-Ｚ]+)$/;
+/* 見出しのまわりの括弧（＜A案＞・【プラン①】など）を取る */
+const unBracket = s => s.replace(/^[<＜〈《【\[(（]+/, '').replace(/[>＞〉》】\])）]+$/, '');
 export function splitBands(fb, texts = [], segs = [], skip = []) {
   const inBox = (x, y, b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
-  const L = texts.map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
+  const L = texts.map(t => ({ ...t, s: unBracket(String(t.t).replace(/[\s\u3000]+/g, '')) }))
     .filter(t => inBox(t.x, t.y, fb) && t.x <= fb[0] + (fb[2] - fb[0]) * 0.1 && !skip.some(b => inBox(t.x, t.y, b)) && BAND_LABEL.test(t.s));
   if (L.length < 2) return null;
   /* いちばん多くそろう縦の列 */
@@ -46,7 +48,7 @@ export function splitBands(fb, texts = [], segs = [], skip = []) {
  * 縦の段（splitBands）で分けた図枠には使わない */
 export function splitCols(fb, texts = [], segs = [], skip = []) {
   const inBox = (x, y, b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
-  const L = texts.map(t => ({ ...t, s: String(t.t).replace(/[\s\u3000]+/g, '') }))
+  const L = texts.map(t => ({ ...t, s: unBracket(String(t.t).replace(/[\s\u3000]+/g, '')) }))
     .filter(t => inBox(t.x, t.y, fb) && !skip.some(b => inBox(t.x, t.y, b)) && BAND_LABEL.test(t.s));
   if (L.length < 2) return null;
   let row = [];
@@ -135,7 +137,18 @@ export function analyzeAll({ segs = [], faces = [], texts = [], fixtures = [], d
   const title = titleInfo(J.texts, tbx.length ? tbx : labelBoxes(J.texts));   // 表題欄の枠が見つからない時は、見出しのかたまりで
   const sheets0 = sheetTitles(J.texts, A.regions.filter(r => r.type === 'frame').map(r => r.box), A.regions.filter(r => r.type === 'title').map(r => r.box));
   const skipB = A.regions.filter(r => r.type === 'title' || r.type === 'table').map(r => r.box);
-  const sheets = sheets0.flatMap(x => (x.kind !== 'table' && (splitBands(x.box, J.texts, segs, skipB) || splitCols(x.box, J.texts, segs, skipB))) || [x]);
+  /* 案（A案・B案）：横に並べた案は分ける（splitCols）。図枠1つに案の見出しが1つだけの時（江南は図枠ごとに＜A案＞＜B案＞）は、その図の名前に付けて案にする。
+   * 案はどれか1つを見積もりに使う物なので alt（2つ以上使う時は黄色の注意） */
+  const ALT1 = /^[A-ZＡ-Ｚ]案$/;
+  const sheets = sheets0.flatMap(x => {
+    if (x.kind === 'table') return [x];
+    const sp = splitBands(x.box, J.texts, segs, skipB) || splitCols(x.box, J.texts, segs, skipB);
+    if (sp) return sp.map(y => ALT1.test(y.title) && x.title ? { ...y, title: x.title + ' ' + y.title } : y);
+    const labs = [...new Set(J.texts.filter(t => t.x >= x.box[0] && t.x <= x.box[2] && t.y >= x.box[1] && t.y <= x.box[3] && !skipB.some(b => t.x >= b[0] && t.x <= b[2] && t.y >= b[1] && t.y <= b[3]))
+      .map(t => unBracket(String(t.t).replace(/[\s\u3000]+/g, ''))).filter(v => ALT1.test(v)))];
+    if (labs.length === 1) return [{ ...x, title: (x.title ? x.title + ' ' : '') + labs[0], kind: x.kind || 'plan', alt: true }];
+    return [x];
+  });
   /* 図面の名前は、図枠ごとに読んだ物（sheetTitles）の方が確か（表題欄の見出しの右だけ見ると会社名などを拾う） */
   const st = [...new Set(sheets.map(x => x.title).filter(Boolean))];
   if (sheets.length >= 2 && st.length) title.sheet = st;
