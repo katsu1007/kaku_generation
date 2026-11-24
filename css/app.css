@@ -486,3 +486,49 @@ body.dwg-fs-on { overflow: hidden; }
 .dwg-fs .dwg-sheets > * { flex: none; }
 .dwg-fs > div:not(#dwgView):not(.dwg-fs-head):not(#dwgMode):not(#dwgBar) { margin-top: 0 !important; }
 /* 全画面の下のボタンの欄は高さを決めておく（区画を選ぶたびに図面の大きさが変わって、次のタップがずれないように） */
+
+/* ---------- スマホで操作する場所を広く（grok の意見4・かつ「操作広げてもらおうかな。使い方も重視」・2026-11-24） ---------- */
+.nav .ns { display: none; }
+.fs-open { display: none; width: 100%; justify-content: center; margin: 0 0 8px; }
+.fs-exit { flex: none; color: var(--accent) !important; font-weight: 800; display: inline-flex; align-items: center; gap: 4px; }
+.fs-exit svg { width: 16px; height: 16px; }
+/* スマホ（縦・横）：図面を広く使う入り口のボタンを見せる。縦は図面の高さも広げる（planview.js の高さの決め方） */
+@media (max-width: 900px), (max-height: 560px) and (orientation: landscape) { .fs-open { display: flex; } }
+/* 全画面：上の「図面・全画面をやめる」の行をやめて、道具の切り替えの左はしに「戻る」を置く（1行ぶん広くなる） */
+.dwg-fs .dwg-fs-head { display: none !important; }
+.dwg-fs #dwgMode { position: relative; }
+.dwg-fs #dwgMode .fs-exit { position: sticky; left: 0; z-index: 1; background: var(--panel); border-right: 1px solid var(--line2); }
+/* 全画面の図面の右の道具：小さくして、入りきらない時は2列に */
+.dwg-fs .pv-tools { gap: 4px; flex-wrap: wrap; max-height: calc(100% - 16px); align-content: flex-end; }
+.dwg-fs .pv-tools .iconbtn { width: 34px; height: 34px; font-size: 15px; }
+.dwg-fs .pv-tools [data-act="dwgFs"] { display: none; }
+/* スマホを横にした時の全画面：図面を左、ボタンの欄を右に並べる（縦に積むと図面が細くなるため） */
+@media (orientation: landscape) and (max-height: 560px) {
+  .dwg-fs { display: grid; grid-template-columns: minmax(0, 1fr) min(330px, 38vw); grid-template-rows: auto auto minmax(0, 1fr); column-gap: 6px; padding-left: max(6px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+  .dwg-fs > * { grid-column: 1; grid-row: 2; }
+  .dwg-fs #dwgMode { grid-column: 1 / -1; grid-row: 1; }
+  .dwg-fs #dwgView { grid-row: 3; }
+  .dwg-fs #dwgBar { grid-column: 2; grid-row: 2 / 4; height: auto; max-height: none; min-height: 0; }
+  .dwg-fs .dwg-oldread { display: none !important; }
+}
+/* スマホを横にした時：左のメニューを細く（アイコンと短い名前だけ）して、作業の所を広く */
+@media (max-width: 900px) and (orientation: landscape) and (min-width: 600px) {
+  .shell { grid-template-columns: 68px minmax(0, 1fr); }
+  .side { padding: max(8px, env(safe-area-inset-top)) 4px 8px max(4px, env(safe-area-inset-left)); align-items: stretch; }
+  .side .brand { justify-content: center; padding: 2px 0 8px; }
+  .side .brand > div:not(.logo), .side .lab, .side .foot { display: none; }
+  .side .sep { margin: 6px 4px; }
+  .side .nav { flex-direction: column; gap: 2px; padding: 7px 2px; font-size: 10px; text-align: center; justify-content: center; line-height: 1.2; }
+  .side .nav .nl { display: none; }
+  .side .nav .ns { display: block; }
+}
+/* 全画面のボタンの欄の中は、狭くても読めるように：入力の並びは2つずつ、長いボタンは折り返す */
+.dwg-fs #dwgBar .g3, .dwg-fs #dwgBar .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.dwg-fs #dwgBar .btn { white-space: normal; height: auto; min-height: 38px; text-align: left; line-height: 1.3; }
+.dwg-fs #dwgBar .f { font-size: 12px; }
+@media (orientation: landscape) and (max-height: 560px) { .dwg-fs #dwgBar .g2 { grid-template-columns: 1fr !important; } }
+/* 全画面の時も、知らせ・確かめる画面・3D・間取りの画面を図面の上に出す（前は図面の下に隠れていた） */
+body.dwg-fs-on .sksheet { z-index: 3150; }
+body.dwg-fs-on .modal-bg { z-index: 3200; }
+body.dwg-fs-on .toast { z-index: 3300; bottom: auto; top: calc(52px + env(safe-area-inset-top)); }
+body.dwg-fs-on .errbar { z-index: 3400; }

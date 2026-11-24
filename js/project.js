@@ -282,7 +282,8 @@ function drawingCard(p) {
       <label class="btn sm" style="cursor:pointer">${icon('up')}読み直す<input type="file" id="dwgFile" accept="${DWG_ACCEPT}" hidden></label>
       <button class="btn sm ghost danger" data-act="dwgClear">${icon('trash')}図面を消す</button></div>
     <div id="dwgEdit" class="${dwgFs ? 'dwg-fs' : ''}"><div class="dwg-fs-head"><b class="small" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name || '図面')}</b><button class="btn sm" data-act="dwgFs">${icon('shrink')}全画面をやめる</button></div>
-    <div class="seg" id="dwgMode" style="margin-bottom:8px"><button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button><button data-mode="lineoff">線を外す・対象外</button></div>
+    ${dwgFs ? '' : `<button class="btn fs-open" data-act="dwgFs">${icon('full')}図面を画面いっぱいにして編集する</button>`}
+    <div class="seg" id="dwgMode" style="margin-bottom:8px">${dwgFs ? `<button class="fs-exit" data-act="dwgFs" title="全画面をやめる">${icon('shrink')}戻る</button>` : ''}<button data-mode="room">部屋を作る</button><button data-mode="fix">器具を直す</button><button data-mode="wall">壁の解体・仕上げ</button><button data-mode="cut">カッター</button><button data-mode="light">照明・配線</button><button data-mode="place">器具を置く</button><button data-mode="meas">測る</button><button data-mode="lineoff">線を外す・対象外</button></div>
     ${oldReadRow(d)}${sheetRow(d)}<div id="dwgView"></div>${sheetNotes(d)}${titleRow(p)}
     <div class="addbar" style="margin-top:10px" id="dwgBar"></div></div>
     <div id="dwgDemo"></div>
@@ -327,7 +328,7 @@ export function sheetMarks(d) {
 /* 文字を覚えていない前の版の図面：図の分け方・工事名称は読み直さないと出ない。その事を先に知らせる（後で気付かないように） */
 function oldReadRow(d) {
   if (!d || !d.analysis || d.src2 || d.analysis.ver === R2VER) return '';
-  return `<div class="small" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ この図面は前の版で読み込んだため、図の分け方（今の図・改修の図）や工事名称がまだ出ていません。上の「読み直す」で同じ図面を選び直すと出ます（一度読み直せば、次からは開くだけで新しくなります）。</div>`;
+  return `<div class="small dwg-oldread" style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(255,176,32,.12);color:#ffb020">⚠ この図面は前の版で読み込んだため、図の分け方（今の図・改修の図）や工事名称がまだ出ていません。上の「読み直す」で同じ図面を選び直すと出ます（一度読み直せば、次からは開くだけで新しくなります）。</div>`;
 }
 function titleRow(p) {
   const d = p.drawing, v = ((((d && d.analysis) || {}).title || {}).project || [])[0];
@@ -1087,6 +1088,7 @@ function stepRooms(ctx) {
   const paintSel = () => {
     if (!p.drawing || !p.drawing.plan) return;
     $$('#dwgMode button', body).forEach(b => b.classList.toggle('on', b.dataset.mode === mode));
+    if (dwgFs) { const on = body.querySelector('#dwgMode button.on'), st = body.querySelector('#dwgMode'); if (on && st && (on.offsetLeft < st.scrollLeft || on.offsetLeft + on.offsetWidth > st.scrollLeft + st.clientWidth)) { const ex = st.querySelector('.fs-exit'); st.scrollLeft = on.offsetLeft - (ex ? ex.offsetWidth + 8 : 0); } }
     /* 部屋を作るで区画を選んでいる間は、選んだ区画の中の「囲まれた所」（机・棚など）を先に見せる（部屋にした後で分かるのではなく、決める前に） */
     let selHoles = '';
     if (mode === 'room' && sel.size) { const key = [...sel].sort((a, b) => a - b).join(','); if (key !== selGeoKey) { selGeoKey = key; selGeo = geoOf(withJoined([...sel])); }
@@ -1712,7 +1714,11 @@ function stepRooms(ctx) {
   });
   body.addEventListener('click', async e => {
     const fsb = e.target.closest('[data-act="dwgFs"]');
-    if (fsb) { dwgFs = !dwgFs; document.body.classList.toggle('dwg-fs-on', dwgFs); draw(); return; }
+    if (fsb) { dwgFs = !dwgFs; document.body.classList.toggle('dwg-fs-on', dwgFs); draw();
+      /* 初めて全画面にした時だけ、操作の仕方を知らせる */
+      if (dwgFs) { let seen = 0; try { seen = +localStorage.getItem('kakugen-fs-tip') || 0; localStorage.setItem('kakugen-fs-tip', String(seen + 1)); } catch (er) { /* 覚えられなくても続ける */ }
+        if (seen < 2) toast('2本の指で広げる・ずらす、1本の指でタップして選べます。上の道具の列は横にずらせます。左上の「戻る」で元の画面に戻ります', { ms: 6500 }); }
+      return; }
     const symb = e.target.closest('[data-sym]');
     if (symb) { const k = +symb.dataset.sym, s = symList(p.drawing).find(q => q.k === k);
       symSel = symSel === k ? -1 : k;

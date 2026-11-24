@@ -160,11 +160,11 @@ function shell() {
   const r = state.route.name === 'project' ? 'projects' : state.route.name;
   $('#side').innerHTML = `
     <div class="brand"><div class="logo">K</div><div><b>KAKU</b><small>見積もりワークスペース</small></div></div>
-    ${NAV.map(([k, h, ic, t]) => `<a class="nav ${r === k ? 'on' : ''}" href="${h}">${icon(ic)}${t}</a>`).join('')}
+    ${NAV.map(([k, h, ic, t]) => `<a class="nav ${r === k ? 'on' : ''}" href="${h}" title="${t}">${icon(ic)}<span class="nl">${t}</span><span class="ns">${t === '単価マスター' ? '単価' : t}</span></a>`).join('')}
     <div class="sep"></div>
     <div class="lab">前のKAKU</div>
-    <a class="nav" href="./old/index.html" title="照明・器具・3Dは新しい画面の「図面」に移りました。前の画面は、前に作った案件を見る時だけ使います">${icon('layers')}前の画面（見るだけ）</a>
-    <a class="nav ${r === 'help' ? 'on' : ''}" href="#/help">${icon('help')}使い方</a>
+    <a class="nav" href="./old/index.html" title="照明・器具・3Dは新しい画面の「図面」に移りました。前の画面は、前に作った案件を見る時だけ使います">${icon('layers')}<span class="nl">前の画面（見るだけ）</span><span class="ns">前の画面</span></a>
+    <a class="nav ${r === 'help' ? 'on' : ''}" href="#/help" title="使い方">${icon('help')}<span class="nl">使い方</span><span class="ns">使い方</span></a>
     <div class="foot">KAKU ${APP_VERSION}（${APP_DATE}）</div>`;
   $('#bottom').innerHTML = NAV.map(([k, h, ic, t]) => `<a class="${r === k ? 'on' : ''}" href="${h}">${icon(ic)}${t === '単価マスター' ? '単価' : t}</a>`).join('');
 }
