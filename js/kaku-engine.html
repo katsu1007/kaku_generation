@@ -1114,7 +1114,8 @@ function dxfRead(str){
   const text=(m,e,ly)=>{let t=e.g.filter(([c])=>c===1||c===3).map(x=>x[1]).join("");
     t=t.replace(/\\U\+([0-9A-Fa-f]{4})/g,(_,h)=>String.fromCharCode(parseInt(h,16)));
     if(e.type==="MTEXT")t=t.replace(/\\P/gi," ").replace(/\\[A-Za-z][^;\\]*;/g,"").replace(/[{}]/g,"");
-    t=t.trim();if(!t||t==="<>")return;const q=P(m,num(e.g,10,0),num(e.g,20,0));texts.push({t,x:q[0],y:q[1],layer:ly})};
+    t=t.trim();if(!t||t==="<>")return;const X0=num(e.g,10,0),Y0=num(e.g,20,0),q=P(m,X0,Y0);const o={t,x:q[0],y:q[1],layer:ly};
+    {const th=num(e.g,40,0),ro=num(e.g,50,0)*Math.PI/180,w=t.length*th*.6;if(th>0&&w>0){const q2=P(m,X0+w*Math.cos(ro),Y0+w*Math.sin(ro));o.x2=q2[0];o.y2=q2[1]}}texts.push(o)};
   let hideOn=false,hiddenN=0;const quads=[],hq=[],cvs=[];
   /* ペーパー空間（図枠・表題を置くレイアウト）の図形は使わない。モデル空間が空の図面だけは使う */
   const hasModel=top.some(e=>num(e.g,67,0)!==1);
@@ -1352,7 +1353,7 @@ function jwwGeom(buf){
       const pt=a=>{const ex=o.r*Math.cos(a),ey=o.r*o.flat*Math.sin(a),ct=Math.cos(o.tilt),st=Math.sin(o.tilt);return P(o.x+ex*ct-ey*st,o.y+ex*st+ey*ct)};
       let ai=null;if(!full&&Math.abs(o.flat-1)<1e-6){const c=P(o.x,o.y),sx=Math.hypot(m[0],m[1]);ai=arcs.length;arcs.push({cx:c[0],cy:c[1],r:o.r*sx*sc,sweep:Math.abs(da)*180/Math.PI,layer:ly})}
       let q=pt(o.a0);for(let k=1;k<=n;k++){const r=pt(o.a0+da*k/n);segs.push(ai==null?[ly,q[0],q[1],r[0],r[1],col,o.width]:[ly,q[0],q[1],r[0],r[1],col,o.width,ai]);q=r}}
-    else if(o.t==="moji"){const s=(o.s||"").trim();if(s&&!/^\^@/.test(s)){const q=P(o.x1,o.y1);texts.push({t:clean(s),x:q[0],y:q[1],layer:ly})}}
+    else if(o.t==="moji"){const s=(o.s||"").trim();if(s&&!/^\^@/.test(s)){const q=P(o.x1,o.y1),q2=P(o.x2,o.y2);texts.push({t:clean(s),x:q[0],y:q[1],x2:q2[0],y2:q2[1],layer:ly})}}
     else if(o.t==="solid"){/* 四角・三角の塗りだけ（円の塗りは線種101以上） */if(o.style<101&&o.p&&o.p.length===8)quads.push({ly:ly0,col,w:o.width,p:[P(o.p[0],o.p[1]),P(o.p[2],o.p[3]),P(o.p[4],o.p[5]),P(o.p[6],o.p[7])]})}
     else if(o.t==="sunpou"){}  /* 寸法は使わない */
     else if(o.t==="block"&&depth<8){const L=lists[o.num];if(!L)return;const c=Math.cos(o.rot),s=Math.sin(o.rot);
@@ -1754,10 +1755,59 @@ function rgCompute(){rgCompute0(null);
     const outPt=(x,y)=>{const l=G.labOf(x,y);return l>0&&G.root[l]===oL};
     rgCompute0({gap:3.6,ok:(p,q)=>outPt((p.x+q.x)/2,(p.y+q.y)/2)});
     const G2=RG.grid;if(!G2||lostOf(G2).length>=lost.length)rgCompute0(null)}catch(err){rgCompute0(null)}}
+/* 線の手がかり（ChatGPT 版の区画探しの考え方を、KAKU の形で書き直した物・kaku_generation 2026-11-24）。
+   rgExp()：どれを使うか（試すあいだは上の画面の __kxExp で切り替える） */
+function rgExp(){try{const v=top.__kxExp;if(v)return v}catch(e){}return RG_EXP}
+const RG_EXP={dim:false,booth:false,mutual:false};
+/* 寸法線を見分ける：数字だけの文字（3〜6桁）のすぐ下を、文字の並びと同じ向きに通る線。壁の2本線の片方（6〜40cm に平行な相方がいる線）は外さない */
+function rgDimSegs(segs,M){
+  const out=new Set();const T=[];
+  (RG.texts||[]).forEach(t=>{if(!(t.x2!=null))return;const n=norm(String(t.t||"")).replace(/[,\s]/g,"");if(!/^\d{3,6}$/.test(n))return;
+    const x=t.x*M,y=t.y*M,x2=t.x2*M,y2=t.y2*M,L=Math.hypot(x2-x,y2-y);if(!(L>0.02))return;const ux=(x2-x)/L,uy=(y2-y)/L,h=Math.min(1.2,Math.max(0.05,L/(n.length*0.6)));
+    T.push({cx:(x+x2)/2-uy*h*0.5,cy:(y+y2)/2+ux*h*0.5,ux,uy,h,L})});
+  if(!T.length)return out;
+  const SG=1,ix=new Map();segs.forEach((q,i)=>{const a0=Math.floor(Math.min(q[0],q[2])/SG),a1=Math.floor(Math.max(q[0],q[2])/SG),b0=Math.floor(Math.min(q[1],q[3])/SG),b1=Math.floor(Math.max(q[1],q[3])/SG);
+    if((a1-a0+1)*(b1-b0+1)>4000)return;for(let a=a0;a<=a1;a++)for(let b=b0;b<=b1;b++){const k=a+","+b;let v=ix.get(k);if(!v)ix.set(k,v=[]);v.push(i)}});
+  const near=(x,y,r)=>{const o=new Set();for(let a=Math.floor((x-r)/SG);a<=Math.floor((x+r)/SG);a++)for(let b=Math.floor((y-r)/SG);b<=Math.floor((y+r)/SG);b++)(ix.get(a+","+b)||[]).forEach(i=>o.add(i));return o};
+  const paired=i=>{const q=segs[i],L=Math.hypot(q[2]-q[0],q[3]-q[1]);if(L<0.4)return false;const ux=(q[2]-q[0])/L,uy=(q[3]-q[1])/L;
+    for(const j of near((q[0]+q[2])/2,(q[1]+q[3])/2,L/2+0.5)){if(j===i)continue;const r=segs[j],Lr=Math.hypot(r[2]-r[0],r[3]-r[1]);if(Lr<0.4)continue;
+      if(Math.abs(ux*(r[3]-r[1])-uy*(r[2]-r[0]))/Lr>0.03)continue;const d=Math.abs((r[0]-q[0])*uy-(r[1]-q[1])*ux);if(d<0.06||d>0.40)continue;
+      const t1=(r[0]-q[0])*ux+(r[1]-q[1])*uy,t2=(r[2]-q[0])*ux+(r[3]-q[1])*uy;if(Math.min(L,Math.max(t1,t2))-Math.max(0,Math.min(t1,t2))>=0.4)return true}return false};
+  T.forEach(t=>{for(const i of near(t.cx,t.cy,t.h*1.5)){if(out.has(i))continue;const q=segs[i],vx=q[2]-q[0],vy=q[3]-q[1],L=Math.hypot(vx,vy);if(L<Math.max(0.15,t.L*0.8))continue;
+    if(Math.abs((vx*t.uy-vy*t.ux)/L)>0.22)continue;const u=((t.cx-q[0])*vx+(t.cy-q[1])*vy)/(L*L);if(u<0||u>1)continue;
+    const d=Math.abs((t.cx-q[0])*vy-(t.cy-q[1])*vx)/L;if(d>t.h*1.3)continue;if(paired(i))continue;out.add(i)}});
+  return out}
+/* トイレのブースの前を閉じる：平行な2枚の仕切りの端が 45cm〜1.1m で向かい合い、反対の端が両方とも同じ奥の壁に付いている（コの字）時だけ、前に見えない線を足す。
+   細切れの線（JW_CAD でよくある）は、同じ向き・4.5cm 以内の同じ直線・12cm 以内のすき間なら1本につないでから見る */
+function rgBoothFronts(segs){
+  const A=Math.PI/90,groups=new Map();
+  segs.forEach(q=>{const dx=q[2]-q[0],dy=q[3]-q[1],L=Math.hypot(dx,dy);if(L<0.02)return;let a=Math.atan2(dy,dx);if(a<0)a+=Math.PI;if(a>=Math.PI)a-=Math.PI;
+    const bin=Math.round(a/A)%90,ux=Math.cos(bin*A),uy=Math.sin(bin*A),nx=-uy,ny=ux,off=((q[0]+q[2])*nx+(q[1]+q[3])*ny)/2,k=bin+"|"+Math.round(off/0.045);
+    let g=groups.get(k);if(!g)groups.set(k,g={ux,uy,nx,ny,off,parts:[]});const p1=q[0]*ux+q[1]*uy,p2=q[2]*ux+q[3]*uy;g.parts.push([Math.min(p1,p2),Math.max(p1,p2)])});
+  const S=[];groups.forEach(g=>{g.parts.sort((a,b)=>a[0]-b[0]);let lo=null,hi=null;const fl=()=>{if(lo!==null&&hi-lo>0.05)S.push({x1:g.ux*lo+g.nx*g.off,y1:g.uy*lo+g.ny*g.off,x2:g.ux*hi+g.nx*g.off,y2:g.uy*hi+g.ny*g.off,dx:g.ux,dy:g.uy,len:hi-lo})};
+    g.parts.forEach(p=>{if(lo===null){lo=p[0];hi=p[1];return}if(p[0]-hi<=0.12)hi=Math.max(hi,p[1]);else{fl();lo=p[0];hi=p[1]}});fl()});
+  const pd=(x,y,s)=>{const vx=s.x2-s.x1,vy=s.y2-s.y1,l2=vx*vx+vy*vy;const t=Math.max(0,Math.min(1,((x-s.x1)*vx+(y-s.y1)*vy)/l2));return Math.hypot(x-(s.x1+t*vx),y-(s.y1+t*vy))};
+  const C=1.1,cell=new Map(),ck=(x,y)=>Math.floor(x/C)+":"+Math.floor(y/C);
+  S.forEach((s,i)=>{[[s.x1,s.y1],[s.x2,s.y2]].forEach(([x,y])=>{const k=ck(x,y);let v=cell.get(k);if(!v)cell.set(k,v=[]);v.push(i)})});
+  /* 奥の壁の候補を探すための線の表（1m） */
+  const SG=1,ix=new Map();S.forEach((s,i)=>{const a0=Math.floor(Math.min(s.x1,s.x2)/SG),a1=Math.floor(Math.max(s.x1,s.x2)/SG),b0=Math.floor(Math.min(s.y1,s.y2)/SG),b1=Math.floor(Math.max(s.y1,s.y2)/SG);
+    if((a1-a0+1)*(b1-b0+1)>4000)return;for(let a=a0;a<=a1;a++)for(let b=b0;b<=b1;b++){const k=a+","+b;let v=ix.get(k);if(!v)ix.set(k,v=[]);v.push(i)}});
+  const at=(x,y)=>ix.get(Math.floor(x/SG)+","+Math.floor(y/SG))||[];
+  const out=[],seen=new Set();
+  S.forEach((a,i)=>{if(a.len<0.6)return;[[a.x1,a.y1,a.x2,a.y2],[a.x2,a.y2,a.x1,a.y1]].forEach(([ex,ey,bx,by])=>{const cx=Math.floor(ex/C),cy=Math.floor(ey/C);
+    for(let ox=-1;ox<=1;ox++)for(let oy=-1;oy<=1;oy++)(cell.get((cx+ox)+":"+(cy+oy))||[]).forEach(j=>{if(j<=i)return;const b=S[j];if(b.len<0.6||Math.abs(a.dx*b.dx+a.dy*b.dy)<0.97)return;
+      [[b.x1,b.y1,b.x2,b.y2],[b.x2,b.y2,b.x1,b.y1]].forEach(([fx,fy,gx,gy])=>{const vx=fx-ex,vy=fy-ey,gap=Math.hypot(vx,vy);if(gap<0.45||gap>1.1)return;const ux=vx/gap,uy=vy/gap;
+        if(Math.abs(ux*a.dx+uy*a.dy)>0.22||Math.abs(ux*b.dx+uy*b.dy)>0.22)return;
+        /* 反対の端が同じ奥の壁に付く */
+        const rear=at(bx,by).some(k=>{if(k===i||k===j)return false;const r=S[k];return r.len>gap*0.8&&Math.abs(r.dx*ux+r.dy*uy)>0.92&&pd(bx,by,r)<0.08&&pd(gx,gy,r)<0.08});
+        if(!rear)return;const key=Math.round(ex*20)+","+Math.round(ey*20)+","+Math.round(fx*20)+","+Math.round(fy*20);if(seen.has(key))return;seen.add(key);out.push([ex,ey,fx,fy])})})})});
+  return out}
 function rgCompute0(X){
   const M=rgM(),on=new Set(RG.groups.filter(g=>g.on).map(g=>g.key));
   const doors=RG.autoDoor?findDoors(RG.segs,RG.arcs,M):new Set();
   const segs=[];RG.segs.forEach((s,i)=>{if(!on.has(gkey(s)))return;if(RG.autoHatch&&RG.hatch.has(i))return;if(doors.has(i))return;if(RG.segOff&&RG.segOff.has(i))return;if(RG.userOff&&RG.userOff.has(i))return;   /* かつが「線を外す」で外した線（kaku_generation） */segs.push([s[1]*M,s[2]*M,s[3]*M,s[4]*M])});
+  {const XP=rgExp();if(XP.dim){const dm=rgDimSegs(segs,M);if(dm.size){const k=segs.filter((q,i)=>!dm.has(i));segs.length=0;k.forEach(q=>segs.push(q))}RG.nDim=dm.size}else RG.nDim=0;
+   if(XP.booth){const bf=rgBoothFronts(segs);bf.forEach(e=>segs.push([e[0],e[1],e[2],e[3],1]));RG.nBooth=bf.length}else RG.nBooth=0}
   if(RG.segOff&&RG.segOff.extra)RG.segOff.extra.forEach(e=>segs.push(e.slice()));   // 新しい読み取り（試し）：吹き抜けの線の無い辺に足す見えない線
   RG.used=segs.length;RG.nHatch=RG.autoHatch?RG.hatch.size:0;RG.nDoor=doors.size;
   /* 出入口をふさぐ：壁の端（線が途切れた所、または壁の厚み分の短い線＝小口のある角）どうしを、
@@ -1775,14 +1825,16 @@ function rgCompute0(X){
       const t=((x-s2[0])*vx+(y-s2[1])*vy)/l2;if(t<0||t>1)continue;if(Math.hypot(s2[0]+vx*t-x,s2[1]+vy*t-y)<=T)return true}return false};
     const ends=[];P.forEach(p=>{const caps=p.inc.filter(e=>e.L<=0.35&&p.inc.some(o=>o!==e&&Math.abs(o.dx*e.dx+o.dy*e.dy)<0.25));  /* 小口：短い線が、壁の線と直角に付いている */if((p.inc.length===1&&!onLine(p.x,p.y,p.inc[0].si))||caps.length)ends.push({...p,caps})});
     const GW=X?Math.max(gap,X.gap):gap;const cell=new Map();const ck=(x,y)=>Math.floor(x/GW)+","+Math.floor(y/GW);ends.forEach((p,i)=>{const k=ck(p.x,p.y);if(!cell.has(k))cell.set(k,[]);cell.get(k).push(i)});
-    const done=new Set();
+    const done=new Set(),MU=rgExp().mutual?[]:null;
     ends.forEach((p,i)=>{const cx=Math.floor(p.x/GW),cy=Math.floor(p.y/GW);
       for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)(cell.get((cx+dx)+","+(cy+dy))||[]).forEach(j=>{if(j<=i)return;const q2=ends[j];
         const vx=q2.x-p.x,vy=q2.y-p.y,d=Math.hypot(vx,vy);if(d<0.4||d>gap&&!(X&&d<=X.gap&&X.ok(p,q2)))return;const ux=vx/d,uy=vy/d;
         // 向かい合っている：小口がある時は小口と直角、どっちも途切れの時は線の向きと同じ
         const okEnd=(e,sx,sy)=>{if(e.caps.length)return e.caps.some(cp=>Math.abs(cp.dx*sx+cp.dy*sy)<0.12);const a=e.inc[0];return (a.dx*sx+a.dy*sy)<-0.94};
         if(!okEnd(p,ux,uy)||!okEnd(q2,-ux,-uy))return;
-        const k=i+"-"+j;if(done.has(k))return;done.add(k);segs.push([p.x,p.y,q2.x,q2.y,1]);vadd++})});
+        const k=i+"-"+j;if(done.has(k))return;done.add(k);if(MU){MU.push([i,j,d]);return}segs.push([p.x,p.y,q2.x,q2.y,1]);vadd++})});
+    if(MU){const best=new Map();MU.forEach(([i,j,d])=>{[[i,j],[j,i]].forEach(([a,b])=>{const o=best.get(a);if(!o||d<o[1])best.set(a,[b,d])})});
+      MU.forEach(([i,j])=>{if(best.get(i)[0]===j&&best.get(j)[0]===i){const p=ends[i],q2=ends[j];segs.push([p.x,p.y,q2.x,q2.y,1]);vadd++}})}
    }
    RG.vlines=vadd}
   if(!segs.length){RG.faces=[];RG.grid=null;RG.msg="使える線がありません。線の種類のチェックを確認してください。";return}

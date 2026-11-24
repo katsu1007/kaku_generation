@@ -1,3 +1,4 @@
+# KX_EXP='{"dim":true}' で読み取りの手がかりを切り替えて比べられる。
 # かつが引いた区画の正解（.real/answers/*.rooms.json）5枚と、今の読み取りを一度に比べる。使い方: python3 tests/answer_eval.py 結果.json [図面名…]（sh tests/e2e/srv.sh を先に動かす）
 import sys,json,os
 from playwright.sync_api import sync_playwright
@@ -11,6 +12,7 @@ R={}
 with sync_playwright() as p:
   b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox']);pg=b.new_page();pg.goto('http://localhost:8765/');pg.wait_for_timeout(600)
   pg.evaluate("async()=>{const a=await import('./js/app.js');a.state.settings.noticeSeen=1;a.state.settings.introSeen=1;await a.saveSettings()}")
+  if os.environ.get('KX_EXP'): pg.evaluate('(e)=>{window.__kxExp=JSON.parse(e)}',os.environ['KX_EXP'])  # 読み取りの手がかりを試しに切り替える（js/kaku-engine.html の rgExp）
   for n,f in SETS:
     if only and n not in only: continue
     rooms=json.load(open(f'.real/answers/{n}.rooms.json'))
