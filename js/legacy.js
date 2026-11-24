@@ -177,8 +177,14 @@ export async function readWithFixtures(file, opt = {}) {
           return JSON.stringify({groups:RG.groups.map(g=>({layer:g.layer,on:!!g.on})),segs:RG.segs.map(s=>{const a=KAKU_rerot([s[1]*M,s[2]*M],M),b=KAKU_rerot([s[3]*M,s[4]*M],M),i=ix.get(gkey(s));return [q(a[0]),q(a[1]),q(b[0]),q(b[1]),i==null?-1:i]})})})()`));
         const rg = opt.regroup(out, raw) || [];
         /* 返す物：外すまとまりの番号の配列、または { groups：外すまとまり, segs：外す線の番号（家具と見た線・js/lineroles.js） } */
-        const off = (Array.isArray(rg) ? rg : (rg.groups || [])).filter(i => raw.groups[i] && raw.groups[i].on);
+        let off = (Array.isArray(rg) ? rg : (rg.groups || [])).filter(i => raw.groups[i] && raw.groups[i].on);
         E.__kxFurn = Array.isArray(rg) ? [] : (rg.segs || []);
+        /* 線のまとまりを自動で切り替える（かつ「自動でレイヤー切り替えて読み込んで区画に分けたらええのに」・2026-11-24）：
+         * 部屋の名前の文字（rg.names）が3つ以上ある図面だけ。線の多いまとまりから1つずつ外して区画を探し直し、
+         * 名前が1つだけ入る区画が増えるか、名前がぶつかる区画が減る時だけ外したままにする（名前が区画の外に出る・大きい区画どうしがくっつく時は戻す） */
+        if (!Array.isArray(rg) && rg.names && rg.names.length >= 3) { try { await step('線のまとまりを切り替えて、区画の分かれ方を比べています');
+          out.autoOff = autoLayers(E, raw, off, rg.names, opt.autoMs || 40000); off = [...off, ...out.autoOff.off]; console.log('autoLayers', JSON.stringify(out.autoOff), rg.names.length);
+        } catch (e3) { console.warn('線のまとまりの切り替えに失敗', e3); } }
         /* 壁らしくない1本線（机・椅子・テーブル・器具など）も外す（rgSingleLines。2本線の壁の図面だけ）。外した本数は out.single に */
         E.__kxOff = off;
         const n1 = E.eval(`(()=>{const keep=RG.groups.map(g=>g.on);let n=0;try{window.__kxOff.forEach(i=>{RG.groups[i].on=false});
@@ -224,6 +230,47 @@ export async function readWithFixtures(file, opt = {}) {
 }
 
 /* 前のKAKUに渡す時の種類：前のKAKUに無い種類（ステンレス流し）は、形が同じ洗面カウンターとして渡す */
+/* 線のまとまりの自動切り替え（試しの読み取りの中）。E：エンジンの画面、raw：まとまりと線、off0：もう外すと決めたまとまり、names：部屋の名前の文字（表示の座標）
+ * 返す物：{ off：足して外すまとまりの番号, tries：試した回数, ms } */
+/* 名前で壁・柱・建具と分かるまとまりは外さない（名前に意味が無い図面だけが相手） */
+const WALL_LAYER = /壁|躯体|柱|間仕切|建具|サッシ|ＲＣ|RC|ALC|LGS|ボード|wall|partition|door|window/i;
+function autoLayers(E, raw, off0, names, budget) {
+  const t0 = Date.now();
+  E.__rt = names;
+  E.eval(`window.__kxTry=function(offs){const keep=RG.groups.map(g=>g.on);try{offs.forEach(i=>{if(RG.groups[i])RG.groups[i].on=false});
+    const so=(typeof rgSingleLines==='function')?rgSingleLines():new Set();(window.__kxFurn||[]).forEach(i=>so.add(i));if(RG.userOff)RG.userOff.forEach(i=>so.add(i));RG.segOff=so;rgCompute();
+    const P=KakuEngine.plan();if(!P||!P.faces)return {own:0,clash:0,lost:1e9,small:0,n:0,tot:0,merged:true};
+    const F=P.faces.filter(f=>f.poly&&f.poly.length>2);
+    const pip=(x,y,Q)=>{let c=false;for(let i=0,j=Q.length-1;i<Q.length;j=i++){const a=Q[i],b=Q[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c};
+    let own=0,clash=0,lost=0;const byF=new Map();
+    window.__rt.forEach(t=>{let best=null;for(const f of F){if((!best||f.area<best.area)&&pip(t.x,t.y,f.poly))best=f}if(!best){lost++;return}const L=byF.get(best)||new Set();L.add(t.t);byF.set(best,L)});
+    byF.forEach(L=>{if(L.size===1)own++;else clash+=L.size-1});
+    const small=F.filter(f=>f.area<1).length,tot=F.reduce((a,f)=>a+f.area,0);
+    /* 区画の中の点（重心が外に出る L 字などは、重心の高さで横に切った一番広い所のまん中） */
+    const inPt=f=>{const Q=f.poly;let cx=0,cy=0;Q.forEach(q=>{cx+=q[0]/Q.length;cy+=q[1]/Q.length});if(pip(cx,cy,Q))return [cx,cy];
+      const xs=[];for(let i=0,j=Q.length-1;i<Q.length;j=i++){const a=Q[i],b=Q[j];if((a[1]>cy)!==(b[1]>cy))xs.push((b[0]-a[0])*(cy-a[1])/(b[1]-a[1])+a[0])}xs.sort((a,b)=>a-b);
+      let bw=-1,bx=cx;for(let k=0;k+1<xs.length;k+=2)if(xs[k+1]-xs[k]>bw){bw=xs[k+1]-xs[k];bx=(xs[k]+xs[k+1])/2}return [bx,cy]};
+    const smallest=(x,y)=>{let best=null;for(const f of F){if((!best||f.area<best.area)&&pip(x,y,f.poly))best=f}return best};
+    const big=F.filter(f=>f.area>=2.5).map(inPt);
+    /* 前の大きい区画の点が2つ以上、同じ区画（その点を含む一番小さい区画）に入る＝大きい区画どうしがくっついた */
+    const PB=window.__prevBig||[];let merged=false;{const seen=new Set();for(const c of PB){const f=smallest(c[0],c[1]);if(!f)continue;if(seen.has(f)){merged=true;break}seen.add(f)}}
+    window.__curBig=big;return {own,clash,lost,small,n:F.length,tot,merged}}finally{delete RG.segOff;RG.groups.forEach((g,i)=>{g.on=keep[i]})}}`);
+  const cnt = new Map(); raw.segs.forEach(q => { if (q[4] >= 0) cnt.set(q[4], (cnt.get(q[4]) || 0) + 1); });
+  const offS = new Set(off0), cand = raw.groups.map((g, i) => ({ i, on: g.on, n: cnt.get(i) || 0 })).filter(g => g.on && !offS.has(g.i) && g.n >= 20 && !WALL_LAYER.test(String(raw.groups[g.i].layer || ''))).sort((a, b) => b.n - a.n);
+  const tryOff = list => E.__kxTry(list);
+  E.__prevBig = null; let best = tryOff([...offS]); E.__prevBig = E.__curBig;
+  const add = []; let tries = 1, improved = true;
+  try {
+    while (improved && Date.now() - t0 < budget) { improved = false;
+      for (const g of cand) { if (add.includes(g.i)) continue; if (Date.now() - t0 >= budget) break;
+        const r = tryOff([...offS, ...add, g.i]); tries++;
+        const ok = !r.merged && r.lost <= best.lost && r.own >= best.own && r.clash <= best.clash
+          && (r.own > best.own || r.clash < best.clash || (r.small < best.small && Math.abs(r.tot - best.tot) <= best.tot * 0.05 && r.n >= best.n * 0.7));
+        if (globalThis.__kxDbg) console.log('autoLayers try', raw.groups[g.i].layer, g.n, JSON.stringify({own:r.own,clash:r.clash,lost:r.lost,small:r.small,n:r.n,tot:Math.round(r.tot),merged:r.merged}), 'best', JSON.stringify({own:best.own,clash:best.clash,lost:best.lost,small:best.small,n:best.n,tot:Math.round(best.tot)}));
+        if (ok) { best = r; add.push(g.i); E.__prevBig = E.__curBig; improved = true; } } }
+  } finally { E.__prevBig = null; E.__curBig = null; E.__rt = null; E.eval('rgCompute()'); }
+  return { off: add, tries, ms: Date.now() - t0, own: best.own, clash: best.clash };
+}
 export const oldType = t => t === 'trough' ? 'counter' : t;
 export const FIX_NAMES = { toilet: '便器', urinal: '小便器', counter: '洗面台', sink: '手洗器・流し', slop: 'SK（掃除流し）', trough: 'ステンレス流し（長い手洗い）', bath: '浴槽', kitchen: 'キッチン', unknown: '判定保留', other: '器具ではない' };
 /* 器具の種類ごとの、明細に入れる品目の初め（本体・取付手間）。画面で変えられる */
