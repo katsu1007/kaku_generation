@@ -1522,7 +1522,7 @@ function rgSingleLines(){
   const near=k=>{const out=new Set(),a=Math.floor(Math.min(X1[k],X2[k])/CS),b=Math.floor(Math.max(X1[k],X2[k])/CS),c=Math.floor(Math.min(Y1[k],Y2[k])/CS),d=Math.floor(Math.max(Y1[k],Y2[k])/CS);
     if((b-a+1)*(d-c+1)>400)return out;for(let gx=a;gx<=b;gx++)for(let gy=c;gy<=d;gy++){const v=cell.get(gx+","+gy);if(v)v.forEach(j=>out.add(j))}return out};
   /* 相方（平行・間 1.5〜40cm・重なりが短い方の半分以上か 30cm 以上） */
-  const paired=new Uint8Array(N);let pl=0,tl=0;
+  const paired=new Uint8Array(N),pd=new Float64Array(N);let pl=0,tl=0;
   for(let k=0;k<N;k++){if(!(L[k]>0.02))continue;tl+=L[k];if(paired[k]){pl+=L[k];continue}
     for(const j of near(k)){if(j===k||!(L[j]>0.02))continue;if(Math.abs(UX[k]*UY[j]-UY[k]*UX[j])>0.05)continue;
       const d=Math.abs((X1[j]-X1[k])*UY[k]-(Y1[j]-Y1[k])*UX[k]);if(d<0.015||d>0.40)continue;
@@ -1530,6 +1530,10 @@ function rgSingleLines(){
       if(ov>=Math.min(0.3,0.5*Math.min(L[k],L[j]))){paired[k]=1;paired[j]=1;break}}
     if(paired[k])pl+=L[k]}
   if(!(tl>0)||pl/tl<0.3)return new Set();   // 2本線の壁の図面ではない
+  /* 2m 以上の線で、壁の厚み（6〜30cm）の相方が 1m 以上重なる物（下の「家具のかたまり」で壁として残す目印） */
+  for(let k=0;k<N;k++){if(!(L[k]>=2))continue;for(const j of near(k)){if(j===k||!(L[j]>=1))continue;if(Math.abs(UX[k]*UY[j]-UY[k]*UX[j])>0.02)continue;
+    const d=Math.abs((X1[j]-X1[k])*UY[k]-(Y1[j]-Y1[k])*UX[k]);if(d<0.06||d>0.30)continue;
+    const t1=(X1[j]-X1[k])*UX[k]+(Y1[j]-Y1[k])*UY[k],t2=(X2[j]-X1[k])*UX[k]+(Y2[j]-Y1[k])*UY[k];if(Math.min(L[k],Math.max(t1,t2))-Math.max(0,Math.min(t1,t2))>=1){pd[k]=d;break}}}
   /* 両端が壁（残す線）に付いている1本線は残す（柱の面・壁の端の小口）。くり返して広げる */
   const keep=paired.slice(),TOL=0.03;
   const touches=(x,y,k)=>{for(const j of near(k)){if(j===k||!keep[j])continue;const dx=X2[j]-X1[j],dy=Y2[j]-Y1[j],l2=dx*dx+dy*dy;let t=l2?((x-X1[j])*dx+(y-Y1[j])*dy)/l2:0;t=Math.max(0,Math.min(1,t));
@@ -1542,7 +1546,9 @@ function rgSingleLines(){
     for(let k=0;k<N;k++){if(!keep[k]||!(L[k]>0.02))continue;for(const j of near(k)){if(j===k||!keep[j])continue;if(segD(X1[k],Y1[k],j)<=0.03||segD(X2[k],Y2[k],j)<=0.03){const a=fd(k),b=fd(j);if(a!==b)par[a]=b}}}
     const bb=new Map();for(let k=0;k<N;k++){if(!keep[k])continue;const r=fd(k);let v=bb.get(r);if(!v){v=[Infinity,Infinity,-Infinity,-Infinity];bb.set(r,v)}
       v[0]=Math.min(v[0],X1[k],X2[k]);v[1]=Math.min(v[1],Y1[k],Y2[k]);v[2]=Math.max(v[2],X1[k],X2[k]);v[3]=Math.max(v[3],Y1[k],Y2[k])}
-    const big=r=>{const v=bb.get(r);return Math.max(v[2]-v[0],v[3]-v[1])>=6};
+    /* 壁の厚み（6〜30cm）の2本線が 2m 以上続くかたまりも壁（窓・柱・扉で途切れて 6m に届かない建物の外壁。江南の別館） */
+    const wallish=new Set();for(let k=0;k<N;k++){if(keep[k]&&L[k]>=2&&pd[k]>=0.06&&pd[k]<=0.30)wallish.add(fd(k))}
+    const big=r=>{const v=bb.get(r);return Math.max(v[2]-v[0],v[3]-v[1])>=6||wallish.has(r)};
     /* ただし、大きいかたまり（建物の壁）の線と同じ直線の上に、両側とも2.5m以内のすき間で並ぶかたまりは壁の切れ端（ドアとドアの間の壁・出入口の枠）なので残す。机は壁に向かって片側だけ */
     const R=2.5,aligned=k=>{let sa=false,sb=false;const ax=Math.floor((Math.min(X1[k],X2[k])-R)/CS),bx=Math.floor((Math.max(X1[k],X2[k])+R)/CS),ay=Math.floor((Math.min(Y1[k],Y2[k])-R)/CS),by=Math.floor((Math.max(Y1[k],Y2[k])+R)/CS);
       if((bx-ax+1)*(by-ay+1)>900)return false;
