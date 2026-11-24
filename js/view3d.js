@@ -61,7 +61,19 @@ function furnBoxes(d) {
 /* 器具の背中（壁側）：読み取りで分かっていない器具（線の形で拾った洋便器・洗面台など）は、四角の4辺のうち、
  * いちばん近くに平行な壁の線（50cm 以上）がある辺を背中にする。前は縦横の長さだけで決めていて、半分くらい向きが逆になっていた
  * （かつ「洗面台と洋便器の方向間違えてるのもある」・2026-11-24） */
-function backOf(x, longSegs) {
+/* 便器の背中：鉢（楕円の細かい曲線）が外にはみ出している側が前、その反対が背中（三井屋：ブースの仕切りを背中の壁と見間違えていた。2026-11-24）。
+ * 箱の4辺それぞれの外 30cm の帯にある短い線（20cm 未満）の数で決める。はっきりしない時は '' */
+function bowlBack(x, segs) {
+  const b = x.b, x0 = Math.min(b[0], b[2]), x1 = Math.max(b[0], b[2]), y0 = Math.min(b[1], b[3]), y1 = Math.max(b[1], b[3]), D = 0.3, c = { N: 0, S: 0, E: 0, W: 0 };
+  for (const s of segs) { if (Math.hypot(s[2] - s[0], s[3] - s[1]) >= 0.2) continue; const mx = (s[0] + s[2]) / 2, my = (s[1] + s[3]) / 2;
+    if (mx >= x0 && mx <= x1) { if (my > y1 && my <= y1 + D) c.N++; else if (my < y0 && my >= y0 - D) c.S++; }
+    if (my >= y0 && my <= y1) { if (mx > x1 && mx <= x1 + D) c.E++; else if (mx < x0 && mx >= x0 - D) c.W++; } }
+  const o = Object.entries(c).sort((a, b) => b[1] - a[1]);
+  if (o[0][1] < 6 || o[0][1] < o[1][1] * 2) return '';
+  return { N: 'S', S: 'N', E: 'W', W: 'E' }[o[0][0]];
+}
+function backOf(x, longSegs, segs) {
+  if (x.t === 'toilet' && segs) { const bb = bowlBack(x, segs); if (bb) return bb; }
   const b = x.b, sides = { N: [b[1] < b[3] ? b[3] : b[1], 'h'], S: [Math.min(b[1], b[3]), 'h'], E: [Math.max(b[0], b[2]), 'v'], W: [Math.min(b[0], b[2]), 'v'] };
   const x0 = Math.min(b[0], b[2]), x1 = Math.max(b[0], b[2]), y0 = Math.min(b[1], b[3]), y1 = Math.max(b[1], b[3]);
   let best = '', bd = 0.35;
@@ -99,7 +111,13 @@ function shownFaces(d, sheetOff = true) {
 }
 /* 3Dに立ち上げる線：出す区画のふちの近く（60cm 以内）を通る線だけ。図の区切り・表・寸法・図枠の線は部屋から離れているので壁にしない。
  * 部屋の中に浮いている線（ふちから 15cm 以上内側。机・椅子・テーブル・棚など）も壁にしない（かつ「机と椅子は無視して良い。知りたいのは壁と床」） */
-export function wallSegs(segs, faces) {
+/* 器具の線は壁にしない（壁も器具も1つのレイヤーの図面＝三井屋で、洗面台が天井まで・便器から壁が立っていた。2026-11-24）：
+ * 両端が器具の箱（3cm 広げた）の中の線と、器具の箱から 50cm 以内の 20cm 未満の短い線（便器の鉢などの曲線） */
+export function wallSegs(segs, faces, fxBoxes = []) {
+  const FXB = fxBoxes.map(b => [Math.min(b[0], b[2]), Math.min(b[1], b[3]), Math.max(b[0], b[2]), Math.max(b[1], b[3])]);
+  const inB = (x, y, b, m) => x >= b[0] - m && x <= b[2] + m && y >= b[1] - m && y <= b[3] + m;
+  if (FXB.length) segs = segs.filter(s => !FXB.some(b => (inB(s[0], s[1], b, 0.03) && inB(s[2], s[3], b, 0.03))
+    || (Math.hypot(s[2] - s[0], s[3] - s[1]) < 0.2 && inB((s[0] + s[2]) / 2, (s[1] + s[3]) / 2, b, 0.5))));
   const C = 1, E = new Map(), key = (x, y) => x + ',' + y;
   faces.forEach((f, fi) => f.poly.forEach((a, k) => { const b = f.poly[(k + 1) % f.poly.length];
     const x0 = Math.floor((Math.min(a[0], b[0]) - 0.6) / C), x1 = Math.floor((Math.max(a[0], b[0]) + 0.6) / C), y0 = Math.floor((Math.min(a[1], b[1]) - 0.6) / C), y1 = Math.floor((Math.max(a[1], b[1]) + 0.6) / C);
@@ -123,7 +141,7 @@ export function toOld(p) {
   /* 家具の箱も、出す区画の中（ふちから 30cm 外まで）にある物だけ（表題欄・凡例の中の形を家具と見た物が建物の外に浮いていた） */
   const inSF = (x, y) => SF.some(f => pip(x, y, f.poly) || f.poly.some((A, i) => { const B = f.poly[(i + 1) % f.poly.length], dx = B[0] - A[0], dy = B[1] - A[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - A[0]) * dx + (y - A[1]) * dy) / L)) : 0; return Math.hypot(x - A[0] - dx * t, y - A[1] - dy * t) < 0.3; }));
   const FB = furnBoxes(d).filter(o => !SF.length || inSF((o.b[0] + o.b[2]) / 2, (o.b[1] + o.b[3]) / 2));
-  const P = { segs: SF.length ? wallSegs(plan.segs || [], SF) : (plan.segs || []), dsegs: plan.dsegs || [], titles: plan.titles || [], furn: FB,
+  const P = { segs: SF.length ? wallSegs(plan.segs || [], SF, (d.fixtures || []).filter(x => x && x.b && x.t !== 'other').map(x => x.b)) : (plan.segs || []), dsegs: plan.dsegs || [], titles: plan.titles || [], furn: FB,
     faces: plan.faces.filter(f => ids.has(f.i)).map((f, k) => ({ i: f.i, no: (f.no || k + 1), name: f.name || '', area: f.area, peri: f.peri, ch: f.ch || 0, poly: f.poly, bb: bbOf(f.poly) })) };
   /* 部屋の名前の札：前は区画の外の四角（bb）が渡っていなかったので、全部の札が座標の 0,0 に重なっていた（「受 事 区画90 イレ 袋」のように重なって読めない）。
    * 区画の中の点に置き、いくつかの区画をまとめた部屋は、いちばん広い区画に1つだけ出す */
@@ -148,15 +166,18 @@ export function toOld(p) {
   /* どの区画にも入らない器具（建物の外・図枠の余白・凡例など）は3Dに出さない（かつ「外に洗面台とか」・2026-11-24）。
    * 器具の四角の真ん中・少し内側の4隅・4辺の30cm外のどれかが区画の中にあれば出す（壁ぎわの器具は区画の形から欠けていることがあるため） */
   const FP = SF.length ? SF : (plan.faces || []).filter(f => f.poly && f.poly.length > 2);
+  const FPB = FP.length ? FP.reduce((a, f) => { f.poly.forEach(q => { a[0] = Math.min(a[0], q[0]); a[1] = Math.min(a[1], q[1]); a[2] = Math.max(a[2], q[0]); a[3] = Math.max(a[3], q[1]); }); return a; }, [Infinity, Infinity, -Infinity, -Infinity]) : null;
   const inAnyFace = b => { const x0 = Math.min(b[0], b[2]), x1 = Math.max(b[0], b[2]), y0 = Math.min(b[1], b[3]), y1 = Math.max(b[1], b[3]), ix = (x1 - x0) * .2, iy = (y1 - y0) * .2;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, o = 0.3;   /* 区画の形は器具の所が欠けていることがあるので、器具の4辺の 30cm 外も見る（器具の前の床） */
     const pts = [[cx, cy], [x0 + ix, y0 + iy], [x1 - ix, y0 + iy], [x1 - ix, y1 - iy], [x0 + ix, y1 - iy], [cx, y0 - o], [cx, y1 + o], [x0 - o, cy], [x1 + o, cy]];
     if (!FP.length || pts.some(q => FP.some(f => pip(q[0], q[1], f.poly)))) return true;
     /* ブースが区画になっていない図面もあるので、区画のふちから 1m 以内なら出す。それより離れた物（建物の外）だけ外す */
     const near = (px, py) => FP.some(f => f.poly.some((A, i) => { const B = f.poly[(i + 1) % f.poly.length], dx = B[0] - A[0], dy = B[1] - A[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((px - A[0]) * dx + (py - A[1]) * dy) / L)) : 0; return Math.hypot(px - A[0] - dx * t, py - A[1] - dy * t) < 1; }));
-    return near(cx, cy); };
+    if (near(cx, cy)) return true;
+    /* 部屋が取れていない所の器具（壁も器具も1つのレイヤー＝三井屋で、便所の真ん中が区画になっていない）：器具の真ん中が、出す区画全部の外まわりの四角（建物の範囲・30cm 広げた）の中なら出す */
+    return !!FPB && cx >= FPB[0] - 0.3 && cx <= FPB[2] + 0.3 && cy >= FPB[1] - 0.3 && cy <= FPB[3] + 0.3; };
   const longSegs = (plan.segs || []).filter(s => Math.hypot(s[2] - s[0], s[3] - s[1]) >= 0.5);
-  const fix = { fx: (d.fixtures || []).map((x, k) => ({ id: 'f' + k, t: shownFixType(TF, x, k), b: x.b, back: x.back || backOf(x, longSegs) })).filter((x, k) => !inReg[k] && x.t !== 'unknown' && x.t !== 'other' && inAnyFace(x.b)), doors: (d.doors || []).map(x => ({ c: x.c, m: x.m, r: x.r })) };
+  const fix = { fx: (d.fixtures || []).map((x, k) => ({ id: 'f' + k, t: shownFixType(TF, x, k), b: x.b, back: (x.src === 'rescue' && !x.edited && shownFixType(TF, x, k) === 'toilet' && bowlBack(x, plan.segs || [])) || x.back || backOf({ ...x, t: shownFixType(TF, x, k) }, longSegs, plan.segs || []) }))   /* 線の形で拾った便器は、鉢のある側から向きを決める */.filter((x, k) => !inReg[k] && x.t !== 'unknown' && x.t !== 'other' && inAnyFace(x.b)), doors: (d.doors || []).map(x => ({ c: x.c, m: x.m, r: x.r })) };
   const cur = { id: '__k3d', name: p.name || '', rooms, places, win: {}, win3d: clone(d.win3d || []), openAuto: true,
     wire: { on: (d.lights || []).length > 0 || (d.outlets || []).length > 0, sw: 'e-sw1', cL: 'e-v16-2', cO: 'e-v20-2', extra: d.wireExtra ?? 10, out: (d.outlets || []).length > 0, link } };
   /* 配線の線と長さは新しい画面の計算（ブースは外の部屋のスイッチ、置いたスイッチ・つなぎ替え込み）をそのまま見せる */
