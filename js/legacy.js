@@ -49,8 +49,11 @@ export async function readWithFixtures(file, opt = {}) {
     await step('線を読んで、部屋の区画を探しています');
     try { const E0 = W.document.getElementById('engineFrame').contentWindow; E0.eval('try{if(typeof RG!=="undefined"&&RG)delete RG.userOff}catch(e){}'); } catch (e) { /* 前の図面の「外した線」を持ち越さない */ }
     G('KAKU_plan=null;KAKU_fix=null;runDrawingImport()');
-    const ok = await wait(() => G('KAKU_plan'), 90000);
+    /* 前のKAKUが区画を見つけられずに終わった時（単位が合わない・線が無いなど）は、90秒待たずにその知らせを返す */
+    const stOf = () => { const e = W.document.getElementById('drawingStatus'); return e ? e.textContent || '' : ''; };
+    const ok = await wait(() => G('KAKU_plan') || (stOf() && !/解析中/.test(stOf()) ? 'end' : null), 90000);
     if (!ok) throw new Error('図面を読めませんでした（時間切れ）');
+    if (ok === 'end') throw new Error(stOf().replace(/\s*\/\s*部屋候補が見つかりませんでした$/, '') || '図面から区画を見つけられませんでした');
     await wait(() => G('KAKU_fix'), 8000);
     /* かつが「線を外す」で外した線（opt.lineOff：keys＝同じ種類の線〈レイヤー｜色｜線種〉、segs＝その線だけ〈図面の座標〉）。
      * 外してから区画を探し直し、前のKAKUの図面（KAKU_plan）もそれに入れ替える。後の新しい読み取り（試し）の探し直しにも効く */

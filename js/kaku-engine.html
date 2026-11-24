@@ -1716,6 +1716,8 @@ function rgInit(entry){
   /* 書いてある単位が図面の大きさと合わない時（m のはずが幅2km超、cm のはずが幅1km超）は、mm で描いた図面と見る。
      単位を書き出すソフトの初期値のままになっている図面がある。jww は縮尺から実寸を出しているので対象外 */
   if(!entry.geo.real&&((unit==="m"&&(Mx-mx)>2000)||(unit==="cm"&&(Mx-mx)>100000)))unit="mm";
+  /* m と書いてあるのに幅が300m超で、ドアの円弧の半径が50〜120（cm で 0.5〜1.2m）の図面は、cm で描いた図面と見る（単位の書き間違い） */
+  if(!entry.geo.real&&unit==="m"&&(Mx-mx)>300){const dr=(entry.geo.arcs||[]).filter(a=>a.sweep>80&&a.sweep<100).map(a=>a.r).sort((a,b)=>a-b),r=dr.length?dr[dr.length>>1]:0;if(r>=50&&r<=120)unit="cm"}
   if(!unit){  /* 単位が書いていない：全体が小さくて、ドアの円弧が0.5〜1.2なら m で描いた図面 */
     const dr=(entry.geo.arcs||[]).filter(a=>a.sweep>80&&a.sweep<100).map(a=>a.r).sort((a,b)=>a-b),r=dr.length?dr[dr.length>>1]:0;
     unit=(Mx-mx)>0&&(Mx-mx)<300&&r>=0.5&&r<=1.2?"m":"mm"}
