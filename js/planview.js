@@ -196,7 +196,7 @@ export function planView(box, plan, opt = {}) {
     vb = [ux - (ux - vb[0]) * f, uy - (uy - vb[1]) * f, vb[2] * f, vb[3] * f]; set();
   };
   /* 物をつかんで動かす（opt.onDragStart が物を返した時だけ。図はずらさない）。0.45秒押したままなら long（1個だけ動かす合図） */
-  let drag = null, dragStart = null, longT = null, loupe = false, lpStart = null, lpMovedFar = false, lpAt = null;
+  let drag = null, dragStart = null, dragTol = 6, longT = null, loupe = false, lpStart = null, lpMovedFar = false, lpAt = null;
   const lpEl = box.querySelector('.pv-loupe'), lpSvg = lpEl.querySelector('svg'), wrap = box.querySelector('.pv-wrap');
   const LP = 150, ZOOM = 3.2;
   function showLoupe(cx, cy) {
@@ -222,7 +222,7 @@ export function planView(box, plan, opt = {}) {
     if (pts.size === 1 && opt.onDragStart) {
       const [ux, uy, sc] = toUser(e.clientX, e.clientY);
       drag = opt.onDragStart(ux, -uy, sc) || null;
-      if (drag) { dragStart = [e.clientX, e.clientY]; longT = setTimeout(() => { if (drag && !moved) { drag.long = true; if (navigator.vibrate) navigator.vibrate(15); drag.onLong && drag.onLong(); } }, 450); }
+      if (drag) { dragStart = [e.clientX, e.clientY]; dragTol = e.pointerType === 'mouse' ? 6 : 14; longT = setTimeout(() => { if (drag && !moved) { drag.long = true; if (navigator.vibrate) navigator.vibrate(15); drag.onLong && drag.onLong(); } }, 450); }
     }
     /* 虫めがね：何もつかんでいない所を0.45秒押したままにすると、指の所を大きく見せる。線の端・線の上に吸い付き、離した所に決める */
     if (pts.size === 1 && !drag) { lpStart = [e.clientX, e.clientY]; longT = setTimeout(() => { if (pts.size === 1 && !lpMovedFar) { loupe = true; if (navigator.vibrate) navigator.vibrate(15); showLoupe(e.clientX, e.clientY); } }, 450); lpMovedFar = false; }
@@ -234,7 +234,8 @@ export function planView(box, plan, opt = {}) {
     if (pts.size === 1 && lpStart && Math.hypot(e.clientX - lpStart[0], e.clientY - lpStart[1]) > 8) { lpMovedFar = true; clearTimeout(longT); }
     if (pts.size === 1 && drag) {
       const tx = e.clientX - dragStart[0], ty = e.clientY - dragStart[1];
-      if (!moved && Math.hypot(tx, ty) < 6) return;
+      /* 指のタップは少しずれる（iPhone で 6〜12px）。指の時は 14px までは動かしていない＝タップと見る（かつ「スイッチをタップしても青くなるだけで消えない」） */
+      if (!moved && Math.hypot(tx, ty) < dragTol) return;
       moved = true; clearTimeout(longT);
       const s = toUser(0, 0)[2]; drag.move(tx * s, -ty * s, tx, ty);
       return;
