@@ -28,27 +28,45 @@ export function currentFin(p, roomId) {
   return o;
 }
 
-/* 選んだ品目を入れる（rooms：部屋idの配列。fin：枠ごとの品目id、空ならその枠は外す） */
-export function applyFin(p, rooms, fin) {
+/* 1つの枠（slot）に品目を入れる・外す（rooms：部屋idの配列。want：品目id、空ならその枠から外す） */
+export function applySlot(p, rooms, k, want) {
+  const s = SLOTS.find(x => x.k === k); if (!s) return;
   const all = p.rooms.map(r => r.id), M = masterItems();
-  SLOTS.forEach(s => {
-    const want = fin[s.k] || '';
-    p.lines.filter(l => inSlot(l, s)).forEach(l => {
-      if (l.itemId === want) return;
-      if (l.basis.rooms === 'all') { if (rooms.some(id => all.includes(id))) l.basis.rooms = all.filter(id => !rooms.includes(id)); }
-      else l.basis.rooms = l.basis.rooms.filter(id => !rooms.includes(id));
-    });
-    if (want) {
-      let l = p.lines.find(l => inSlot(l, s) && l.itemId === want);
-      if (l) { if (l.basis.rooms !== 'all') l.basis.rooms = [...new Set([...l.basis.rooms, ...rooms])]; }
-      else {
-        const it = M.find(i => i.id === want); if (!it) return;
-        p.lines.push({ id: uid('l'), itemId: it.id, name: it.name, spec: [it.spec, s.layer > 1 ? '（下の層）' : ''].filter(Boolean).join(' '), unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: s.measure, rooms: [...rooms] }, ...(s.layer > 1 ? { layer: s.layer } : {}) });
-      }
-    }
+  want = want || '';
+  p.lines.filter(l => inSlot(l, s)).forEach(l => {
+    if (l.itemId === want) return;
+    if (l.basis.rooms === 'all') { if (rooms.some(id => all.includes(id))) l.basis.rooms = all.filter(id => !rooms.includes(id)); }
+    else l.basis.rooms = l.basis.rooms.filter(id => !rooms.includes(id));
   });
+  if (want) {
+    let l = p.lines.find(l => inSlot(l, s) && l.itemId === want);
+    if (l) { if (l.basis.rooms !== 'all') l.basis.rooms = [...new Set([...l.basis.rooms, ...rooms])]; }
+    else {
+      const it = M.find(i => i.id === want); if (!it) return;
+      p.lines.push({ id: uid('l'), itemId: it.id, name: it.name, spec: [it.spec, s.layer > 1 ? '（下の層）' : ''].filter(Boolean).join(' '), unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: s.measure, rooms: [...rooms] }, ...(s.layer > 1 ? { layer: s.layer } : {}) });
+    }
+  }
   /* 部屋が1つも無くなった枠の行は消す（この画面で作った・部屋を外しただけの行） */
-  p.lines = p.lines.filter(l => !(SLOTS.some(s => inSlot(l, s)) && Array.isArray(l.basis.rooms) && !l.basis.rooms.length));
+  p.lines = p.lines.filter(l => !(inSlot(l, s) && Array.isArray(l.basis.rooms) && !l.basis.rooms.length));
+}
+
+/* 選んだ品目を入れる（rooms：部屋idの配列。fin：枠ごとの品目id、空ならその枠は外す） */
+export function applyFin(p, rooms, fin) { SLOTS.forEach(s => applySlot(p, rooms, s.k, fin[s.k] || '')); }
+
+/* 枠の外の品目（「＋項目を追加」で入れた物）：部屋の面積・長さで数える行に部屋を足す・外す */
+export const inAnySlot = l => SLOTS.some(s => inSlot(l, s));
+export function addRoomsToItem(p, rooms, itemId) {
+  const it = masterItems().find(i => i.id === itemId); if (!it || !it.measure) return null;
+  let l = p.lines.find(l => l.itemId === itemId && l.basis && l.basis.measure === it.measure && !inAnySlot(l) && !l.layer);
+  if (l) { if (l.basis.rooms !== 'all') l.basis.rooms = [...new Set([...l.basis.rooms, ...rooms])]; }
+  else { l = { id: uid('l'), itemId: it.id, name: it.name, spec: it.spec || '', unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: it.measure, rooms: [...rooms] } }; p.lines.push(l); }
+  return l;
+}
+export function removeRoomsFromLine(p, rooms, lineId) {
+  const l = p.lines.find(x => x.id === lineId); if (!l || !l.basis) return;
+  const all = p.rooms.map(r => r.id);
+  if (l.basis.rooms === 'all') l.basis.rooms = all.filter(id => !rooms.includes(id)); else l.basis.rooms = l.basis.rooms.filter(id => !rooms.includes(id));
+  if (Array.isArray(l.basis.rooms) && !l.basis.rooms.length) p.lines = p.lines.filter(x => x !== l);
 }
 
 let lastFin = null;
