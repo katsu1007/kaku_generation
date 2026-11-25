@@ -59,6 +59,11 @@ with sync_playwright() as p:
   sel=pg.locator('.wk-panel [data-wkslot=wF]');opt=sel.locator('option').nth(1).get_attribute('value');sel.select_option(opt);pg.wait_for_timeout(500)
   st=pg.evaluate("async()=>{const a=await import('./js/app.js');const p=a.state.projects.find(x=>x.id==='%s');return {n:p.rooms.length,w:p.lines.filter(l=>l.cat==='wall').map(l=>l.basis.rooms.length)}}"%pid)
   ok(st['w'] and st['w'][0]==st['n'] and st['n']>2,f'選んだ区画が全部部屋になって壁の仕上げに入る（{st}）')
+  # その他：トイレブースを選んだ部屋（ブース）の数で入れる
+  pg.click('.wk-panel [data-wk=add][data-part=その他]');pg.wait_for_timeout(300);pg.fill('.modal [data-q]','ブース');pg.wait_for_timeout(200)
+  pg.locator('.modal [data-list] [data-id]').first.click();pg.wait_for_timeout(400)
+  bq=pg.evaluate("async()=>{const a=await import('./js/app.js');const c=await import('./js/calc.js');const p=a.state.projects.find(x=>x.id==='%s');const t=c.totals(p,a.opts());const k=p.lines.findIndex(l=>/ブース/.test(l.name));return k<0?null:[p.lines[k].name,t.lines[k].qty]}"%pid)
+  ok(bq and bq[1]==12,f'その他でトイレブースを足すと、選んだブースの数で入る（{bq}）')
   # 壁を1面ずつ
   pg.click('[data-wkm=wall]');pg.wait_for_timeout(400)
   seg=pg.evaluate("""async()=>{const a=await import('./js/app.js');const p=a.state.projects.find(x=>x.id==='%s');const r=p.rooms[0],f=p.drawing.plan.faces.find(f=>f.i===r.faces[0]);const q=f.poly;let b=null,bl=0;for(let k=0;k<q.length;k++){const u=q[k],v=q[(k+1)%%q.length],L=Math.hypot(v[0]-u[0],v[1]-u[1]);if(L>bl){bl=L;b=[(u[0]+v[0])/2,(u[1]+v[1])/2]}}return b}"""%pid)
@@ -99,4 +104,9 @@ with sync_playwright() as p:
   pg.click('.wk-fs .fs-exit');pg.wait_for_timeout(300)
   ok(pg.locator('.wk-fs').count()==0,'戻るで全画面をやめる')
   pg.screenshot(path=os.environ.get('SHOT','/tmp/work.png'))
+  # 器具を明細に入れる：紙巻器・トイレブースの行がある
+  pg.evaluate("location.hash='#/p/%s/2'"%pid);pg.wait_for_timeout(1200)
+  pg.evaluate("document.querySelector('[data-act=fixLines]')&&document.querySelector('[data-act=fixLines]').click()");pg.wait_for_timeout(500)
+  ft=pg.evaluate("[...document.querySelectorAll('.modal [data-ft]')].map(e=>e.dataset.ft+':'+e.querySelector('.pill').textContent)")
+  ok(any(x.startswith('booth:') for x in ft) and any(x.startswith('paper:') for x in ft),f'器具を明細に入れるに紙巻器・トイレブースの行がある（{ft}）')
   print(errs or 'no errors');b.close()

@@ -60,8 +60,9 @@ export function applyFin(p, rooms, fin) { SLOTS.forEach(s => applySlot(p, rooms,
 
 /* 枠の外の品目（「＋項目を追加」で入れた物）：部屋の面積・長さで数える行に部屋を足す・外す */
 export const inAnySlot = l => SLOTS.some(s => inSlot(l, s));
-export function addRoomsToItem(p, rooms, itemId) {
-  const it = masterItems().find(i => i.id === itemId); if (!it || !it.measure) return null;
+export function addRoomsToItem(p, rooms, itemId, measure) {
+  const it0 = masterItems().find(i => i.id === itemId); if (!it0) return null;
+  const it = measure ? { ...it0, measure } : it0; if (!it.measure || it.measure === 'manual') return null;   // measure：品目の数え方を変える時（その他＝部屋の数 'count'）
   let l = p.lines.find(l => l.itemId === itemId && l.basis && l.basis.measure === it.measure && l.extra && !l.layer);
   if (l) { if (l.basis.rooms !== 'all') l.basis.rooms = [...new Set([...l.basis.rooms, ...rooms])]; }
   else { l = { id: uid('l'), itemId: it.id, name: it.name, spec: it.spec || '', unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: it.measure, rooms: [...rooms] }, extra: true }; p.lines.push(l); }

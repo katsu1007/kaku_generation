@@ -27,7 +27,7 @@ import { supplementFaces, polygonizeFaces } from './polygonize.js';
 import { extractDxfDims, checkDimensions, dimCheckFor } from './dxf-dims.js';
 import { estimateSymScale, symScaleFor, scaleCheck, scaleTargetFor, userCoef, scaleGeomBy } from './symscale.js';
 import { correctFixtureTypes } from './typefix.js';
-import { USES, DEF_LM, needCount, pitchFor, luxOf, wirePlan, cableQty, pip, polyD } from './lighting.js';
+import { USES, DEF_LM, needCount, pitchFor, luxOf, wirePlan, cableQty, pip, polyD, boothHosts } from './lighting.js';
 /* iPhone・iPad では、選べるファイルの種類を絞ると .jww・.jwc・.dxf が灰色になって選べない（iPhone がこの拡張子を知らないため）。
    なので iPhone・iPad では絞らない。何を選んでも、読み込む時に拡張子で見分けるので困らない */
 const IOS = typeof navigator !== 'undefined' && (/iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
@@ -750,9 +750,17 @@ function fixLinesDialog(p, after) {
   const c = {}; const corrIn = {}; let nCorr = 0; const use = fixturesInUse(p.drawing); let nOff = 0;
   fx.forEach((x, k) => { if (!use[k]) { nOff++; return; } const t = shownFixType(TF, x, k); c[t] = (c[t] || 0) + 1; if (TF[k] && TF[k].shown) { corrIn[t] = (corrIn[t] || 0) + 1; nCorr++; } });
   const items = masterItems();
-  const types = Object.keys(c).filter(t => FIX_ITEMS[t]);
+  /* 紙巻器・トイレブース（前のKAKUの「器具の数を明細に入れる」にあった行。移す時に抜けていた・かつ「トイレ用パーテーションの選択無くなった？」）：
+     紙巻器は便器1台に1個、ブースは図面のブースの区画（2.5㎡以下で便器が1つ・ドアのある区画）の数 */
+  const XN = { paper: '紙巻器', booth: 'トイレブース' }, XI = { paper: ['fx-paper', 'w-fxAcc'], booth: ['fx-boothM', 'w-booth'] }, XW = { paper: ['紙巻', 'トイレ小物'], booth: ['ブース'] };
+  const XNOTE = {};
+  if (c.toilet) { c.paper = c.toilet; XNOTE.paper = `便器1台に1個として ${c.toilet} 個`;
+    let nb = 0; try { const d0 = p.drawing, F0 = (d0.plan.faces || []).filter(f => f.poly && f.area >= .6), fx0 = fx.filter((x, k) => use[k]).map(x => ({ ...x, t: shownFixType(TF, x, fx.indexOf(x)) })); nb = Object.keys(boothHosts(F0, fx0, d0.doors || [])).length; } catch (e) { console.warn('ブースを数えられませんでした', e); }
+    c.booth = nb; XNOTE.booth = nb ? `ブースの区画から ${nb} 室` : '図面からブースが見つかりませんでした（数を入れてください）'; }
+  const NM = t => XN[t] || FIX_NAMES[t], IT = t => XI[t] || FIX_ITEMS[t];
+  const types = Object.keys(c).filter(t => IT(t));
   const opts2 = (t, kind, def) => {
-    const words = FIX_WORDS[t] || [];
+    const words = XW[t] || FIX_WORDS[t] || [];
     const list = items.filter(i => words.some(w => i.name.includes(w)) && (kind === 'labor' ? i.kind === 'labor' : i.kind !== 'labor'));
     return `<option value="">入れない</option>` + list.map(i => `<option value="${esc(i.id)}" ${i.id === def ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}（${yen(i.price)}）</option>`).join('');
   };
@@ -763,9 +771,9 @@ function fixLinesDialog(p, after) {
   const m = modal({
     title: '図面の器具を明細に入れる', wide: true,
     body: `<p class="small muted" style="margin-top:0">種類ごとに、入れる品目と数を確かめてください。前に入れた器具の行は入れ直します。${skip ? `「判定保留」「器具ではない」の ${skip} 個は入れません。` : ''}${nOff ? `使わない図・表・表題欄の中の ${nOff} 個は入れません。` : ''}${nCorr ? `種類は辞書と寸法で照合した補正後の表示です（補正 ${nCorr} 件。理由は図面タブのシンボル判定の一覧で見られます）。` : ''}</p>
-      <div class="grid" style="gap:10px">${types.map(t => `<div class="card" style="padding:12px" data-ft="${t}"><div class="row" style="margin-bottom:8px"><b>${esc(FIX_NAMES[t])}</b><span class="pill info">図面で ${c[t]} 個</span>${corrIn[t] ? `<span class="pill warn">うち補正 ${corrIn[t]} 件</span>` : ''}${codeOfType(t) ? `<span class="pill ok">図面の品番 ${esc(codeOfType(t))}</span>` : ''}</div>
-        <div class="grid g3"><label class="f">本体<select class="in" data-k="body">${opts2(t, 'mat', FIX_ITEMS[t][0])}</select></label>
-        <label class="f">取付の手間<select class="in" data-k="labor">${opts2(t, 'labor', FIX_ITEMS[t][1])}</select></label>
+      <div class="grid" style="gap:10px">${types.map(t => `<div class="card" style="padding:12px" data-ft="${t}"><div class="row" style="margin-bottom:8px"><b>${esc(NM(t))}</b><span class="pill info">${XNOTE[t] ? esc(XNOTE[t]) : `図面で ${c[t]} 個`}</span>${corrIn[t] ? `<span class="pill warn">うち補正 ${corrIn[t]} 件</span>` : ''}${codeOfType(t) ? `<span class="pill ok">図面の品番 ${esc(codeOfType(t))}</span>` : ''}</div>
+        <div class="grid g3"><label class="f">本体<select class="in" data-k="body">${opts2(t, 'mat', IT(t)[0])}</select></label>
+        <label class="f">取付の手間<select class="in" data-k="labor">${opts2(t, 'labor', IT(t)[1])}</select></label>
         <label class="f">数<input class="in num" type="number" inputmode="numeric" data-k="n" value="${c[t]}"></label></div></div>`).join('') || '<p class="muted">明細に入れられる器具がありません。</p>'}</div>`,
     foot: `<button class="btn" data-close>やめる</button><button class="btn primary" id="fxGo">明細に入れる</button>`
   });
@@ -2336,13 +2344,14 @@ function workPanel(p, top, after) {
     const fNames = F.map(f => '区画' + f.no);
     const sec = pt => { const ss = SLOTS.filter(s => s.part === pt && isD(s) === demo), ex = exAll.filter(l => WK_PART[l.basis.measure] === pt && !!DEMO(l.cat) === demo);
       if (!ss.length && !ex.length && (demo && pt === '巾木')) return '';
+      const hint = pt === 'その他' && !ex.length ? '<div class="small muted">トイレブースなど、部屋（ブース）1つごとに数える物。選んだ部屋の数で入ります。</div>' : '';
       return `<div class="wk-sec"><div class="wk-sec-h"><b>${pt}</b><span class="spacer"></span><button class="btn sm ghost" data-wk="add" data-part="${pt}">${icon('plus')}${pt}に足す</button></div>
-        ${ss.length ? `<div class="grid g3">${ss.map(slotRow).join('')}</div>` : ''}
+        ${ss.length ? `<div class="grid g3">${ss.map(slotRow).join('')}</div>` : ''}${hint}
         ${ex.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}</div>`; };
     const other = exAll.filter(l => !WK_PART[l.basis.measure] && !!DEMO(l.cat) === demo);
     pn.innerHTML = `<div class="row small" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><b>${esc(names.length ? names.slice(0, 3).join('・') + (names.length > 3 ? ` ほか${names.length - 3}部屋` : '') : fNames.slice(0, 4).join('・') + (fNames.length > 4 ? ` ほか${fNames.length - 4}` : ''))}</b><span class="muted">${F.length} 区画${fl ? `・床 ${Math.round(fl * 100) / 100}㎡` : ''}</span>${free ? `<span class="pill info">まだ部屋でない区画 ${free}：工事を選ぶと部屋になります</span>` : ''}<span class="spacer"></span><button class="btn sm" data-wk="same" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button><button class="btn sm ghost" data-wk="clear">選ぶのをやめる</button></div>
       <div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap"><div class="seg" role="tablist"><button class="${demo ? 'on' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体${nD ? `（${nD}）` : ''}</button><button class="${!demo ? 'on' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規${nN ? `（${nN}）` : ''}</button></div><span class="spacer"></span><button class="btn sm primary" data-wk="next" title="今の区画を終わりにして、まだ工事を選んでいない次の区画を選びます">次の区画へ${icon('next')}</button></div>
-      ${['床', '壁', '天井', '巾木'].map(sec).join('')}
+      ${['床', '壁', '天井', '巾木', ...(demo ? [] : ['その他'])].map(sec).join('')}
       ${other.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="muted">${esc((MEASURES[l.basis.measure] || {}).label || '')}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}`;
   };
   pn.addEventListener('change', e => { const k = e.target.dataset.wkslot; if (!k || e.target.value === '__mix') return; const v = e.target.value; apply(R => applySlot(p, R, k, v)); });
@@ -2366,7 +2375,7 @@ function workPanel(p, top, after) {
       const rr = room && p.rooms.find(x => x.id === room); toast(`壁を入れました（${r3(len)}m × ${h}m）${rr ? `。「${rr.name}」の壁の行から同じ分を引きます` : ''}`, { ms: 4000 }); }
     if (a === 'tab') { wkTab = b.dataset.v; panel(); }
     if (a === 'drop') { const R = roomsSel(); removeRoomsFromLine(p, R, b.dataset.id); syncWaste(p); touch(p); panel(); after(); }
-    if (a === 'add') addItemDialog(wkTab === 'demo', id => apply(R => addRoomsToItem(p, R, id)), b.dataset.part);
+    if (a === 'add') addItemDialog(wkTab === 'demo', (id, ms) => apply(R => addRoomsToItem(p, R, id, ms)), b.dataset.part);
     if (a === 'next') { /* 今の区画を終わりにして、まだ工事を選んでいない次の区画（番号の順）を選んで、そこへ寄せる（かつ「区画選択→工事内容選択→次の区画の内容選択に移行」） */
       const F = plan.faces, off = d.faceOff || {}, J = d.faceJoin || {}, last = Math.max(...[...wkSel].map(i => (F.find(f => f.i === i) || {}).no || 0));
       const todo = f => !off[f.i] && J[f.i] == null && f.poly && f.poly.length >= 3 && !wrapsMany(f, F) && !wkSel.has(f.i) && (() => { const r = roomOfFace(f.i); return !r || !hasWork(r.id); })();
@@ -2380,17 +2389,20 @@ function workPanel(p, top, after) {
   panel();
 }
 /* 「＋項目を追加」：部屋の面積・長さで数える品目から選ぶ（解体のタブは解体の品目、新規は解体以外） */
-const WK_PART = { floor: '床', wall: '壁', perim: '壁', ceil: '天井', base: '巾木' };
+const WK_PART = { floor: '床', wall: '壁', perim: '壁', ceil: '天井', base: '巾木', count: 'その他' };
 function addItemDialog(demo, onPick, part) {
-  const items = masterItems().filter(i => i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && /^demo/.test(i.cat || '') === demo && (!part || WK_PART[i.measure] === part));
+  /* その他＝部屋ごとに1つ数える物（トイレブース・器具など。単位が 室・個・台・式 の品目。部屋の数で数える） */
+  const other = part === 'その他';
+  const items = masterItems().filter(i => /^demo/.test(i.cat || '') === demo && (other ? (i.measure === 'count' || (/^(室|個|台|式|組|箇所|ヶ所|か所)$/.test(i.unit || '') && !/^(s|e|w-e)/.test(i.cat || '') && i.cat !== 'wire' && i.cat !== 'lgs' && i.cat !== 'tsuka'))
+    : (i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && (!part || WK_PART[i.measure] === part))));
   const cats = new Map(categories().map(c => [c[0], c[1]]));
   const m = modal({ title: `${part ? part + 'に足す' : '項目を足す'}（${demo ? '解体' : '新規'}）`, wide: true,
     body: `<input class="in" data-q type="search" placeholder="品目で探す" style="margin-bottom:8px"><p class="small muted" style="margin-top:0">数量は選んだ区画（部屋）の面積・長さから自動で出ます。ほかの品目は下の「一覧から選ぶ」で入れられます。</p><div data-list></div>` });
   const list = m.el.querySelector('[data-list]'), q = m.el.querySelector('[data-q]');
   const show = () => { const w = q.value.trim(); const L = items.filter(i => !w || (i.name + ' ' + (i.spec || '') + ' ' + (cats.get(i.cat) || '')).includes(w)).slice(0, 200);
-    list.innerHTML = L.map(i => `<button class="btn" data-id="${esc(i.id)}" style="display:flex;width:100%;justify-content:flex-start;gap:8px;margin-bottom:4px;text-align:left"><span>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</span><span class="spacer"></span><span class="small muted">${esc(cats.get(i.cat) || '')}・${esc(MEASURES[i.measure].label)}・${yen(i.price)}/${esc(i.unit)}</span></button>`).join('') || '<p class="muted small">見つかりません</p>'; };
+    list.innerHTML = L.map(i => `<button class="btn" data-id="${esc(i.id)}" style="display:flex;width:100%;justify-content:flex-start;gap:8px;margin-bottom:4px;text-align:left"><span>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</span><span class="spacer"></span><span class="small muted">${esc(cats.get(i.cat) || '')}・${esc(other ? '部屋の数' : MEASURES[i.measure].label)}・${yen(i.price)}/${esc(i.unit)}</span></button>`).join('') || '<p class="muted small">見つかりません</p>'; };
   q.addEventListener('input', show); show();
-  list.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; m.close(); onPick(b.dataset.id); toast('項目を追加しました（③工事の行に入りました）'); });
+  list.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; m.close(); onPick(b.dataset.id, other ? 'count' : null); toast(other ? '項目を追加しました（選んだ部屋の数で数えます）' : '項目を追加しました（③工事の行に入りました）'); });
 }
 
 function stepLines(ctx) {
@@ -2558,7 +2570,7 @@ function basisDialog(p, l, after) {
   } else if (B.type === 'link') {
     how = B.parent ? `<p style="margin:0">元の配管「${esc(B.parent.name)}」の長さ ${fmt(B.parent.len, 3)}m × 1mあたり ${fmt(B.rate, 3)} ＝ ${fmt(B.net, 3)}${u}${l.why ? `（${esc(l.why)}）` : ''}</p>` : '<p class="muted" style="margin:0">元の配管の行がありません。</p>';
   } else {
-    const src = l.fromFix ? `図面の器具（${esc(FIX_NAMES[l.fromFix] || '')}）の数から入れた行です。`
+    const src = l.fromFix ? `図面の器具（${esc(FIX_NAMES[l.fromFix] || { paper: '紙巻器', booth: 'トイレブース' }[l.fromFix] || '')}）の数から入れた行です。`
       : l.fromDemo ? '図面で入れた物から自動で作った行です（図面を直すと数量も変わります）。' : '数量は手で入れた数です。';
     how = `<p style="margin:0">${src}</p><p style="margin:6px 0 0">入れた数量：<b>${fmt(B.net, 3)}</b>${u}</p>`;
   }
