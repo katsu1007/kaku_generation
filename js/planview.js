@@ -116,7 +116,7 @@ export function planView(box, plan, opt = {}) {
   set();
   /* 図面の縦横の比に合わせて高さを決める（横長の図面で下が空かないように） */
   const fitH = () => { if (!box.isConnected) { window.removeEventListener('resize', fitH); return; }   // 描き直して外れた図面の分は外す（描き直すたびに溜まっていた）
-    if (box.closest('.dwg-fs')) { svg.style.height = ''; return; } const w = box.clientWidth || 600; /* スマホの縦は、横長の図面でも画面の半分の高さを取る（寄せて編集しやすく） */ const lo = window.innerWidth <= 900 && window.innerHeight > window.innerWidth ? Math.min(window.innerHeight * 0.5, 480) : 240; svg.style.height = Math.round(Math.max(lo, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
+    if (box.closest('.dwg-fs, .wk-fs')) { svg.style.height = ''; return; } const w = box.clientWidth || 600; /* スマホの縦は、横長の図面でも画面の半分の高さを取る（寄せて編集しやすく） */ const lo = window.innerWidth <= 900 && window.innerHeight > window.innerWidth ? Math.min(window.innerHeight * 0.5, 480) : 240; svg.style.height = Math.round(Math.max(lo, Math.min(window.innerHeight * 0.62, 560, w * base[3] / base[2]))) + 'px'; };
   fitH();
   window.addEventListener('resize', fitH);
 

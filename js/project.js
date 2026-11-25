@@ -2237,20 +2237,22 @@ function lineCard(l, rooms, lines = []) {
 
 /* ③工事の上の図面：区画をタップして、その区画（部屋）の工事を 解体・新規 のタブで選ぶ（かつ・2026-11-25）。
  * 選んだ品目は部屋の面積・長さで数える行に入る（②の仕上げと同じ行）。まだ部屋にしていない区画は、工事を決めた時に1区画1部屋で作る */
-let wkKeep = null, wkTab = 'demo', wkPid = '', wkMode = 'face';
+let wkKeep = null, wkTab = 'demo', wkPid = '', wkMode = 'face', wkFs = false;
 const wkSel = new Set(), wkWsel = new Set();
 function workPanel(p, top, after) {
-  if (wkPid !== p.id) { wkSel.clear(); wkWsel.clear(); wkKeep = null; wkPid = p.id; wkMode = 'face'; }
+  if (wkPid !== p.id) { wkSel.clear(); wkWsel.clear(); wkKeep = null; wkPid = p.id; wkMode = 'face'; wkFs = false; }
+  if (wkFs) document.body.classList.add('dwg-fs-on');
   const d = p.drawing, plan = d && d.plan;
   if (!plan || !(plan.faces || []).length) { top.innerHTML = ''; return; }
   const roomOfFace = i => { const J = d.faceJoin || {}; let k = 0, j = i; while (J[j] != null && k++ < 20) j = J[j]; return p.rooms.find(r => (r.faces || []).includes(i) || (r.faces || []).includes(j)); };
   const owner = () => { const m = new Map(); p.rooms.forEach(r => (r.faces || []).forEach(i => m.set(i, r.color))); Object.entries(d.faceJoin || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); }); return m; };
   [...wkSel].forEach(i => { if (!plan.faces.some(f => f.i === i)) wkSel.delete(i); });
   const keep = wkKeep && wkKeep();
-  top.innerHTML = `<div class="card" style="margin-bottom:12px;padding:10px"><div class="seg" style="margin-bottom:6px"><button data-wkm="face" class="${wkMode === 'face' ? 'on' : ''}">区画の工事</button><button data-wkm="wall" class="${wkMode === 'wall' ? 'on' : ''}">壁を1面ずつ</button></div><div class="small muted" style="margin-bottom:6px">${wkMode === 'face' ? '区画をタップして選びます（続けてタップで足す・もう一度で外す）。<b>✓</b> は工事を選んだ部屋です。' : '仕様を変える壁の線をタップしてください（何本でも）。'}</div><div class="wk-view"></div><div class="wk-panel" style="margin-top:8px"></div></div>`;
+  top.innerHTML = `<div class="card${wkFs ? ' wk-fs' : ''}" style="margin-bottom:12px;padding:10px">${wkFs ? '' : `<button class="btn fs-open" data-wkfs>${icon('full')}図面を画面いっぱいにして選ぶ</button>`}<div class="seg wk-modes" style="margin-bottom:6px">${wkFs ? `<button class="fs-exit" data-wkfs title="全画面をやめる">${icon('shrink')}戻る</button>` : ''}<button data-wkm="face" class="${wkMode === 'face' ? 'on' : ''}">区画の工事</button><button data-wkm="wall" class="${wkMode === 'wall' ? 'on' : ''}">壁を1面ずつ</button></div><div class="small muted wk-hint" style="margin-bottom:6px">${wkMode === 'face' ? '区画をタップして選びます（続けてタップで足す・もう一度で外す）。<b>✓</b> は工事を選んだ部屋です。' : '仕様を変える壁の線をタップしてください（何本でも）。'}</div><div class="wk-view"></div><div class="wk-panel" style="margin-top:8px"></div></div>`;
   const hasWork = id => p.lines.some(l => isRoomBased(l) && (l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id)))) || (d.walls || []).some(w => w.room === id);
   const view = planView(top.querySelector('.wk-view'), plan, {
-    keep, selected: () => (wkMode === 'face' ? wkSel : new Set()), owner, mode: () => (wkMode === 'wall' ? 'wall' : 'room'),
+    keep, selected: () => (wkMode === 'face' ? wkSel : new Set()), owner,
+    extraTools: `<button class="iconbtn" data-wkfs title="${wkFs ? '全画面をやめる' : '全画面で選ぶ'}" aria-label="${wkFs ? '全画面をやめる' : '全画面で選ぶ'}">${icon(wkFs ? 'shrink' : 'full')}</button>`, mode: () => (wkMode === 'wall' ? 'wall' : 'room'),
     onPoint: (x, y, sc) => { if (wkMode !== 'wall') return; const k = nearestSeg(plan, x, y, sc * 18); if (k < 0) return; const first = !wkWsel.size; if (wkWsel.has(k)) wkWsel.delete(k); else wkWsel.add(k); ov(); panel(); if (first) showPn(); },
     marks: () => { const o = {}; Object.keys(d.faceOff || {}).forEach(i => { if (d.faceOff[i]) o[i] = { s: 'out', type: 'off', why: '区画ではない', hide: true }; }); return o; },
     rooms: () => { const J = d.faceJoin || {}; return p.rooms.filter(r => r.src === 'plan' && (r.faces || []).length).map(r => { const fs = new Set(r.faces); Object.entries(J).forEach(([a, b]) => { if (fs.has(b)) fs.add(+a); }); return { faces: [...fs], color: r.color, name: (r.name || '部屋') + (hasWork(r.id) ? ' ✓' : ''), area: r.area }; }); },
@@ -2270,6 +2272,8 @@ function workPanel(p, top, after) {
     view.overlay(h); };
   ov();
   top.querySelectorAll('[data-wkm]').forEach(b => b.onclick = () => { wkMode = b.dataset.wkm; workPanel(p, top, after); });
+  /* 全画面：図面を画面いっぱいにして、下に工事の欄（②の全画面と同じ形。かつ「それええな つけよか」・2026-11-25） */
+  top.querySelectorAll('[data-wkfs]').forEach(b => b.onclick = e => { e.stopPropagation(); wkFs = !wkFs; document.body.classList.toggle('dwg-fs-on', wkFs); workPanel(p, top, after); if (!wkFs) top.scrollIntoView({ block: 'start' }); });
   const M = masterItems(), DEMO = c => /^demo/.test(c || '');
   const roomsSel = () => [...new Set([...wkSel].map(i => roomOfFace(i)).filter(Boolean).map(r => r.id))];
   /* 工事を決める時：まだ部屋にしていない区画は1区画1部屋で作る */
