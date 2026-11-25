@@ -3,8 +3,8 @@
  * 保存は localStorage（自分の辞書 kakugen-symdict-user と同じ流儀）。案件・バックアップには入れない。
  * ここは画面に触らない純粋な部品（tests/finpreset.test.mjs でテスト）。枠の並びは roomfin.js の SLOTS と同じ。 */
 export const PRESET_KEY = 'kakugen-finpreset';
-export const SLOT_KEYS = ['fD', 'fB', 'fF', 'wD', 'wD2', 'wL', 'wB', 'wF', 'cD', 'cL', 'cF', 'bF'];
-export const SLOT_LABELS = { fD: '床・解体', fB: '床・下地', fF: '床・仕上げ', wD: '壁・解体', wD2: '壁・下の層も解体', wL: '壁・下地（軽量）', wB: '壁・下地（ボード）', wF: '壁・仕上げ', cD: '天井・解体', cL: '天井・下地（軽量）', cF: '天井・仕上げ', bF: '巾木' };
+export const SLOT_KEYS = ['fD', 'fB', 'fF', 'wD', 'wD2', 'wL', 'wB', 'wF', 'cD', 'cL', 'cF', 'cM', 'bF'];
+export const SLOT_LABELS = { fD: '床・解体', fB: '床・下地', fF: '床・仕上げ', wD: '壁・解体', wD2: '壁・下の層も解体', wL: '壁・下地（軽量）', wB: '壁・下地（ボード）', wF: '壁・仕上げ', cD: '天井・解体', cL: '天井・下地（軽量）', cF: '天井・仕上げ', cM: '天井・廻り縁・見切り縁', bF: '巾木' };
 
 /* 枠ごとの品目idだけを残す（知らない枠・空は捨てる）。fin は { 枠: 品目id } */
 export function cleanFin(fin, slotKeys = SLOT_KEYS) {

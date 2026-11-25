@@ -59,6 +59,14 @@ with sync_playwright() as p:
   sel=pg.locator('.wk-panel [data-wkslot=wF]');opt=sel.locator('option').nth(1).get_attribute('value');sel.select_option(opt);pg.wait_for_timeout(500)
   st=pg.evaluate("async()=>{const a=await import('./js/app.js');const p=a.state.projects.find(x=>x.id==='%s');return {n:p.rooms.length,w:p.lines.filter(l=>l.cat==='wall').map(l=>l.basis.rooms.length)}}"%pid)
   ok(st['w'] and st['w'][0]==st['n'] and st['n']>2,f'選んだ区画が全部部屋になって壁の仕上げに入る（{st}）')
+  # 天井：廻り縁・見切り縁の欄、壁に長さを入れる見切り材
+  ok(pg.locator('.wk-panel [data-wkslot=cM] option[value=k-ceil]').count()==1 and pg.locator('.wk-panel [data-wkslot=cM] option[value=t-mmdf]').count()==1,'天井に廻り縁・見切り縁の欄がある')
+  ok(pg.locator('.wk-panel [data-wkslot=bF] option[value=t-mmdf]').count()==0,'巾木の欄に廻り縁が混ざらない')
+  pg.click('.wk-panel [data-wk=add][data-part=壁]');pg.wait_for_timeout(300);pg.fill('.modal [data-q]','出隅');pg.wait_for_timeout(200)
+  pg.locator('.modal [data-list] [data-id]').first.click();pg.wait_for_timeout(300)
+  pg.fill('.modal [data-len]','4.8');pg.click('.modal [data-ok]');pg.wait_for_timeout(400)
+  sec=pg.evaluate("[...document.querySelectorAll('.wk-panel .wk-sec')].find(e=>e.querySelector('b').textContent==='壁').textContent")
+  ok('出隅' in sec and '4.8' in sec,'壁に出隅コーナーを長さで入れると、壁の所に出る')
   # その他：トイレブースを選んだ部屋（ブース）の数で入れる
   pg.click('.wk-panel [data-wk=add][data-part=その他]');pg.wait_for_timeout(300);pg.fill('.modal [data-q]','ブース');pg.wait_for_timeout(200)
   pg.locator('.modal [data-list] [data-id]').first.click();pg.wait_for_timeout(400)

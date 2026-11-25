@@ -18,12 +18,14 @@ export const SLOTS = [
   { k: 'cD', part: '天井', role: '解体', measure: 'ceil', cats: ['demoC'] },
   { k: 'cL', part: '天井', role: '下地（軽量）', measure: 'ceil', cats: ['work'], only: /^w-lgsC$/ },
   { k: 'cF', part: '天井', role: '仕上げ', measure: 'ceil', cats: ['ceil'] },
-  { k: 'bF', part: '巾木', role: '', measure: 'base', cats: ['trim'] }
+  /* 天井と壁の取り合い：廻り縁・天井見切り縁（部屋の周りの長さで数える。かつ「天井と壁の所に使う見切り材の項目がない」・2026-11-25） */
+  { k: 'cM', part: '天井', role: '廻り縁・見切り縁', measure: 'perim', cats: ['trim', 'mikiri'], only: /^(t-m|k-ceil$)/ },
+  { k: 'bF', part: '巾木', role: '', measure: 'base', cats: ['trim'], only: /^t-h/ }
 ];
 /* 枠の行：「＋足す」で入れた行（extra）は枠に入れない（同じボードを2枚目として足した時に、枠を変えると消えないように） */
 const inSlot = (l, s) => !l.extra && l.basis && l.basis.measure === s.measure && (s.only ? s.only.test(l.itemId || '') : s.cats.includes(l.cat)) && (l.layer || 1) === (s.layer || 1);
 /* 枠で選べる品目 */
-export const slotItems = (s, M) => M.filter(i => i.measure === s.measure && (s.only ? s.only.test(i.id) : s.cats.includes(i.cat)));
+export const slotItems = (s, M) => M.filter(i => s.only ? s.only.test(i.id) : (i.measure === s.measure && s.cats.includes(i.cat)));
 const hasRoom = (l, id) => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id));
 
 /* 今その部屋に入っている品目（枠ごと） */

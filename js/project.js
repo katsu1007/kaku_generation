@@ -2339,15 +2339,17 @@ function workPanel(p, top, after) {
     const demo = wkTab === 'demo', isD = s => /解体/.test(s.role);
     const inR = l => R.some(id => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id)));
     const exAll = p.lines.filter(l => isRoomBased(l) && !inAnySlot(l) && inR(l));
+    const exLen = p.lines.filter(l => l.wkPart && !l.basis && (l.wkRooms || []).some(id => R.includes(id)));
     const cnt = dm => SLOTS.filter(s => isD(s) === dm && cur.some(c => c[s.k])).length + exAll.filter(l => !!DEMO(l.cat) === dm).length;
-    const nD = cnt(true), nN = cnt(false), fl = R.reduce((t, id) => t + (Number((p.rooms.find(r => r.id === id) || {}).area) || 0), 0);
+    const nD = cnt(true), nN = cnt(false) + exLen.length, fl = R.reduce((t, id) => t + (Number((p.rooms.find(r => r.id === id) || {}).area) || 0), 0);
     const fNames = F.map(f => '区画' + f.no);
     const sec = pt => { const ss = SLOTS.filter(s => s.part === pt && isD(s) === demo), ex = exAll.filter(l => WK_PART[l.basis.measure] === pt && !!DEMO(l.cat) === demo);
       if (!ss.length && !ex.length && (demo && pt === '巾木')) return '';
       const hint = pt === 'その他' && !ex.length ? '<div class="small muted">トイレブースなど、部屋（ブース）1つごとに数える物。選んだ部屋の数で入ります。</div>' : '';
       return `<div class="wk-sec"><div class="wk-sec-h"><b>${pt}</b><span class="spacer"></span><button class="btn sm ghost" data-wk="add" data-part="${pt}">${icon('plus')}${pt}に足す</button></div>
         ${ss.length ? `<div class="grid g3">${ss.map(slotRow).join('')}</div>` : ''}${hint}
-        ${ex.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}</div>`; };
+        ${ex.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}
+        ${demo ? '' : exLen.filter(l => l.wkPart === pt).map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="muted">${fmt(Number(l.qty) || 0, 2)}${esc(l.unit || '')}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="droplen" data-id="${esc(l.id)}">消す</button></div>`).join('')}</div>`; };
     const other = exAll.filter(l => !WK_PART[l.basis.measure] && !!DEMO(l.cat) === demo);
     pn.innerHTML = `<div class="row small" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><b>${esc(names.length ? names.slice(0, 3).join('・') + (names.length > 3 ? ` ほか${names.length - 3}部屋` : '') : fNames.slice(0, 4).join('・') + (fNames.length > 4 ? ` ほか${fNames.length - 4}` : ''))}</b><span class="muted">${F.length} 区画${fl ? `・床 ${Math.round(fl * 100) / 100}㎡` : ''}</span>${free ? `<span class="pill info">まだ部屋でない区画 ${free}：工事を選ぶと部屋になります</span>` : ''}<span class="spacer"></span><button class="btn sm" data-wk="same" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button><button class="btn sm ghost" data-wk="clear">選ぶのをやめる</button></div>
       <div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap"><div class="seg" role="tablist"><button class="${demo ? 'on' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体${nD ? `（${nD}）` : ''}</button><button class="${!demo ? 'on' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規${nN ? `（${nN}）` : ''}</button></div><span class="spacer"></span><button class="btn sm primary" data-wk="next" title="今の区画を終わりにして、まだ工事を選んでいない次の区画を選びます">次の区画へ${icon('next')}</button></div>
@@ -2375,7 +2377,18 @@ function workPanel(p, top, after) {
       const rr = room && p.rooms.find(x => x.id === room); toast(`壁を入れました（${r3(len)}m × ${h}m）${rr ? `。「${rr.name}」の壁の行から同じ分を引きます` : ''}`, { ms: 4000 }); }
     if (a === 'tab') { wkTab = b.dataset.v; panel(); }
     if (a === 'drop') { const R = roomsSel(); removeRoomsFromLine(p, R, b.dataset.id); syncWaste(p); touch(p); panel(); after(); }
-    if (a === 'add') addItemDialog(wkTab === 'demo', (id, ms) => apply(R => addRoomsToItem(p, R, id, ms)), b.dataset.part);
+    if (a === 'droplen') { const l = p.lines.find(x => x.id === b.dataset.id); if (!l) return; const k = p.lines.indexOf(l); p.lines.splice(k, 1); touch(p); panel(); after();
+      toast(`「${l.name}」を消しました`, { action: '元に戻す', onAction: () => { p.lines.splice(k, 0, l); touch(p); panel(); after(); } }); }
+    if (a === 'add') { const part = b.dataset.part; addItemDialog(wkTab === 'demo', (id, ms) => {
+      if (ms !== 'len') return apply(R => addRoomsToItem(p, R, id, ms));
+      /* 長さを入れる物：天井は選んだ部屋の周りの長さを最初に入れておく */
+      const it = M.find(x => x.id === id); if (!it) return;
+      const R0 = roomsSel(), def = part === '天井' && R0.length ? Math.round(R0.reduce((t, rid) => t + (Number((p.rooms.find(r => r.id === rid) || {}).perim) || 0), 0) * 100) / 100 : '';
+      const m2 = modal({ title: `${it.name}${it.spec ? ' ' + it.spec : ''}`, body: `<label class="f">長さ<div class="unitwrap"><input class="in num" data-len type="number" inputmode="decimal" step="0.01" value="${def}"><span>m</span></div></label><p class="small muted">${part === '天井' ? '選んだ部屋の周りの長さを入れてあります。' : '図面や現場で測った長さを入れてください。'}あとで③工事の行でも直せます。</p>`, foot: `<button class="btn" data-close>やめる</button><button class="btn primary" data-ok>入れる</button>` });
+      const inp = m2.el.querySelector('[data-len]'); setTimeout(() => inp.focus(), 50);
+      m2.el.querySelector('[data-ok]').onclick = () => { const q = Number(inp.value) || 0; if (!(q > 0)) { toast('長さを入れてください', { bad: true }); return; } m2.close();
+        apply(R => { p.lines.push({ id: uid('l'), itemId: it.id, name: it.name, spec: it.spec || '', unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: 0, cat: it.cat, qty: q, basis: null, wkPart: part, wkRooms: [...R] }); });
+        toast(`${it.name} ${q}m を入れました`); }; }, part); }
     if (a === 'next') { /* 今の区画を終わりにして、まだ工事を選んでいない次の区画（番号の順）を選んで、そこへ寄せる（かつ「区画選択→工事内容選択→次の区画の内容選択に移行」） */
       const F = plan.faces, off = d.faceOff || {}, J = d.faceJoin || {}, last = Math.max(...[...wkSel].map(i => (F.find(f => f.i === i) || {}).no || 0));
       const todo = f => !off[f.i] && J[f.i] == null && f.poly && f.poly.length >= 3 && !wrapsMany(f, F) && !wkSel.has(f.i) && (() => { const r = roomOfFace(f.i); return !r || !hasWork(r.id); })();
@@ -2390,19 +2403,24 @@ function workPanel(p, top, after) {
 }
 /* 「＋項目を追加」：部屋の面積・長さで数える品目から選ぶ（解体のタブは解体の品目、新規は解体以外） */
 const WK_PART = { floor: '床', wall: '壁', perim: '壁', ceil: '天井', base: '巾木', count: 'その他' };
+/* 長さを手で入れる見切り材（部屋の寸法からは出せない物。かつ「天井と壁の所に使う見切り材の項目がない」）：床＝床見切り、壁＝壁見切り・出隅/入隅・ジョイナー・アングルなど、天井＝天井見切り縁・廻り縁。取付の手間も */
+const LEN_OK = (i, part) => i.measure === 'manual' && (i.unit === 'm') && (
+  part === '床' ? /^k-f/.test(i.id) || i.id === 'w-mikiri'
+  : part === '壁' ? (i.cat === 'mikiri' && !/^k-(f|ceil|stair|frame)/.test(i.id)) || i.id === 'w-mikiri'
+  : part === '天井' ? i.id === 'k-ceil' || i.id === 'w-mawari' || i.id === 'w-mikiri' : false);
 function addItemDialog(demo, onPick, part) {
   /* その他＝部屋ごとに1つ数える物（トイレブース・器具など。単位が 室・個・台・式 の品目。部屋の数で数える） */
   const other = part === 'その他';
   const items = masterItems().filter(i => /^demo/.test(i.cat || '') === demo && (other ? (i.measure === 'count' || (/^(室|個|台|式|組|箇所|ヶ所|か所)$/.test(i.unit || '') && !/^(s|e|w-e)/.test(i.cat || '') && i.cat !== 'wire' && i.cat !== 'lgs' && i.cat !== 'tsuka'))
-    : (i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && (!part || WK_PART[i.measure] === part))));
+    : (i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && (!part || WK_PART[i.measure] === part)) || (!demo && LEN_OK(i, part))));
   const cats = new Map(categories().map(c => [c[0], c[1]]));
   const m = modal({ title: `${part ? part + 'に足す' : '項目を足す'}（${demo ? '解体' : '新規'}）`, wide: true,
     body: `<input class="in" data-q type="search" placeholder="品目で探す" style="margin-bottom:8px"><p class="small muted" style="margin-top:0">数量は選んだ区画（部屋）の面積・長さから自動で出ます。ほかの品目は下の「一覧から選ぶ」で入れられます。</p><div data-list></div>` });
   const list = m.el.querySelector('[data-list]'), q = m.el.querySelector('[data-q]');
   const show = () => { const w = q.value.trim(); const L = items.filter(i => !w || (i.name + ' ' + (i.spec || '') + ' ' + (cats.get(i.cat) || '')).includes(w)).slice(0, 200);
-    list.innerHTML = L.map(i => `<button class="btn" data-id="${esc(i.id)}" style="display:flex;width:100%;justify-content:flex-start;gap:8px;margin-bottom:4px;text-align:left"><span>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</span><span class="spacer"></span><span class="small muted">${esc(cats.get(i.cat) || '')}・${esc(other ? '部屋の数' : MEASURES[i.measure].label)}・${yen(i.price)}/${esc(i.unit)}</span></button>`).join('') || '<p class="muted small">見つかりません</p>'; };
+    list.innerHTML = L.map(i => `<button class="btn" data-id="${esc(i.id)}" style="display:flex;width:100%;justify-content:flex-start;gap:8px;margin-bottom:4px;text-align:left"><span>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}</span><span class="spacer"></span><span class="small muted">${esc(cats.get(i.cat) || '')}・${esc(other ? '部屋の数' : i.measure === 'manual' ? '長さを入れる' : MEASURES[i.measure].label)}・${yen(i.price)}/${esc(i.unit)}</span></button>`).join('') || '<p class="muted small">見つかりません</p>'; };
   q.addEventListener('input', show); show();
-  list.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; m.close(); onPick(b.dataset.id, other ? 'count' : null); toast(other ? '項目を追加しました（選んだ部屋の数で数えます）' : '項目を追加しました（③工事の行に入りました）'); });
+  list.addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (!b) return; m.close(); const it = items.find(x => x.id === b.dataset.id); if (it && it.measure === 'manual' && !other) { onPick(it.id, 'len'); return; } onPick(b.dataset.id, other ? 'count' : null); toast(other ? '項目を追加しました（選んだ部屋の数で数えます）' : '項目を追加しました（③工事の行に入りました）'); });
 }
 
 function stepLines(ctx) {
