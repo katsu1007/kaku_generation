@@ -555,3 +555,8 @@ body.dwg-fs-on .errbar { z-index: 3400; }
   .wk-fs .wk-panel .g3 { grid-template-columns: 1fr !important; }
 }
 .wk-wf .f { min-width: 0; }
+.nextbar.nb-static { position: static; background: none; }
+/* ③工事の区画の欄：床・壁・天井・巾木ごとのまとまり */
+.wk-sec { border-top: 1px solid var(--line); padding: 6px 0 8px; }
+.wk-sec-h { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.wk-ex { gap: 6px; padding: 4px 0 4px 8px; border-left: 3px solid var(--line2); margin-top: 4px; }

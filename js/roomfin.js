@@ -12,13 +12,18 @@ export const SLOTS = [
   { k: 'fF', part: '床', role: '仕上げ', measure: 'floor', cats: ['floor'] },
   { k: 'wD', part: '壁', role: '解体', measure: 'wall', cats: ['demoW'] },
   { k: 'wD2', part: '壁', role: '下の層も解体', measure: 'wall', cats: ['demoW'], layer: 2 },
-  { k: 'wB', part: '壁', role: '下地', measure: 'wall', cats: ['board'] },
+  { k: 'wL', part: '壁', role: '下地（軽量）', measure: 'wall', cats: ['work'], only: /^w-lgs[WP]$/ },
+  { k: 'wB', part: '壁', role: '下地（ボード）', measure: 'wall', cats: ['board'] },
   { k: 'wF', part: '壁', role: '仕上げ', measure: 'wall', cats: ['wall'] },
   { k: 'cD', part: '天井', role: '解体', measure: 'ceil', cats: ['demoC'] },
+  { k: 'cL', part: '天井', role: '下地（軽量）', measure: 'ceil', cats: ['work'], only: /^w-lgsC$/ },
   { k: 'cF', part: '天井', role: '仕上げ', measure: 'ceil', cats: ['ceil'] },
   { k: 'bF', part: '巾木', role: '', measure: 'base', cats: ['trim'] }
 ];
-const inSlot = (l, s) => l.basis && l.basis.measure === s.measure && s.cats.includes(l.cat) && (l.layer || 1) === (s.layer || 1);
+/* 枠の行：「＋足す」で入れた行（extra）は枠に入れない（同じボードを2枚目として足した時に、枠を変えると消えないように） */
+const inSlot = (l, s) => !l.extra && l.basis && l.basis.measure === s.measure && (s.only ? s.only.test(l.itemId || '') : s.cats.includes(l.cat)) && (l.layer || 1) === (s.layer || 1);
+/* 枠で選べる品目 */
+export const slotItems = (s, M) => M.filter(i => i.measure === s.measure && (s.only ? s.only.test(i.id) : s.cats.includes(i.cat)));
 const hasRoom = (l, id) => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id));
 
 /* 今その部屋に入っている品目（枠ごと） */
@@ -57,9 +62,9 @@ export function applyFin(p, rooms, fin) { SLOTS.forEach(s => applySlot(p, rooms,
 export const inAnySlot = l => SLOTS.some(s => inSlot(l, s));
 export function addRoomsToItem(p, rooms, itemId) {
   const it = masterItems().find(i => i.id === itemId); if (!it || !it.measure) return null;
-  let l = p.lines.find(l => l.itemId === itemId && l.basis && l.basis.measure === it.measure && !inAnySlot(l) && !l.layer);
+  let l = p.lines.find(l => l.itemId === itemId && l.basis && l.basis.measure === it.measure && l.extra && !l.layer);
   if (l) { if (l.basis.rooms !== 'all') l.basis.rooms = [...new Set([...l.basis.rooms, ...rooms])]; }
-  else { l = { id: uid('l'), itemId: it.id, name: it.name, spec: it.spec || '', unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: it.measure, rooms: [...rooms] } }; p.lines.push(l); }
+  else { l = { id: uid('l'), itemId: it.id, name: it.name, spec: it.spec || '', unit: it.unit, kind: it.kind || 'mat', price: it.price || '', cost: '', loss: '', sheet: it.sheet || 0, cat: it.cat, qty: '', basis: { measure: it.measure, rooms: [...rooms] }, extra: true }; p.lines.push(l); }
   return l;
 }
 export function removeRoomsFromLine(p, rooms, lineId) {
@@ -77,7 +82,7 @@ export function openRoomFin(p, rooms, { title, onDone, usePreset } = {}) {
   let first = currentFin(p, rooms[0]);
   let fromPreset = false;
   if (usePreset && pFin) { const before = first; first = mergeInitial(first, pFin); fromPreset = SLOTS.some(s => first[s.k] && !before[s.k]); }
-  const opts = s => M.filter(i => s.cats.includes(i.cat) && i.measure === s.measure);
+  const opts = s => slotItems(s, M);
   const row = s => `<label class="f">${s.role || '品目'}<select class="in" data-slot="${s.k}"><option value="">${/解体/.test(s.role) ? '解体しない' : 'なし'}</option>${opts(s).map(i => `<option value="${esc(i.id)}" ${first[s.k] === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}（${yen(i.price)}/${esc(i.unit)}）</option>`).join('')}</select></label>`;
   const parts = ['床', '壁', '天井', '巾木'];
   const names = rooms.map(id => (p.rooms.find(r => r.id === id) || {}).name).filter(Boolean);

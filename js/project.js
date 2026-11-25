@@ -36,7 +36,7 @@ import { uid } from './store.js';
 import { openElec, elecLines } from './elec.js';
 import { groupsOf, LABOR, COLORS, areaPts, linePts, placePts, placeCounts, symText } from './place.js';
 import { open3D, applyWin3d } from './view3d.js';
-import { openRoomFin, currentFin, SLOTS, applySlot, inAnySlot, addRoomsToItem, removeRoomsFromLine } from './roomfin.js';
+import { openRoomFin, currentFin, SLOTS, slotItems, applySlot, inAnySlot, addRoomsToItem, removeRoomsFromLine } from './roomfin.js';
 import { openSketch } from './sketchui.js';
 import { toPlan as sketchPlan, geomOf } from './sketch.js';
 import { jww as jwwBytes, dxf as dxfBytes } from './cad.js';
@@ -99,6 +99,8 @@ registerView('project', async (el, route) => {
   const prev = step > 1 ? `<a class="btn" href="#/p/${encodeURIComponent(p.id)}/${step - 1}">${icon('back')}戻る</a>` : '';
   const next = step < 5 ? `<a class="btn primary big" href="#/p/${encodeURIComponent(p.id)}/${step + 1}">次へ：${STEPS[step].t}${icon('next')}</a>` : '';
   nb.innerHTML = `${prev}<span class="spacer"></span>${next}`;
+  /* ③で図面がある時は、下の「次へ」を図面の上に浮かせない（図面を触っている時に押してしまい、確認に飛んでいた。かつ「毎回次へって確認に飛ぶとめんどくさい」）。ページのいちばん下に置く */
+  nb.classList.toggle('nb-static', step === 3 && !!(p.drawing && p.drawing.plan));
   refresh(p, step);
   if (lastFocus.id) {
     const t = document.querySelector(`[data-line="${lastFocus.id}"],[data-room="${lastFocus.id}"]`);
@@ -2284,7 +2286,7 @@ function workPanel(p, top, after) {
   /* 工事を決める時：まだ部屋にしていない区画は1区画1部屋で作る */
   const ensureRooms = () => { let made = 0; [...wkSel].forEach(i => { if (!roomOfFace(i)) { if (planRoomOf(p, i)) made++; } }); if (made) toast(`${made} 区画を部屋にしました（②部屋で名前・まとめ方を直せます）`, { ms: 4000 }); return roomsSel(); };
   const apply = fn => { const R = ensureRooms(); if (!R.length) return; fn(R); syncWaste(p); touch(p); view.paint(); panel(); after(); };
-  const optList = s => M.filter(i => s.cats.includes(i.cat) && i.measure === s.measure);
+  const optList = s => slotItems(s, M);
   /* 壁を1面ずつ（かつ「壁一面選ぶと解体と新規のタブがなくなる」「壁に寸法入れれると良い・ここからここまで」・2026-11-25）：
      線をタップ／ここからここまで を選び、長さは図面から出した値を入れておいて手で直せる。解体（解体・下の層）と新規（下地・仕上げ）のタブは区画の時と同じ */
   const wSel = () => wkWway === 'seg' ? { segs: [...wkWsel] } : { pts: wkWpts.map(q => [r3(q[0]), r3(q[1])]) };
@@ -2324,18 +2326,24 @@ function workPanel(p, top, after) {
     const names = [...new Set(R.map(id => (p.rooms.find(r => r.id === id) || {}).name).filter(Boolean))];
     const cur = R.map(id => currentFin(p, id));
     const slotRow = s => { const vals = [...new Set(cur.map(c => c[s.k] || ''))], v = !R.length ? '' : (vals.length > 1 || (free && vals[0])) ? '__mix' : vals[0];
-      return `<label class="f">${s.part}${s.role && !/解体/.test(s.role) ? '・' + s.role : s.role === '下の層も解体' ? '（下の層も）' : ''}<select class="in" data-wkslot="${s.k}">${v === '__mix' ? '<option value="__mix" selected>（部屋で違う）</option>' : ''}<option value="">${/解体/.test(s.role) ? '解体しない' : 'なし'}</option>${optList(s).map(i => `<option value="${esc(i.id)}" ${v === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}（${yen(i.price)}/${esc(i.unit)}）</option>`).join('')}</select></label>`; };
-    const demo = wkTab === 'demo', isD = s => /解体/.test(s.role), slots = SLOTS.filter(s => demo ? isD(s) : !isD(s));
+      return `<label class="f">${s.role ? s.role.replace(/^解体$/, '解体').replace('下の層も解体', '下の層も解体') : '品目'}<select class="in" data-wkslot="${s.k}">${v === '__mix' ? '<option value="__mix" selected>（部屋で違う）</option>' : ''}<option value="">${/解体/.test(s.role) ? '解体しない' : 'なし'}</option>${optList(s).map(i => `<option value="${esc(i.id)}" ${v === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}（${yen(i.price)}/${esc(i.unit)}）</option>`).join('')}</select></label>`; };
+    /* 床・壁・天井・巾木ごとに分けて出す（かつ「工事内容の項目分けた方が良い。壁 床 天井」）。「＋足す」で入れた物もその所の中に出す（かつ「壁なら壁の項目につけて」） */
+    const demo = wkTab === 'demo', isD = s => /解体/.test(s.role);
     const inR = l => R.some(id => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id)));
-    const exAll = p.lines.filter(l => isRoomBased(l) && !inAnySlot(l) && inR(l)), extras = exAll.filter(l => !!DEMO(l.cat) === demo);
+    const exAll = p.lines.filter(l => isRoomBased(l) && !inAnySlot(l) && inR(l));
     const cnt = dm => SLOTS.filter(s => isD(s) === dm && cur.some(c => c[s.k])).length + exAll.filter(l => !!DEMO(l.cat) === dm).length;
     const nD = cnt(true), nN = cnt(false), fl = R.reduce((t, id) => t + (Number((p.rooms.find(r => r.id === id) || {}).area) || 0), 0);
     const fNames = F.map(f => '区画' + f.no);
+    const sec = pt => { const ss = SLOTS.filter(s => s.part === pt && isD(s) === demo), ex = exAll.filter(l => WK_PART[l.basis.measure] === pt && !!DEMO(l.cat) === demo);
+      if (!ss.length && !ex.length && (demo && pt === '巾木')) return '';
+      return `<div class="wk-sec"><div class="wk-sec-h"><b>${pt}</b><span class="spacer"></span><button class="btn sm ghost" data-wk="add" data-part="${pt}">${icon('plus')}${pt}に足す</button></div>
+        ${ss.length ? `<div class="grid g3">${ss.map(slotRow).join('')}</div>` : ''}
+        ${ex.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}</div>`; };
+    const other = exAll.filter(l => !WK_PART[l.basis.measure] && !!DEMO(l.cat) === demo);
     pn.innerHTML = `<div class="row small" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><b>${esc(names.length ? names.slice(0, 3).join('・') + (names.length > 3 ? ` ほか${names.length - 3}部屋` : '') : fNames.slice(0, 4).join('・') + (fNames.length > 4 ? ` ほか${fNames.length - 4}` : ''))}</b><span class="muted">${F.length} 区画${fl ? `・床 ${Math.round(fl * 100) / 100}㎡` : ''}</span>${free ? `<span class="pill info">まだ部屋でない区画 ${free}：工事を選ぶと部屋になります</span>` : ''}<span class="spacer"></span><button class="btn sm" data-wk="same" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button><button class="btn sm ghost" data-wk="clear">選ぶのをやめる</button></div>
-      <div class="seg" role="tablist" style="margin-bottom:8px"><button class="${demo ? 'on' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体${nD ? `（${nD}）` : ''}</button><button class="${!demo ? 'on' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規${nN ? `（${nN}）` : ''}</button></div>
-      <div class="grid g3">${slots.map(slotRow).join('')}</div>
-      ${extras.length ? `<div style="margin-top:8px"><div class="small muted">追加した項目</div>${extras.map(l => `<div class="row small" style="gap:6px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="muted">${esc((MEASURES[l.basis.measure] || {}).label || '')}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">この区画から外す</button></div>`).join('')}</div>` : ''}
-      <button class="btn sm" data-wk="add" style="margin-top:8px">${icon('plus')}${demo ? '解体' : '新規'}の項目を追加</button>`;
+      <div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap"><div class="seg" role="tablist"><button class="${demo ? 'on' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体${nD ? `（${nD}）` : ''}</button><button class="${!demo ? 'on' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規${nN ? `（${nN}）` : ''}</button></div><span class="spacer"></span><button class="btn sm primary" data-wk="next" title="今の区画を終わりにして、まだ工事を選んでいない次の区画を選びます">次の区画へ${icon('next')}</button></div>
+      ${['床', '壁', '天井', '巾木'].map(sec).join('')}
+      ${other.map(l => `<div class="row small wk-ex"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="muted">${esc((MEASURES[l.basis.measure] || {}).label || '')}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">外す</button></div>`).join('')}`;
   };
   pn.addEventListener('change', e => { const k = e.target.dataset.wkslot; if (!k || e.target.value === '__mix') return; const v = e.target.value; apply(R => applySlot(p, R, k, v)); });
   pn.addEventListener('click', e => { const b = e.target.closest('[data-wk]'); if (!b) return; const a = b.dataset.wk;
@@ -2358,15 +2366,25 @@ function workPanel(p, top, after) {
       const rr = room && p.rooms.find(x => x.id === room); toast(`壁を入れました（${r3(len)}m × ${h}m）${rr ? `。「${rr.name}」の壁の行から同じ分を引きます` : ''}`, { ms: 4000 }); }
     if (a === 'tab') { wkTab = b.dataset.v; panel(); }
     if (a === 'drop') { const R = roomsSel(); removeRoomsFromLine(p, R, b.dataset.id); syncWaste(p); touch(p); panel(); after(); }
-    if (a === 'add') addItemDialog(wkTab === 'demo', id => apply(R => addRoomsToItem(p, R, id)));
+    if (a === 'add') addItemDialog(wkTab === 'demo', id => apply(R => addRoomsToItem(p, R, id)), b.dataset.part);
+    if (a === 'next') { /* 今の区画を終わりにして、まだ工事を選んでいない次の区画（番号の順）を選んで、そこへ寄せる（かつ「区画選択→工事内容選択→次の区画の内容選択に移行」） */
+      const F = plan.faces, off = d.faceOff || {}, J = d.faceJoin || {}, last = Math.max(...[...wkSel].map(i => (F.find(f => f.i === i) || {}).no || 0));
+      const todo = f => !off[f.i] && J[f.i] == null && f.poly && f.poly.length >= 3 && !wrapsMany(f, F) && !wkSel.has(f.i) && (() => { const r = roomOfFace(f.i); return !r || !hasWork(r.id); })();
+      const order = [...F].sort((x, y) => x.no - y.no), nx = order.find(f => f.no > last && todo(f)) || order.find(todo);
+      wkSel.clear();
+      if (!nx) { view.paint(); panel(); toast('工事を選んでいない区画は、もうありません。終わったら下の「次へ：確認」で確認に進んでください', { ms: 6000 }); return; }
+      wkSel.add(nx.i); const xs = nx.poly.map(q => q[0]), ys = nx.poly.map(q => q[1]), w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys), m = Math.max(w, h, 2) * 1.2;
+      const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2; view.zoomTo([cx - m, cy - m, cx + m, cy + m]); view.paint(); panel();
+      toast(`区画${nx.no} を選びました`, { ms: 2000 }); }
   });
   panel();
 }
 /* 「＋項目を追加」：部屋の面積・長さで数える品目から選ぶ（解体のタブは解体の品目、新規は解体以外） */
-function addItemDialog(demo, onPick) {
-  const items = masterItems().filter(i => i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && /^demo/.test(i.cat || '') === demo);
+const WK_PART = { floor: '床', wall: '壁', perim: '壁', ceil: '天井', base: '巾木' };
+function addItemDialog(demo, onPick, part) {
+  const items = masterItems().filter(i => i.measure && MEASURES[i.measure] && !['manual', 'link', 'waste'].includes(i.measure) && /^demo/.test(i.cat || '') === demo && (!part || WK_PART[i.measure] === part));
   const cats = new Map(categories().map(c => [c[0], c[1]]));
-  const m = modal({ title: demo ? '解体の項目を追加' : '新規の項目を追加', wide: true,
+  const m = modal({ title: `${part ? part + 'に足す' : '項目を足す'}（${demo ? '解体' : '新規'}）`, wide: true,
     body: `<input class="in" data-q type="search" placeholder="品目で探す" style="margin-bottom:8px"><p class="small muted" style="margin-top:0">数量は選んだ区画（部屋）の面積・長さから自動で出ます。ほかの品目は下の「一覧から選ぶ」で入れられます。</p><div data-list></div>` });
   const list = m.el.querySelector('[data-list]'), q = m.el.querySelector('[data-q]');
   const show = () => { const w = q.value.trim(); const L = items.filter(i => !w || (i.name + ' ' + (i.spec || '') + ' ' + (cats.get(i.cat) || '')).includes(w)).slice(0, 200);
