@@ -6,7 +6,7 @@ only=sys.argv[2:]
 JS=r"""async([pid,rooms])=>{const a=await import('./js/app.js'),C=await import('./js/answercmp.js');const d=a.state.projects.find(x=>x.id===pid).drawing;
 const cmp=C.compareRooms(rooms,d.plan.faces);
 const v2=d.v2?C.compareRooms(rooms,d.v2.faces):null;
-return JSON.stringify({open:d.open||{},v2open:(d.v2&&d.v2.open)||{},cmp,v2sum:v2&&v2.sum,v2rooms:v2&&v2.rooms,faces:d.plan.faces.map(f=>({i:f.i,area:f.area,poly:f.poly,merged:!!f.merged})),v2faces:d.v2?d.v2.faces.map(f=>({area:f.area,poly:f.poly})):[],segs:d.plan.segs,texts:((d.src2||{}).texts||[]),doors:d.doors||[]})}"""
+return JSON.stringify({sheets:((d.analysis||{}).sheets||[]).map(s=>({box:s.box,kind:s.kind,title:s.title})),open:d.open||{},v2open:(d.v2&&d.v2.open)||{},cmp,v2sum:v2&&v2.sum,v2rooms:v2&&v2.rooms,faces:d.plan.faces.map(f=>({i:f.i,area:f.area,poly:f.poly,merged:!!f.merged})),v2faces:d.v2?d.v2.faces.map(f=>({area:f.area,poly:f.poly})):[],segs:d.plan.segs,texts:((d.src2||{}).texts||[]),doors:d.doors||[]})}"""
 R={}
 with sync_playwright() as p:
   b=p.chromium.launch(executable_path='/usr/bin/google-chrome',args=['--no-sandbox']);pg=b.new_page();pg.goto('http://localhost:8765/');pg.wait_for_timeout(600)

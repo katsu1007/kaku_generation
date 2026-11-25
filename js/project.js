@@ -8,7 +8,7 @@ import { groupRoles, ROLE } from './reader2/lines.js';
 import { furnitureLines } from './lineroles.js';
 import { modelFor, normalizeText } from './reader2/text.js';
 import { SYS, MANY, sysOptions, rebuild, PIPE_LOSS } from './piping.js';
-import { mergeSplitFaces, splitMerged, absorbBoxes } from './facemerge.js';
+import { mergeSplitFaces, splitMerged, absorbBoxes, inPt as faceInPt } from './facemerge.js';
 /* 読み込んだ図面のファイル（開いている間だけ）。「線を外す」で区画を作り直す時に、もう一度選ばなくてよいように */
 const cadFiles = new Map();
 import { importDrawing, groupGeom, roomHoles, planCH, orderFaces as orderFacesOf } from './drawing.js';
@@ -1604,6 +1604,8 @@ function stepRooms(ctx) {
       const cad0 = files.find(f => /\.(jww|jwc|dxf)$/i.test(f.name)); if (cad0) cadFiles.set(p.id, files);
       /* 同じ図面を読み直す時は、外した線・工事対象外の範囲を引き継ぐ */
       const sameFile = !!(cad0 && p.drawing && p.drawing.fileName === cad0.name), keepLO = sameFile ? (p.drawing.lineOff || null) : null, keepOut = sameFile ? (p.drawing.outZones || null) : null;
+      /* 「区画ではない」にした所も、同じ図面を読み直した時は引き継ぐ（区画の番号は変わるので、区画の中の点と広さで覚える。かつ・2026-11-25） */
+      const keepOff = sameFile && p.drawing.faceOff && p.drawing.plan ? (p.drawing.plan.faces || []).filter(f => p.drawing.faceOff[f.i] && f.poly && f.poly.length > 2).map(f => ({ pt: faceInPt(f.poly), area: f.area })) : [];
       if (p.drawing && p.rooms.some(r => r.src === 'plan') && !(await ask('図面を読み直しますか？', '今の図面から作った部屋は残りますが、図面とのつながりは外れます。', { ok: '読み直す' }))) { e.target.value = ''; return; }
       const st = body.querySelector('#dwgStatus');
       /* 読み込み中の表示：くるくる（計算で画面が止まっていても回る）と、今どの段階か */
@@ -1655,6 +1657,11 @@ function stepRooms(ctx) {
         p.drawing = { fileName: (cad ? [cad] : files).map(f => f.name).join('、'), at: Date.now(), plan: res.plan, fixtures: cad ? res.fixtures : null, open: cad ? res.open : null, doors: cad ? (res.doorList || []) : [], fixG: cad ? res.fixG : '', fixGd: cad ? res.fixGd : '', dims, dimCheck,
           ...(keepLO && ((keepLO.keys || []).length || (keepLO.segs || []).length) ? { lineOff: keepLO } : {}), ...(keepOut && keepOut.length ? { outZones: keepOut } : {}) };
         if (prevScaleUser !== null) p.drawing.scaleUser = prevScaleUser;
+        /* 前に「区画ではない」にした所：その点を含む一番小さい新しい区画が、広さ 0.5〜2倍なら同じ所とみて印を付け直す */
+        if (keepOff.length && p.drawing.plan && p.drawing.plan.faces) { const off = {};
+          keepOff.forEach(o => { let best = null; for (const f of p.drawing.plan.faces) { if (!f.poly || f.poly.length < 3 || (best && f.area >= best.area)) continue; if (pip(o.pt[0], o.pt[1], f.poly)) best = f; }
+            if (best && best.area >= o.area * 0.5 && best.area <= o.area * 2) off[best.i] = true; });
+          if (Object.keys(off).length) p.drawing.faceOff = off; }
         /* 器具の救済：壁も器具も同じレイヤーに描く図面では、読み取りが壁のレイヤーごと外して器具が消える。
          * 読み取りには触らず、ここでだけ救済分（src:'rescue'）を足す。読み取りが拾った器具と重なる物は出さない（そちらが優先） */
         let allFixtures = res.fixtures || [];
