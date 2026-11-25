@@ -48,7 +48,7 @@ import { docsStep } from './docs.js';
 const STEPS = [
   { n: 1, t: '現場', s: 'お客様と現場', lead: 'お客様の名前と現場の住所を入れてください。見積書にそのまま載ります。' },
   { n: 2, t: '部屋', s: '寸法を入れる', lead: '図面がある時は「図面を選ぶ」で読み込んで、区画をタップして部屋にしてください。図面が無い時は「部屋を足す」で幅と奥行（m）を入れてください。床・壁・天井の面積が自動で出ます。' },
-  { n: 3, t: '工事', s: '品目を選ぶ', lead: '「一覧から選ぶ」で工事の品目を選んでください。床・壁・天井の品目は、部屋の寸法から数量が自動で入ります（材料はロス込み）。' },
+  { n: 3, t: '工事', s: '品目を選ぶ', lead: '図面がある時は、上の図面で区画をタップして、解体・新規の工事を選んでください。ほかの品目は「一覧から選ぶ」で入れます。床・壁・天井の品目は、部屋の寸法から数量が自動で入ります（材料はロス込み）。' },
   { n: 4, t: '確認', s: '検算と金額', lead: '計算をもう一度別の方法で確かめ、間違いやすい所を出します。赤い所を直してから書類を作ってください。' },
   { n: 5, t: '書類', s: '見積書を出す', lead: '見積書・請求書・内訳書を作ります。見積書を出すたびに「第○版」として記録が残り、前の版と比べられます。' }
 ];
@@ -2247,17 +2247,20 @@ function workPanel(p, top, after) {
   const owner = () => { const m = new Map(); p.rooms.forEach(r => (r.faces || []).forEach(i => m.set(i, r.color))); Object.entries(d.faceJoin || {}).forEach(([a, b]) => { if (!m.has(+a) && m.has(b)) m.set(+a, m.get(b)); }); return m; };
   [...wkSel].forEach(i => { if (!plan.faces.some(f => f.i === i)) wkSel.delete(i); });
   const keep = wkKeep && wkKeep();
-  top.innerHTML = `<div class="card" style="margin-bottom:12px;padding:10px"><div class="seg" style="margin-bottom:6px"><button data-wkm="face" class="${wkMode === 'face' ? 'on' : ''}">区画の工事</button><button data-wkm="wall" class="${wkMode === 'wall' ? 'on' : ''}">壁を1面ずつ</button></div><div class="row small muted" style="margin-bottom:6px">${wkMode === 'face' ? '図面の区画をタップすると、その区画の工事（解体・新規）を選べます。続けてタップで足す・もう一度で外す。' : '仕様を変える壁の線をタップしてください（何本でも）。その壁だけの解体・下地・仕上げを入れ、部屋の壁全体の行からは同じ分を引きます。'}</div><div class="wk-view"></div><div class="wk-panel" style="margin-top:8px"></div></div>`;
+  top.innerHTML = `<div class="card" style="margin-bottom:12px;padding:10px"><div class="seg" style="margin-bottom:6px"><button data-wkm="face" class="${wkMode === 'face' ? 'on' : ''}">区画の工事</button><button data-wkm="wall" class="${wkMode === 'wall' ? 'on' : ''}">壁を1面ずつ</button></div><div class="small muted" style="margin-bottom:6px">${wkMode === 'face' ? '区画をタップして選びます（続けてタップで足す・もう一度で外す）。<b>✓</b> は工事を選んだ部屋です。' : '仕様を変える壁の線をタップしてください（何本でも）。'}</div><div class="wk-view"></div><div class="wk-panel" style="margin-top:8px"></div></div>`;
+  const hasWork = id => p.lines.some(l => isRoomBased(l) && (l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id)))) || (d.walls || []).some(w => w.room === id);
   const view = planView(top.querySelector('.wk-view'), plan, {
     keep, selected: () => (wkMode === 'face' ? wkSel : new Set()), owner, mode: () => (wkMode === 'wall' ? 'wall' : 'room'),
-    onPoint: (x, y, sc) => { if (wkMode !== 'wall') return; const k = nearestSeg(plan, x, y, sc * 18); if (k < 0) return; if (wkWsel.has(k)) wkWsel.delete(k); else wkWsel.add(k); ov(); panel(); },
+    onPoint: (x, y, sc) => { if (wkMode !== 'wall') return; const k = nearestSeg(plan, x, y, sc * 18); if (k < 0) return; const first = !wkWsel.size; if (wkWsel.has(k)) wkWsel.delete(k); else wkWsel.add(k); ov(); panel(); if (first) showPn(); },
     marks: () => { const o = {}; Object.keys(d.faceOff || {}).forEach(i => { if (d.faceOff[i]) o[i] = { s: 'out', type: 'off', why: '区画ではない', hide: true }; }); return o; },
-    rooms: () => { const J = d.faceJoin || {}; return p.rooms.filter(r => r.src === 'plan' && (r.faces || []).length).map(r => { const fs = new Set(r.faces); Object.entries(J).forEach(([a, b]) => { if (fs.has(b)) fs.add(+a); }); return { faces: [...fs], color: r.color, name: r.name || '部屋', area: r.area }; }); },
+    rooms: () => { const J = d.faceJoin || {}; return p.rooms.filter(r => r.src === 'plan' && (r.faces || []).length).map(r => { const fs = new Set(r.faces); Object.entries(J).forEach(([a, b]) => { if (fs.has(b)) fs.add(+a); }); return { faces: [...fs], color: r.color, name: (r.name || '部屋') + (hasWork(r.id) ? ' ✓' : ''), area: r.area }; }); },
     onTap: i => { if ((d.faceOff || {})[i]) { toast('「区画ではない」にした区画です。②部屋で元に戻せます', { ms: 4000 }); return; }
-      if (wkSel.has(i)) wkSel.delete(i); else wkSel.add(i); view.paint(); panel(); }
+      const first = !wkSel.size; if (wkSel.has(i)) wkSel.delete(i); else wkSel.add(i); view.paint(); panel(); if (first && wkSel.size) showPn(); }
   });
   wkKeep = () => view.keep();
   const pn = top.querySelector('.wk-panel');
+  /* 選び始めた時、下の欄が画面の外なら見える所まで動かす（スマホで図面の下に隠れないように） */
+  const showPn = () => { try { const r = pn.getBoundingClientRect(); if (r.top > innerHeight - 80) pn.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) { /* 無くても困らない */ } };
   /* 壁を1面ずつ：入れた壁（赤）と選んでいる線（橙） */
   const ov = () => { const lw = view.lw; let h = '';
     if (wkMode === 'wall') {
@@ -2276,7 +2279,7 @@ function workPanel(p, top, after) {
   const wallPanel = () => {
     const W = d.walls || [], rn = id => (p.rooms.find(r => r.id === id) || {}).name || '';
     const list = W.length ? `<div style="margin-top:8px"><div class="small muted">入れた壁（${W.length}）</div>${W.map(w => `<div class="row small" style="gap:6px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(w.name || rn(w.room) || '壁')} ${r3(w.len)}m×${r3(w.h)}m</span><span class="muted">${esc([w.itemId, ...(w.more || []), w.baseId, w.finId].filter(Boolean).map(id => (M.find(i => i.id === id) || {}).name || '').filter(Boolean).join('・'))}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="wdel" data-id="${esc(w.id)}">消す</button></div>`).join('')}</div>` : '';
-    if (!wkWsel.size) { pn.innerHTML = list; return; }
+    if (!wkWsel.size) { pn.innerHTML = `<div class="small muted" style="padding:6px 2px">トイレの奥の壁だけタイルにする時など、1面だけ仕様が違う壁に使います。図面の壁の線をタップすると、ここで解体・下地・仕上げを選べます。部屋の壁全体の行からは、その分を自動で引きます。</div>` + list; return; }
     const segs = [...wkWsel], len = segs.reduce((a, i) => a + (plan.segs[i] ? segLen(plan.segs[i]) : 0), 0), guess = wallRooms(p, { segs }), gs = new Set(guess.map(r => r.id));
     const pr = p.rooms.filter(r => r.src === 'plan'), order = [...guess, ...pr.filter(r => !gs.has(r.id))];
     const ls = state.wallSet || { demo: 'w-dW-cloth', base: '', fin: '' }, dh = planCH(plan) || opts().ceilH;
@@ -2301,10 +2304,14 @@ function workPanel(p, top, after) {
     const cur = R.map(id => currentFin(p, id));
     const slotRow = s => { const vals = [...new Set(cur.map(c => c[s.k] || ''))], v = !R.length ? '' : (vals.length > 1 || (free && vals[0])) ? '__mix' : vals[0];
       return `<label class="f">${s.part}${s.role && !/解体/.test(s.role) ? '・' + s.role : s.role === '下の層も解体' ? '（下の層も）' : ''}<select class="in" data-wkslot="${s.k}">${v === '__mix' ? '<option value="__mix" selected>（部屋で違う）</option>' : ''}<option value="">${/解体/.test(s.role) ? '解体しない' : 'なし'}</option>${optList(s).map(i => `<option value="${esc(i.id)}" ${v === i.id ? 'selected' : ''}>${esc(i.name)}${i.spec ? ' ' + esc(i.spec) : ''}（${yen(i.price)}/${esc(i.unit)}）</option>`).join('')}</select></label>`; };
-    const demo = wkTab === 'demo', slots = SLOTS.filter(s => demo ? /解体/.test(s.role) : !/解体/.test(s.role));
-    const extras = p.lines.filter(l => isRoomBased(l) && !inAnySlot(l) && !!DEMO(l.cat) === demo && R.some(id => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id))));
-    pn.innerHTML = `<div class="row small" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><b>${F.length} 区画</b>${names.length ? `（${esc(names.slice(0, 3).join('・'))}${names.length > 3 ? ` ほか${names.length - 3}部屋` : ''}）` : ''}${free ? `<span class="pill info">まだ部屋でない区画 ${free}：工事を選ぶと部屋になります</span>` : ''}<span class="spacer"></span><button class="btn sm" data-wk="same" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button><button class="btn sm ghost" data-wk="clear">選ぶのをやめる</button></div>
-      <div class="row" role="tablist" style="gap:6px;margin-bottom:8px"><button class="btn sm ${demo ? 'primary' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体</button><button class="btn sm ${!demo ? 'primary' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規</button></div>
+    const demo = wkTab === 'demo', isD = s => /解体/.test(s.role), slots = SLOTS.filter(s => demo ? isD(s) : !isD(s));
+    const inR = l => R.some(id => l.basis.rooms === 'all' || (Array.isArray(l.basis.rooms) && l.basis.rooms.includes(id)));
+    const exAll = p.lines.filter(l => isRoomBased(l) && !inAnySlot(l) && inR(l)), extras = exAll.filter(l => !!DEMO(l.cat) === demo);
+    const cnt = dm => SLOTS.filter(s => isD(s) === dm && cur.some(c => c[s.k])).length + exAll.filter(l => !!DEMO(l.cat) === dm).length;
+    const nD = cnt(true), nN = cnt(false), fl = R.reduce((t, id) => t + (Number((p.rooms.find(r => r.id === id) || {}).area) || 0), 0);
+    const fNames = F.map(f => '区画' + f.no);
+    pn.innerHTML = `<div class="row small" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><b>${esc(names.length ? names.slice(0, 3).join('・') + (names.length > 3 ? ` ほか${names.length - 3}部屋` : '') : fNames.slice(0, 4).join('・') + (fNames.length > 4 ? ` ほか${fNames.length - 4}` : ''))}</b><span class="muted">${F.length} 区画${fl ? `・床 ${Math.round(fl * 100) / 100}㎡` : ''}</span>${free ? `<span class="pill info">まだ部屋でない区画 ${free}：工事を選ぶと部屋になります</span>` : ''}<span class="spacer"></span><button class="btn sm" data-wk="same" title="選んだ区画と同じ広さ・同じ周りの長さの区画（トイレのブースなど）を、まとめて選びます">同じ大きさの区画も選ぶ</button><button class="btn sm ghost" data-wk="clear">選ぶのをやめる</button></div>
+      <div class="seg" role="tablist" style="margin-bottom:8px"><button class="${demo ? 'on' : ''}" data-wk="tab" data-v="demo" role="tab" aria-selected="${demo}">解体${nD ? `（${nD}）` : ''}</button><button class="${!demo ? 'on' : ''}" data-wk="tab" data-v="new" role="tab" aria-selected="${!demo}">新規${nN ? `（${nN}）` : ''}</button></div>
       <div class="grid g3">${slots.map(slotRow).join('')}</div>
       ${extras.length ? `<div style="margin-top:8px"><div class="small muted">追加した項目</div>${extras.map(l => `<div class="row small" style="gap:6px;padding:4px 0;border-bottom:1px solid var(--line)"><span>${esc(l.name)}${l.spec ? ' ' + esc(l.spec) : ''}</span><span class="muted">${esc((MEASURES[l.basis.measure] || {}).label || '')}</span><span class="spacer"></span><button class="btn sm ghost" data-wk="drop" data-id="${esc(l.id)}">この区画から外す</button></div>`).join('')}</div>` : ''}
       <button class="btn sm" data-wk="add" style="margin-top:8px">${icon('plus')}${demo ? '解体' : '新規'}の項目を追加</button>`;
@@ -2353,7 +2360,7 @@ function stepLines(ctx) {
     lb.innerHTML = `
       <div class="addbar" style="margin-bottom:12px"><button class="btn primary" data-act="pick">${icon('list')}一覧から選ぶ</button><button class="btn" data-act="free">${icon('plus')}自由に入れる</button>
         <span class="spacer"></span><span class="pill">行 <b data-out="linecount"></b></span><span class="pill acc">小計 <b data-out="subtotal"></b></span></div>
-      <div class="lines">${p.lines.map(l => lineCard(l, p.rooms, p.lines)).join('') || `<div class="card empty"><b>まだ工事の品目がありません</b>「一覧から選ぶ」で、床・壁・天井の仕上げや解体などを選んでください。</div>`}</div>
+      <div class="lines">${p.lines.map(l => lineCard(l, p.rooms, p.lines)).join('') || `<div class="card empty"><b>まだ工事の品目がありません</b>${p.drawing && p.drawing.plan ? '上の図面で区画をタップして解体・新規を選ぶか、' : ''}「一覧から選ぶ」で、床・壁・天井の仕上げや解体などを選んでください。</div>`}</div>
       ${p.lines.length > 3 ? `<div class="addbar" style="margin-top:12px"><button class="btn primary" data-act="pick">${icon('list')}一覧から選ぶ</button><button class="btn" data-act="free">${icon('plus')}自由に入れる</button></div>` : ''}`;
     refresh();
   };
