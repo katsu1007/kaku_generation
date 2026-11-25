@@ -51,6 +51,22 @@ with sync_playwright() as p:
   ok(st['w']==1 and st['off']==1 and st['l']>=1,f'壁1面の仕上げが入り、部屋の壁から引かれる（{st}）')
   pg.click('.wk-panel [data-wk=wdel]');pg.wait_for_timeout(300)
   ok(pg.evaluate("async()=>{const a=await import('./js/app.js');return (a.state.projects.find(x=>x.id==='%s').drawing.walls||[]).length}"%pid)==0,'入れた壁を消せる')
+  # 壁を1面ずつ：線を選んでも解体・新規のタブがある
+  pg.evaluate("document.querySelector('.wk-view').scrollIntoView({block:'center'})");pg.wait_for_timeout(300)
+  toS=lambda b,dx=0: pg.evaluate("""([b,dx])=>{const s=document.querySelector('.wk-view svg.pv');const pt=s.createSVGPoint();pt.x=b[0]+dx;pt.y=-b[1];const r=pt.matrixTransform(s.getScreenCTM());return [r.x,r.y]}""",[b,dx])
+  xy=toS(seg);pg.mouse.click(xy[0],xy[1]);pg.wait_for_timeout(300)
+  ok(pg.locator('.wk-panel [data-wk=tab]').count()==2,'壁を選んでも解体・新規のタブがある')
+  # ここからここまで：2点打って長さを手で入れる
+  pg.click('.wk-panel [data-wk=wway][data-v=range]');pg.wait_for_timeout(400)
+  xy=toS(seg);pg.mouse.click(xy[0],xy[1]);pg.wait_for_timeout(200);pg.mouse.click(xy[0]+60,xy[1]);pg.wait_for_timeout(300)
+  ok(pg.locator('.wk-panel [data-wf=len]').count()==1,'ここからここまでで2点打つと長さの欄が出る')
+  pg.fill('.wk-panel [data-wf=len]','1.5');pg.click('.wk-panel [data-wk=tab][data-v=demo]');pg.wait_for_timeout(200)
+  ok(pg.input_value('.wk-panel [data-wf=len]')=='1.5','タブを切り替えても入れた長さが残る')
+  pg.select_option('.wk-panel [data-wf=demo]',index=1);pg.click('.wk-panel [data-wk=wadd]');pg.wait_for_timeout(400)
+  w=pg.evaluate("async()=>{const a=await import('./js/app.js');const W=a.state.projects.find(x=>x.id==='%s').drawing.walls||[];return W.map(w=>[w.len,!!w.pts,w.itemId])}"%pid)
+  ok(len(w)==1 and w[0][0]==1.5 and w[0][1] and w[0][2],f'手で入れた長さで壁が入る（{w}）')
+  pg.click('.wk-panel [data-wk=wdel]');pg.wait_for_timeout(300)
+  pg.click('.wk-panel [data-wk=wway][data-v=seg]');pg.wait_for_timeout(300)
   # 全画面で選ぶ
   pg.click('[data-wkm=face]');pg.wait_for_timeout(300)
   pg.locator('.wk-view [data-wkfs]').click();pg.wait_for_timeout(400)

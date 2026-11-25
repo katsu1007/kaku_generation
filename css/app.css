@@ -230,7 +230,7 @@ details.more[open] > summary::before { content: "－ "; }
 
 /* ---------- 知らせ ---------- */
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 200; background: var(--text); color: var(--bg); padding: 12px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: center; max-width: calc(100vw - 32px); }
-.toast button { background: none; border: 0; color: var(--accent); font-weight: 800; padding: 4px; }
+.toast button { background: none; border: 0; color: var(--accent); font-weight: 800; padding: 4px; flex: none; white-space: nowrap; }
 .toast.bad { background: var(--bad); color: #fff; } .toast.bad button { color: #fff; }
 .errbar { position: fixed; top: 0; left: 0; right: 0; z-index: 300; background: var(--bad); color: #fff; padding: 12px 18px; font-size: 14px; display: flex; gap: 12px; align-items: center; }
 .errbar button { margin-left: auto; background: #fff3; border: 0; color: #fff; border-radius: 8px; padding: 6px 12px; }
@@ -544,7 +544,7 @@ body.dwg-fs-on .errbar { z-index: 3400; }
 .wk-fs .wk-view .pv { height: 100% !important; }
 .wk-fs .wk-panel { flex: none; height: 40vh; overflow: auto; margin: 0 !important; }
 .wk-fs .wk-panel:empty { display: none; }
-.wk-fs .wk-panel .g3 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.wk-fs .wk-panel .g3, .wk-fs .wk-panel .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 .wk-fs .pv-tools { gap: 4px; flex-wrap: wrap; max-height: calc(100% - 16px); align-content: flex-end; }
 .wk-fs .pv-tools .iconbtn { width: 34px; height: 34px; font-size: 15px; }
 @media (orientation: landscape) and (max-height: 560px) {
@@ -554,3 +554,4 @@ body.dwg-fs-on .errbar { z-index: 3400; }
   .wk-fs .wk-panel { grid-column: 2; grid-row: 1 / 4; height: auto; max-height: none; min-height: 0; }
   .wk-fs .wk-panel .g3 { grid-template-columns: 1fr !important; }
 }
+.wk-wf .f { min-width: 0; }
